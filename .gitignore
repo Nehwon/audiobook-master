@@ -1,0 +1,153 @@
+# Fichiers temporaires et cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Fichiers de logs
+*.log
+logs/
+
+# Fichiers temporaires
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Fichiers de configuration locaux
+.env
+.env.local
+.env.*.local
+config.local.py
+
+# Fichiers audio et médias (DROIT D'AUTEUR - ILLÉGAL)
+*.mp3
+*.m4a
+*.m4b
+*.wav
+*.flac
+*.aac
+*.ogg
+*.wma
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.wmv
+
+# Archives et compressés
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.tar.bz2
+
+# Fichiers de conversion
+*.converted
+*.processed
+output/
+converted/
+
+# Fichiers de benchmark
+benchmark_output/
+*.benchmark
+
+# Fichiers de test
+test_*
+*_test.*
+tests/output/
+tests/temp/
+
+# Fichiers de backup
+*.bak
+*.backup
+*~
+backup/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Fichiers IDE
+.vscode/
+.idea/
+*.sublime-*
+.atom/
+
+# Fichiers de documentation générés
+docs/_build/
+docs/.doctrees/
+.sphinx/
+
+# Fichiers de coverage
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+
+# Fichiers de profiling
+*.prof
+*.profile
+
+# Fichiers de secrets et clés
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+keys/
+
+# Fichiers de confirmation Git
+.github_push_confirmed
+.github_push_request_*.md
+
+# Fichiers d'archives (sauf documentation)
+Archives/*/
+!Archives/README.md
+!Archives/.gitkeep
+
+# Fichiers de renommage
+renaming_log.txt
+renamed_files/
+
+# Fichiers temporaires de conversion
+temp_*
+tmp_*
+.temp/
+
+# Fichiers de cache de métadonnées
+metadata_cache/
+covers_cache/
+
+# Fichiers de lock
+*.lock
+.lock
+*.pid
+
+# Fichiers de base de données locales
+*.db
+*.sqlite
+*.sqlite3
+
+# Fichiers d'export
+exports/
+*.export

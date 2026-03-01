@@ -1,0 +1,150 @@
+name: Quality Gates
+
+on:
+  push:
+    branches: [ dev, main, 'feature/*', 'hotfix/*', 'release/*' ]
+  pull_request:
+    branches: [ dev, main ]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black isort flake8 pytest
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        if [ -f requirements_web.txt ]; then pip install -r requirements_web.txt; fi
+        
+    - name: Check Python syntax
+      run: |
+        echo "🐍 Vérification de la syntaxe Python..."
+        python -m py_compile *.py || exit 1
+        echo "✅ Syntaxe Python valide"
+        
+    - name: Check code formatting with black
+      run: |
+        echo "📝 Vérification du formatage avec black..."
+        black --check *.py || {
+          echo "❌ Le code n'est pas formaté avec black"
+          echo "💡 Lancez: black *.py"
+          exit 1
+        }
+        echo "✅ Code formaté correctement"
+        
+    - name: Check imports with isort
+      run: |
+        echo "📦 Vérification des imports avec isort..."
+        isort --check-only *.py || {
+          echo "❌ Les imports ne sont pas ordonnés"
+          echo "💡 Lancez: isort *.py"
+          exit 1
+        }
+        echo "✅ Imports ordonnés correctement"
+        
+    - name: Lint with flake8
+      run: |
+        echo "🔍 Analyse du code avec flake8..."
+        flake8 *.py --max-line-length=100 --ignore=E203,W503 || {
+          echo "❌ Erreurs de style détectées"
+          exit 1
+        }
+        echo "✅ Code style valide"
+        
+    - name: Check for secrets
+      run: |
+        echo "🔒 Vérification des secrets..."
+        if grep -r "password\|secret\|token\|key" --include="*.py" . | grep -v "example\|sample\|test\|__pycache__" | head -1; then
+          echo "❌ Secrets détectés dans le code"
+          exit 1
+        fi
+        echo "✅ Aucun secret détecté"
+        
+    - name: Check documentation
+      run: |
+        echo "📚 Vérification de la documentation..."
+        if [ ! -f "README.md" ]; then
+          echo "❌ README.md manquant"
+          exit 1
+        fi
+        if [ ! -f "CHANGELOG.md" ]; then
+          echo "❌ CHANGELOG.md manquant"
+          exit 1
+        fi
+        echo "✅ Documentation présente"
+        
+    - name: Performance tests
+      run: |
+        echo "⚡ Tests de performance..."
+        python -c "
+import time
+import sys
+try:
+    from audiobook_processor import AudiobookProcessor
+    start = time.time()
+    processor = AudiobookProcessor('/tmp', '/tmp', '/tmp')
+    duration = time.time() - start
+    if duration > 2.0:
+        print(f'❌ Initialisation trop lente ({duration:.2f}s)')
+        sys.exit(1)
+    print(f'✅ Performance OK ({duration:.2f}s)')
+except Exception as e:
+    print(f'❌ Erreur performance: {e}')
+    sys.exit(1)
+" || exit 1
+        
+    - name: Run unit tests
+      run: |
+        echo "🧪 Exécution des tests unitaires..."
+        if [ -d "tests" ]; then
+          python -m pytest tests/ -v || {
+            echo "❌ Tests unitaires en échec"
+            exit 1
+          }
+          echo "✅ Tests unitaires validés"
+        else
+          echo "⚠️ Aucun test unitaire trouvé"
+        fi
+
+  version-check:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Check version in CHANGELOG
+      run: |
+        echo "📋 Vérification de la version..."
+        if ! grep -q "## \[2\." CHANGELOG.md; then
+          echo "❌ Pas de version détectée dans CHANGELOG.md"
+          echo "💡 Ajoutez une entrée de version avant de merger dans main"
+          exit 1
+        fi
+        echo "✅ Version détectée dans CHANGELOG.md"
+
+  branch-protection:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Check source branch
+      run: |
+        echo "🔄 Vérification de la branche source..."
+        if [[ "${{ github.event.pull_request.head.ref }}" != "dev" && "${{ github.event.pull_request.head.ref }}" != release/* ]]; then
+          echo "⚠️ Attention: Merge de ${{ github.event.pull_request.head.ref }} vers main"
+          echo "💡 Il est recommandé de merger depuis dev ou une branche release/*"
+        else
+          echo "✅ Branche source appropriée"
+        fi

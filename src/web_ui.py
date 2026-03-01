@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-Interface Web pour le gestionnaire d'audiobooks
-- Dashboard en temps réel
-- Upload de fichiers
-- Suivi des conversions
-- Gestion des métadonnées
+Interface web pour Audiobook Manager Pro
 """
 
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
-from flask_socketio import SocketIO, emit
+import sys
 import os
-import json
-import threading
+from pathlib import Path
+
+# Ajouter le répertoire src au PYTHONPATH
+sys.path.insert(0, str(Path(__file__).parent))
+
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
+from flask_socketio import SocketIO, emit
+import logging
+from datetime import datetime
 import time
 from pathlib import Path
 from datetime import datetime

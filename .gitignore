@@ -21,8 +21,13 @@ wheels/
 *.egg
 
 # Fichiers de logs
-*.log
 logs/
+*.log
+logs/*.log
+logs/*.txt
+
+# Fichiers de développement (déplacés vers src/)
+# Note: Les fichiers Python sont maintenant dans src/
 
 # Fichiers temporaires
 *.tmp

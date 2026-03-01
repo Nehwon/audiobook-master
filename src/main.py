@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-Point d'entrée principal du système de traitement d'audiobooks
+Audiobook Manager Pro - Point d'entrée principal
 """
 
-import argparse
-import logging
 import sys
+import os
 from pathlib import Path
-from typing import Dict
 
-from audiobook_processor import AudiobookProcessor, AudiobookMetadata
+# Ajouter le répertoire src au PYTHONPATH
+sys.path.insert(0, str(Path(__file__).parent))
+
+from src.audiobook_processor import AudiobookProcessor, AudiobookMetadata
 from config import ProcessingConfig
 from audiobookshelf_client import AudiobookshelfClient, AudiobookshelfConfig
 from scraper import BookScraper

@@ -1,0 +1,6 @@
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+Pillow>=10.0.0
+mutagen>=1.46.0
+rarfile>=4.0
+lxml>=4.9.0

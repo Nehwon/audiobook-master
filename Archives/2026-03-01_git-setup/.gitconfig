@@ -1,0 +1,50 @@
+# Configuration Git pour Audiobook Manager Pro
+
+[core]
+    # Branche par défaut
+    autocrlf = input
+    editor = nano
+
+[user]
+    name = Fabrice
+    email = fabrice@lamachere.fr
+
+[branch]
+    # Configuration par défaut pour la branche dev
+    dev = true
+    main = true
+
+[init]
+    defaultBranch = main
+
+[merge]
+    # Merge策略 pour éviter les fast-forward sur main
+    ff = only
+
+[push]
+    # Pousser seulement la branche courante
+    default = simple
+
+[pull]
+    # Rebase par défaut pour garder l'historique propre
+    rebase = true
+
+[alias]
+    # Alias utiles pour le workflow
+    co = checkout
+    br = branch
+    st = status
+    ci = commit
+    ft = feature
+    hf = hotfix
+    rl = release
+    
+    # Workflow commands
+    start-feature = "!sh -c 'git checkout dev && git pull && git checkout -b feature/$1' -"
+    start-hotfix = "!sh -c 'git checkout main && git pull && git checkout -b hotfix/$1' -"
+    start-release = "!sh -c 'git checkout dev && git pull && git checkout -b release/$1' -"
+    
+    # Merge commands
+    merge-feature = "!sh -c 'git checkout dev && git merge --no-ff feature/$1' -"
+    merge-release = "!sh -c 'git checkout main && git merge --no-ff release/$1' -"
+    merge-hotfix = "!sh -c 'git checkout main && git merge --no-ff hotfix/$1' -"

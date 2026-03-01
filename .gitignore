@@ -125,6 +125,11 @@ keys/
 .github_push_confirmed
 .github_push_request_*.md
 
+# Fichiers spécifiques à GitHub
+GITHUB_DESCRIPTION.md
+merge_request_*.md
+.github/
+
 # Fichiers d'archives (sauf documentation)
 Archives/*/
 !Archives/README.md

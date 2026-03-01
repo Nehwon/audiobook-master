@@ -1,12 +1,6 @@
 # Règles de Push et Merge - Audiobook Manager Pro
 
-## 🔒 Règles de Push GitHub
-
-### 🚫 **Restriction Push GitHub**
-- **Jamais de push direct** vers GitHub sans demande explicite
-- **Confirmation obligatoire** de l'auteur (Fabrice) avant tout push GitHub
-- **Exception** : Uniquement pour releases majeures validées
-- **Workflow** : Toujours push vers Gitea en premier
+## 🔒 Règles de Push Gitea
 
 ### 📋 **Processus de Push**
 
@@ -16,35 +10,19 @@
 git push origin dev
 git push origin feature/nom-feature
 
-# ❌ Push GitHub interdit sans confirmation
-git push github  # BESOIN CONFIRMATION
+# 🔄 Workflow standard
+git add .
+git commit -m "feat: description du changement"
+git push origin dev
 ```
 
-#### 2. Demande de Push GitHub
-```bash
-# Étape 1: Préparer le push
-git status
-git log --oneline -5
-
-# Étape 2: Demander confirmation
-# Message à l'auteur:
-# "Demande de push GitHub pour la branche [nom-branche]
-# Contenu: [description des changements]
-# Validation: [tests passés, documentation mise à jour]"
-
-# Étape 3: Attendre confirmation explicite
-# Réponse attendue: "OK pour push GitHub [branche]"
-
-# Étape 4: Push autorisé
-git push github [branche]
-```
-
-#### 3. Release Majeure
+#### 2. Release Majeure
 ```bash
 # Cas exceptionnel: Release majeure
 git checkout main
+git merge --no-ff dev
 git tag v2.1.0
-git push github main --tags
+git push origin main --tags
 ```
 
 ## 🌿 Règles de Branches
@@ -84,7 +62,6 @@ git checkout main
 git merge --no-ff dev
 git tag v2.1.0
 git push origin main --tags
-git push github main --tags  # Avec confirmation
 ```
 
 #### 📋 **Cas 2: Changement Standard**
@@ -104,12 +81,11 @@ git push github main --tags  # Avec confirmation
 git checkout main
 git merge --no-ff dev
 git push origin main
-git push github main  # Avec confirmation
 ```
 
 ## 🔐 Validation Automatique
 
-### ✅ **Checklist Pre-Push GitHub**
+### ✅ **Checklist Pre-Merge**
 ```bash
 # Script de validation (à implémenter)
 #!/bin/bash
@@ -117,29 +93,29 @@ git push github main  # Avec confirmation
 # Vérifier branche actuelle
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 if [ "$current_branch" != "main" ] && [ "$current_branch" != "dev" ]; then
-    echo "❌ Push GitHub uniquement depuis main ou dev"
+    echo "❌ Merge uniquement depuis main ou dev"
     exit 1
 fi
 
 # Vérifier si demande confirmée
-if [ ! -f ".github_push_confirmed" ]; then
-    echo "❌ Demander confirmation avant push GitHub"
+if [ ! -f ".merge_confirmed" ]; then
+    echo "❌ Demander confirmation avant merge"
     exit 1
 fi
 
 # Vérifier tests
 if ! pytest tests/ --quiet; then
-    echo "❌ Tests en échec - Push GitHub interdit"
+    echo "❌ Tests en échec - Merge interdit"
     exit 1
 fi
 
-echo "✅ Push GitHub autorisé"
-rm .github_push_confirmed
+echo "✅ Merge autorisé"
+rm .merge_confirmed
 ```
 
 ### 📝 **Template Demande Confirmation**
 ```markdown
-## Demande de Push GitHub
+## Demande de Merge
 
 **Branche**: [nom-branche]
 **Auteur**: [développeur]
@@ -167,7 +143,7 @@ rm .github_push_confirmed
 - **Bugs résolus**: [x]
 
 ---
-**Demande de confirmation**: [ ] OK pour push GitHub
+**Demande de confirmation**: [ ] OK pour merge
 **Validé par**: ________________________
 **Date**: ________________________
 ```
@@ -178,7 +154,7 @@ rm .github_push_confirmed
 1. **Travailler** sur branches feature depuis dev
 2. **Push** vers origin (Gitea) régulièrement
 3. **Merge** dans dev après review
-4. **Jamais de push GitHub** sans demande
+4. **Jamais de push direct** vers main sans validation
 
 ### 🚀 **Release Process**
 1. **Finaliser** features dans dev
@@ -186,28 +162,15 @@ rm .github_push_confirmed
 3. **Demander** merge vers main
 4. **Attendre** validation utilisateur
 5. **Merger** dans main
-6. **Demander** push GitHub
-7. **Push** vers GitHub après confirmation
+6. **Taguer** la version
+7. **Push** vers Gitea
 
 ### 📊 **Monitoring**
-- **Log des demandes** : Fichier `.github_push_requests.log`
+- **Log des demandes** : Fichier `.merge_requests.log`
 - **Historique des merges** : Fichier `.merge_history.log`
-- **Validation automatique** : Hook pre-push GitHub
-
-## 🚨 Sanctions
-
-### ⚠️ **Push GitHub non autorisé**
-- **Warning** : Message d'erreur explicite
-- **Blocage** : Hook Git bloque le push
-- **Notification** : Email/message à l'équipe
-
-### 🔄 **Processus de régularisation**
-1. **Analyser** le push non autorisé
-2. **Créer** demande de confirmation rétroactive
-3. **Valider** les changements
-4. **Autoriser** le push après validation
+- **Validation automatique** : Tests avant merges
 
 ---
-*Règles strictes pour qualité et sécurité*  
-*Version: 1.0*  
-*Date: 2026-03-01*
+*Règles adaptées pour dépôt Gitea unique*  
+*Version: 2.0*  
+*Date: 2026-03-02*

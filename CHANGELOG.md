@@ -5,6 +5,30 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.0.8] - 2026-03-02
+
+### 🧪 AJOUTÉ
+- **Tests Main Final** : 17 tests pour CLI, arguments, exceptions, dry-run, upload
+- **Tests CLI Complète** : Traitement fichier unique et par lots
+- **Tests Exceptions** : Gestion erreurs critiques et fichiers manquants
+- **Tests Configuration** : Options avancées et validation
+- **Tests Upload** : Configuration et gestion erreurs
+- **Total** : 152 tests unitaires 100% fonctionnels
+
+### 🔧 AMÉLIORÉ
+- **Coverage Global** : 58% (record historique !) ⬆️ maintenu
+- **Coverage Main.py** : 73% (presque 80% objectif)
+- **Tests Robustesse** : Gestion complète des cas d'erreur
+- **Tests CLI** : Couverture complète des options et arguments
+- **Structure Tests** : Organisation modulaire et maintenable
+
+### 📊 MÉTRIQUES
+- **Coverage Global** : 58% (record historique !)
+- **Tests Fonctionnels** : 152/152 tests passants (100%)
+- **Modules Testés** : core/config.py (100%), core/metadata.py (43%), core/processor.py (67%), core/main.py (73%)
+
+---
+
 ## [2.0.7] - 2026-03-02
 
 ### 🧪 AJOUTÉ

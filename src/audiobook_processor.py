@@ -399,30 +399,7 @@ class AudiobookProcessor:
                     '-f', 'concat',
                     '-safe', '0',
                     '-i', str(file_list),
-                    # Filtres audio si présents
-                    *(['-af', filter_string] if filter_string else []),
-                    # Audio haute qualité CPU
-                    '-c:a', 'libfdk_aac' if self.check_fdk_aac() else 'aac',
-                    '-b:a', config.audio_bitrate,
-                    '-ac', str(config.audio_channels),
-                    '-ar', str(config.sample_rate),
-                    '-aac_coder', config.aac_coder,
-                    '-cutoff', str(config.cutoff_freq),
-                    # VBR si FDK disponible
-                    *(['-vbr', '4'] if self.check_fdk_aac() else []),
-                    # Métadonnées
-                    *metadata_args,
-                    '-progress', 'pipe:1',
-                    '-f', 'mp4',
-                    str(output_path)
                 ]
-            # Calcule la taille totale des fichiers source
-            total_input_size = 0
-            for audio_file in audio_files:
-                try:
-                    total_input_size += audio_file.stat().st_size
-                except OSError:
-                    continue
             
             total_input_mb = total_input_size / (1024*1024)
             logger.info(f'📊 Taille totale source: {total_input_mb:.1f}MB ({len(audio_files)} fichiers)')

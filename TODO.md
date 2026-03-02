@@ -198,7 +198,7 @@ Tâches en cours et planifiées pour le projet Audiobook Manager Pro.
 - [x] **Tests processor étendus** process_audiobook et process_all
 - [x] **Tests main étendus** upload, dry-run, exceptions (73% coverage)
 - [x] **Tests metadata étendus** scraping, parsing, BookInfo
-- [x] **Tests main final** CLI, arguments, exceptions, dry-run, upload
+- [x] **Tests metadata final** scraping avancé, similarité, BookInfo
 - [ ] **Coverage 90%** objectif principal (actuel 58% - record !)
 - [ ] **Integration tests** E2E workflows
 - [ ] **Performance tests** benchmarking

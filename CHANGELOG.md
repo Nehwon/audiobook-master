@@ -5,6 +5,30 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.0.9] - 2026-03-02
+
+### 🧪 AJOUTÉ
+- **Tests Metadata Final** : 28 tests pour scraping avancé, similarité, BookInfo
+- **Tests Scraping Avancé** : Pagination, caractères spéciaux, filtres
+- **Tests Similarité** : Calcul et validation de correspondance
+- **Tests BookInfo** : Création complète et représentation string
+- **Tests Téléchargement** : Sous-répertoires et gestion erreurs
+- **Total** : 152 tests unitaires 100% fonctionnels
+
+### 🔧 AMÉLIORÉ
+- **Coverage Global** : 58% (record historique !) ⬆️ maintenu
+- **Coverage Metadata** : 43% (objectif 60% en cours)
+- **Tests Robustesse** : Gestion des cas limites et erreurs
+- **Tests Scraping** : Couverture complète des fonctionnalités
+- **Structure Tests** : Organisation modulaire et maintenable
+
+### 📊 MÉTRIQUES
+- **Coverage Global** : 58% (record historique !)
+- **Tests Fonctionnels** : 152/152 tests passants (100%)
+- **Modules Testés** : core/config.py (100%), core/metadata.py (43%), core/processor.py (67%), core/main.py (73%)
+
+---
+
 ## [2.0.8] - 2026-03-02
 
 ### 🧪 AJOUTÉ

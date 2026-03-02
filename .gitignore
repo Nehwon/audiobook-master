@@ -75,11 +75,16 @@ converted/
 benchmark_output/
 *.benchmark
 
-# Fichiers de test
+# Fichiers de test (sauf fichiers de test spécifiques)
 test_*
 *_test.*
 tests/output/
 tests/temp/
+tests/__pycache__/
+tests/.pytest_cache/
+
+# Exceptions : fichiers de test autorisés
+!tests/test_*.py
 
 # Fichiers de backup
 *.bak
@@ -161,3 +166,6 @@ covers_cache/
 # Fichiers d'export
 exports/
 *.export
+
+# Environnement virtuel
+venv/

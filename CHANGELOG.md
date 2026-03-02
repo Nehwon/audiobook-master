@@ -5,6 +5,29 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.0.2] - 2026-03-02
+
+### 🧪 AJOUTÉ
+- **54 Tests Unitaires** : Suite complète de tests 100% fonctionnels
+- **Tests Metadata Scraper** : 31 tests pour Audible et Babelio scrapers
+- **Tests Main Simplifiés** : 8 tests pour arguments CLI et parsing
+- **Coverage Reporting** : Configuration complète avec pytest-cov
+
+### 🔧 AMÉLIORÉ
+- **Coverage Global** : 34% (objectif 90%) ⬆️ de 16% à 34%
+- **Tests Processor** : 100% fonctionnels (3/3 tests)
+- **Tests Metadata** : 100% fonctionnels (31/31 tests)
+- **Tests Config** : 100% fonctionnels (5/5 tests)
+- **Tests Main** : 100% fonctionnels (8/8 tests)
+- **Structure Tests** : Organisation modulaire et maintenable
+
+### 📊 MÉTRIQUES
+- **Coverage Global** : 34% (objectif 90%)
+- **Tests Fonctionnels** : 54/54 tests passants (100%)
+- **Modules Testés** : core/config.py (100%), core/metadata.py (35%), core/processor.py (30%), core/main.py (21%)
+
+---
+
 ## [2.0.1] - 2026-03-02
 
 ### 🧪 AJOUTÉ

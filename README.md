@@ -286,9 +286,9 @@ Le projet inclut une suite complète de tests unitaires :
 - **core/config.py** : 100% coverage ✅
 - **core/processor.py** : 67% coverage (conversion, parsing, GPU)
 - **core/metadata.py** : 41% coverage (scraping, validation)
-- **core/main.py** : 21% coverage (arguments, CLI)
-- **Total** : 52% coverage global ✅
-- **Tests** : 120/120 tests passants (100%)
+- **core/main.py** : 73% coverage (arguments, CLI)
+- **Total** : 57% coverage global ✅
+- **Tests** : 131/131 tests passants (100%)
 
 ### Contribution
 1. Fork le projet

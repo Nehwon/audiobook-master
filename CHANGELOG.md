@@ -5,6 +5,30 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.0.5] - 2026-03-02
+
+### 🧪 AJOUTÉ
+- **Tests Main Extended** : 11 tests étendus pour main.py
+- **Tests Upload** : Configuration et gestion upload Audiobookshelf
+- **Tests Dry-Run** : Mode simulation pour fichiers et lots
+- **Tests Exception Handling** : Gestion robuste des erreurs critiques
+- **Tests Logging** : Configuration et vérification logging
+- **Total** : 131 tests unitaires 100% fonctionnels
+
+### 🔧 AMÉLIORÉ
+- **Coverage Global** : 57% (objectif 90%) ⬆️ de 52% à 57%
+- **Coverage Main.py** : 73% ⬆️ de 21% à 73% (objectif 50% dépassé !)
+- **Tests Complets** : upload, dry-run, exceptions, logging, arguments
+- **Tests Robustesse** : Gestion des cas limites et erreurs critiques
+- **Structure Tests** : Organisation modulaire et maintenable
+
+### 📊 MÉTRIQUES
+- **Coverage Global** : 57% (objectif 90%)
+- **Tests Fonctionnels** : 131/131 tests passants (100%)
+- **Modules Testés** : core/config.py (100%), core/metadata.py (41%), core/processor.py (67%), core/main.py (73%)
+
+---
+
 ## [2.0.4] - 2026-03-02
 
 ### 🧪 AJOUTÉ

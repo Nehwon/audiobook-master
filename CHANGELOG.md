@@ -5,6 +5,28 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.0.4] - 2026-03-02
+
+### 🧪 AJOUTÉ
+- **Tests Processor Extended** : 10 tests étendus pour process_audiobook et process_all
+- **Tests Configuration** : Tests avec configuration personnalisée
+- **Tests Exception Handling** : Gestion des erreurs et exceptions
+- **Total** : 120 tests unitaires 100% fonctionnels
+
+### 🔧 AMÉLIORÉ
+- **Coverage Global** : 52% (objectif 90%) ⬆️ de 43% à 52%
+- **Coverage Processor** : 67% ⬆️ de 46% à 67% (presque 70% !)
+- **Tests Complets** : process_audiobook, process_all, configuration, exceptions
+- **Tests Robustesse** : Gestion des cas limites et erreurs
+- **Structure Tests** : Organisation modulaire et maintenable
+
+### 📊 MÉTRIQUES
+- **Coverage Global** : 52% (objectif 90%)
+- **Tests Fonctionnels** : 120/120 tests passants (100%)
+- **Modules Testés** : core/config.py (100%), core/metadata.py (41%), core/processor.py (67%), core/main.py (21%)
+
+---
+
 ## [2.0.3] - 2026-03-02
 
 ### 🧪 AJOUTÉ

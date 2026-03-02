@@ -61,7 +61,7 @@ Tâches en cours et planifiées pour le projet Audiobook Manager Pro.
     - [x] **Tests métadonnées** parsing et validation
     - [x] **Tests processor** conversion et GPU
     - [x] **Tests main.py** arguments et CLI
-    - [ ] **Atteindre 90% coverage** global (actuel 43%)
+    - [ ] **Atteindre 90% coverage** global (actuel 52%)
 - [x] **Gestion erreurs** robuste opérations externes
 - [x] **Memory leaks** libération fichiers temporaires
 - [x] **Logs structurés** format JSON pour analyse
@@ -187,15 +187,16 @@ Tâches en cours et planifiées pour le projet Audiobook Manager Pro.
 - [ ] **Static analysis** MyPy, Pylint, Bandit
 
 ### Tests & CI/CD
-- [x] **Unit tests** base couverture 43%
+- [x] **Unit tests** base couverture 52%
 - [x] **Test configuration** pytest-cov configuré
 - [x] **Test structure** imports et modules corrigés
 - [x] **Test processor** conversion et parsing (100% fonctionnels)
 - [x] **Test metadata** validation et formatage (100% fonctionnels)
 - [x] **Test main.py** arguments CLI (100% fonctionnels)
-- [x] **110 tests unitaires** tous passants ✅
-- [x] **Tests étendus** coverage processor et metadata
-- [ ] **Coverage 90%** objectif principal (actuel 43%)
+- [x] **120 tests unitaires** tous passants ✅
+- [x] **Tests étendus** coverage processor (67%) et metadata (41%)
+- [x] **Tests processor étendus** process_audiobook et process_all
+- [ ] **Coverage 90%** objectif principal (actuel 52%)
 - [ ] **Integration tests** E2E workflows
 - [ ] **Performance tests** benchmarking
 - [ ] **Security tests** SAST scanning

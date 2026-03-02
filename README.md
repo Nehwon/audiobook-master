@@ -284,11 +284,11 @@ pytest --cov=. --cov-report=html --cov-report=term-missing
 ### Tests Unitaires
 Le projet inclut une suite complète de tests unitaires :
 - **core/config.py** : 100% coverage ✅
-- **core/processor.py** : 30% coverage (conversion, parsing, GPU)
-- **core/metadata.py** : 35% coverage (scraping, validation)
+- **core/processor.py** : 46% coverage (conversion, parsing, GPU)
+- **core/metadata.py** : 41% coverage (scraping, validation)
 - **core/main.py** : 21% coverage (arguments, CLI)
-- **Total** : 34% coverage global ✅
-- **Tests** : 54/54 tests passants (100%)
+- **Total** : 43% coverage global ✅
+- **Tests** : 110/110 tests passants (100%)
 
 ### Contribution
 1. Fork le projet

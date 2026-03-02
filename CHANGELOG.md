@@ -5,6 +5,28 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.0.3] - 2026-03-02
+
+### 🧪 AJOUTÉ
+- **Tests Processor Coverage** : 23 tests étendus pour processor.py
+- **Tests Metadata Coverage** : 33 tests étendus pour metadata.py
+- **Tests Main Coverage** : 12 tests étendus pour main.py
+- **Total** : 110 tests unitaires 100% fonctionnels
+
+### 🔧 AMÉLIORÉ
+- **Coverage Global** : 43% (objectif 90%) ⬆️ de 34% à 43%
+- **Coverage Processor** : 46% ⬆️ de 30% à 46%
+- **Coverage Metadata** : 41% ⬆️ de 35% à 41%
+- **Tests Complets** : parsing, extraction, GPU, pochette, synopsis, CLI
+- **Structure Tests** : Organisation modulaire et maintenable
+
+### 📊 MÉTRIQUES
+- **Coverage Global** : 43% (objectif 90%)
+- **Tests Fonctionnels** : 110/110 tests passants (100%)
+- **Modules Testés** : core/config.py (100%), core/metadata.py (41%), core/processor.py (46%), core/main.py (21%)
+
+---
+
 ## [2.0.2] - 2026-03-02
 
 ### 🧪 AJOUTÉ

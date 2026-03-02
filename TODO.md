@@ -14,13 +14,13 @@ Tâches en cours et planifiées pour le projet Audiobook Manager Pro.
 - [x] **Design responsive** avec Tailwind CSS
 - [x] **Notifications** en temps réel
 
-### � Base Système Plugins
+### 🧩 Base Système Plugins
 - [x] **Architecture extensible** pour futurs plugins
 - [x] **API endpoints** pour intégrations tierces
 - [x] **Configuration system** pour extensions
 - [x] **Documentation base** pour développeurs
 
-### � Performance & GPU
+### 🚀 Performance & GPU
 - [x] **Détection GPU RTX 4070/3050** automatique
 - [x] **Monitoring CPU/GPU** avec indicateurs visuels
 - [x] **Filtres audio accélérés** sur GPU
@@ -36,6 +36,12 @@ Tâches en cours et planifiées pour le projet Audiobook Manager Pro.
 - [x] **Support multi-formats** (MP3, M4A, WAV, FLAC, AAC)
 - [x] **Archives** (ZIP, RAR) extraction automatique
 
+### 🤖 Intelligence Artificielle (Nouveau)
+- [x] **Génération de synopsis** avec validation des règles (150-300 mots, sans spoilers)
+- [x] **Classification des genres** (max 3 genres pertinents)
+- [x] **Validation croisée des métadonnées** depuis sources multiples
+- [x] **Sécurité des entrées IA** avec nettoyage des prompts
+
 ---
 
 ## 🚨 Urgent (Cette semaine)
@@ -47,10 +53,10 @@ Tâches en cours et planifiées pour le projet Audiobook Manager Pro.
 - [ ] **File permissions** Windows compatibility
 
 ### 🔧 Stabilisation
-- [ ] **Tests unitaires** couverture fonctions core
-- [ ] **Gestion erreurs** robuste opérations externes
-- [ ] **Memory leaks** libération fichiers temporaires
-- [ ] **Logs structurés** format JSON pour analyse
+- [-] **Tests unitaires** couverture fonctions core
+- [x] **Gestion erreurs** robuste opérations externes
+- [x] **Memory leaks** libération fichiers temporaires
+- [x] **Logs structurés** format JSON pour analyse
 
 ---
 

@@ -287,7 +287,7 @@ Le projet inclut une suite complète de tests unitaires :
 - **core/processor.py** : 67% coverage (conversion, parsing, GPU)
 - **core/metadata.py** : 43% coverage (scraping, validation)
 - **core/main.py** : 73% coverage (arguments, CLI)
-- **Total** : 58% coverage global ✅
+- **Total** : 58% coverage global (record historique !) ✅
 - **Tests** : 152/152 tests passants (100%)
 
 ### Contribution

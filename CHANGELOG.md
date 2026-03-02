@@ -5,6 +5,30 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.0.6] - 2026-03-02
+
+### 🧪 AJOUTÉ
+- **Tests Metadata Extended** : 21 tests étendus pour metadata.py
+- **Tests Scraping** : Recherche et parsing Audible/Babelio
+- **Tests BookInfo** : Création, validation et représentation
+- **Tests Similarité** : Calcul de similarité et validation de correspondance
+- **Tests Téléchargement** : Download et gestion des pochettes
+- **Total** : 152 tests unitaires 100% fonctionnels
+
+### 🔧 AMÉLIORÉ
+- **Coverage Global** : 58% (objectif 90%) ⬆️ de 57% à 58%
+- **Coverage Metadata** : 43% ⬆️ de 41% à 43%
+- **Tests Complets** : scraping, parsing, validation, BookInfo
+- **Tests Robustesse** : Gestion des erreurs HTTP et parsing
+- **Structure Tests** : Organisation modulaire et maintenable
+
+### 📊 MÉTRIQUES
+- **Coverage Global** : 58% (objectif 90%)
+- **Tests Fonctionnels** : 152/152 tests passants (100%)
+- **Modules Testés** : core/config.py (100%), core/metadata.py (43%), core/processor.py (67%), core/main.py (73%)
+
+---
+
 ## [2.0.5] - 2026-03-02
 
 ### 🧪 AJOUTÉ

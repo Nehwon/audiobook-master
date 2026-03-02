@@ -30,7 +30,7 @@ from mutagen.mp4 import MP4, MP4Cover
 from mutagen.id3 import ID3, APIC, TPE1, TIT2, TALB
 import zipfile
 import rarfile
-from config import ProcessingConfig
+from .config import ProcessingConfig
 
 # Configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -399,8 +399,27 @@ class AudiobookProcessor:
                     '-f', 'concat',
                     '-safe', '0',
                     '-i', str(file_list),
+                    # Audio HAUTE QUALITÉ CPU
+                    '-c:a', 'libfdk_aac' if self.check_fdk_aac() else 'aac',
+                    '-b:a', config.audio_bitrate,
+                    '-ac', str(config.audio_channels),
+                    '-ar', str(config.sample_rate),
+                    '-aac_coder', config.aac_coder,
+                    '-cutoff', str(config.cutoff_freq),
+                    # VBR si FDK disponible
+                    *(['-vbr', '4'] if self.check_fdk_aac() else []),
+                    # Paramètres d'optimisation
+                    '-movflags', '+faststart',
+                    # Métadonnées
+                    *metadata_args,
+                    '-progress', 'pipe:1',
+                    '-f', 'mp4',
+                    str(output_path)
                 ]
+                codec_info = f"FDK-AAC VBR4 + CPU" if self.check_fdk_aac() else f"AAC + CPU"
             
+            # Calcul de la taille totale des fichiers
+            total_input_size = sum(f.stat().st_size for f in audio_files)
             total_input_mb = total_input_size / (1024*1024)
             logger.info(f'📊 Taille totale source: {total_input_mb:.1f}MB ({len(audio_files)} fichiers)')
             
@@ -439,32 +458,34 @@ class AudiobookProcessor:
                 # Condition d'arrêt: si progression > 90% ET temps > 30 secondes
                 if elapsed > 30:
                     try:
+                        # Lecture de la sortie du processus
+                        output_line = process.stderr.readline()
+
                         if output_path.exists():
                             current_size = output_path.stat().st_size / (1024*1024)
                             estimated_final_size = total_input_mb * (0.3 if '64k' in config.audio_bitrate else 0.6)
-                        
+                        else:
+                            current_size = last_size
+
                         # Extraire la taille si disponible
-                        size_match = None
                         if "size=" in output_line:
                             size_str = output_line.split("size=")[1].strip()
                             try:
                                 current_size = float(size_str.split()[0]) / (1024*1024)
                             except:
                                 current_size = last_size
-                        else:
-                            current_size = last_size
-                            
+
                             # Calculer la vitesse et afficher la progression
                             if elapsed > 0 and current_size > last_size:
                                 speed_mbps = (current_size - last_size) / elapsed
                                 speed_mb_min = speed_mbps * 60 / 1024 / 1024
-                                
+
                                 # Créer la barre de progression basée sur les données réelles
                                 progress_percent = min(100, (current_size / total_input_mb) * 100)
                                 bar_length = 50
                                 filled_length = int(bar_length * progress_percent / 100)
                                 bar = '█' * filled_length + '░' * (bar_length - filled_length)
-                                
+
                                 # Déterminer l'activité en fonction de la vitesse
                                 if speed_mbps > 5:
                                     activity = "🔥 ACTIF"
@@ -474,12 +495,12 @@ class AudiobookProcessor:
                                     activity = "🐢 LENT"
                                 else:
                                     activity = "⏸️ PAUSE"
-                                
+
                                 try:
                                     logger.info(f'🎵 [{bar}] {progress_percent:3.0f}% | '
-                                                 f'{current_size:.1f}MB/{total_input_mb:.1f}MB | '
-                                                 f'+{speed_mb_min:.1f}MB/s | '
-                                                 f'Temps: {elapsed:.1f}s')
+                                         f'{current_size:.1f}MB/{total_input_mb:.1f}MB | '
+                                         f'+{speed_mb_min:.1f}MB/s | '
+                                         f'Temps: {elapsed:.1f}s')
                                 except:
                                     # Si parsing échoue, afficher la ligne brute
                                     if "outtime=" in output_line or "frame=" in output_line:
@@ -490,11 +511,12 @@ class AudiobookProcessor:
                                 # Pas de progression disponible
                                 if elapsed > 5:
                                     logger.info(f"⏸️ PAUSE - Temps: {elapsed:.1f}s")
-                        
+
                         last_size = current_size
                         last_progress_time = current_time
-                    
-                except (OSError, PermissionError):
+
+                    except Exception as e:
+                        logger.debug(f"Exception dans la boucle de progression: {e}")
                         continue
                 
                 # Petite pause pour ne pas surcharger le CPU
@@ -570,7 +592,9 @@ class AudiobookProcessor:
                             return True
                         elif '3050' in gpu_name:
                             logger.info(f"✅ GPU NVIDIA RTX 3050 trouvé: {gpu_name}")
-                            logger.info(f"⚠️ RTX 3050 non trouvé, utilisation de: {gpu_name}")
+                            return True
+                        else:
+                            logger.info(f"⚠️ Autre GPU trouvé: {gpu_name}")
                             return True
                     
                     logger.warning("❌ Aucun GPU NVIDIA compatible trouvé")

@@ -72,6 +72,7 @@ class ProcessingConfig:
             self.scraping_sources = ["babelio", "fnac"]
         
         # Crée les répertoires nécessaires
+        Path(self.source_directory).mkdir(parents=True, exist_ok=True)
         Path(self.output_directory).mkdir(parents=True, exist_ok=True)
         Path(self.temp_directory).mkdir(parents=True, exist_ok=True)
 

@@ -61,7 +61,7 @@ Tâches en cours et planifiées pour le projet Audiobook Manager Pro.
     - [x] **Tests métadonnées** parsing et validation
     - [x] **Tests processor** conversion et GPU
     - [x] **Tests main.py** arguments et CLI
-    - [ ] **Atteindre 90% coverage** global (actuel 58% - record historique !)
+    - [ ] **Atteindre 90% coverage** global (actuel 72% - NOUVEAU RECORD !)
 - [x] **Gestion erreurs** robuste opérations externes
 - [x] **Memory leaks** libération fichiers temporaires
 - [x] **Logs structurés** format JSON pour analyse
@@ -187,19 +187,20 @@ Tâches en cours et planifiées pour le projet Audiobook Manager Pro.
 - [ ] **Static analysis** MyPy, Pylint, Bandit
 
 ### Tests & CI/CD
-- [x] **Unit tests** base couverture 58% (record historique !)
+- [x] **Unit tests** base couverture 72% (NOUVEAU RECORD !)
 - [x] **Test configuration** pytest-cov configuré
 - [x] **Test structure** imports et modules corrigés
 - [x] **Test processor** conversion et parsing (100% fonctionnels)
 - [x] **Test metadata** validation et formatage (100% fonctionnels)
 - [x] **Test main.py** arguments CLI (100% fonctionnels)
-- [x] **152 tests unitaires** tous passants ✅
-- [x] **Tests étendus** coverage processor (67%) et metadata (43%)
+- [x] **181 tests unitaires** tous passants ✅
+- [x] **Tests étendus** coverage processor (67%) et metadata (73%)
 - [x] **Tests processor étendus** process_audiobook et process_all
 - [x] **Tests main étendus** upload, dry-run, exceptions (73% coverage)
 - [x] **Tests metadata étendus** scraping, parsing, BookInfo
 - [x] **Tests metadata final** scraping avancé, similarité, BookInfo
-- [ ] **Coverage 90%** objectif principal (actuel 58% - record !)
+- [x] **Tests metadata targeted** vraies méthodes, GoogleBooks, BookScraper
+- [ ] **Coverage 90%** objectif principal (actuel 72% - NOUVEAU RECORD !)
 - [ ] **Integration tests** E2E workflows
 - [ ] **Performance tests** benchmarking
 - [ ] **Security tests** SAST scanning

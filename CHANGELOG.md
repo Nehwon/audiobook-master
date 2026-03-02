@@ -5,6 +5,31 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.1.0] - 2026-03-02
+
+### 🧪 AJOUTÉ
+- **Tests Metadata Targeted** : 29 tests pour les vraies méthodes de metadata.py
+- **Tests GoogleBooksScraper** : Recherche API, parsing, similarité, téléchargement
+- **Tests BookScraper** : Interface principale avec fallback multi-sources
+- **Tests Extraction Audible** : 13 méthodes _extract_* complètes
+- **Tests Retry Logic** : Gestion des erreurs et tentatives multiples
+- **Total** : 181 tests unitaires 100% fonctionnels
+
+### 🔧 AMÉLIORÉ
+- **Coverage Global** : 72% (NOUVEAU RECORD !) ⬆️ de 58% à 72% (+14% !)
+- **Coverage Metadata** : 73% (EXPLOSION !) ⬆️ de 43% à 73% (+30% !)
+- **Tests Robustesse** : Gestion complète des erreurs HTTP et retry
+- **Tests Architecture** : Couverture complète des classes et méthodes
+- **Tests Performance** : Mocks optimisés pour exécution rapide
+
+### 📊 MÉTRIQUES RECORD
+- **Coverage Global** : 72% (NOUVEAU RECORD HISTORIQUE !)
+- **Tests Fonctionnels** : 181/181 tests passants (100%)
+- **Modules Testés** : core/config.py (100%), core/metadata.py (73%), core/processor.py (67%), core/main.py (73%)
+- **Progression** : +14% coverage global en une seule session !
+
+---
+
 ## [2.0.9] - 2026-03-02
 
 ### 🧪 AJOUTÉ

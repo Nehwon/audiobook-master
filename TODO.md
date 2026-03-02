@@ -47,7 +47,7 @@ Tâches en cours et planifiées pour le projet Audiobook Manager Pro.
 ## 🚨 Urgent (Cette semaine)
 
 ### 🐛 Corrections Critiques
-- [ ] **Corriger boucle infinie** résiduelle dans cas edge
+- [x] **Corriger boucle infinie** résiduelle dans cas edge
 - [ ] **Optimiser memory usage** sur conversions >2h
 - [ ] **Fix GPU detection** multi-GPU instable
 - [ ] **File permissions** Windows compatibility

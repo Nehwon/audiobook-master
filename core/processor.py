@@ -413,10 +413,25 @@ class AudiobookProcessor:
             last_size = 0
             last_progress_time = 0
             
+            # Timeout maximum de 4 heures (14400 secondes) pour éviter les boucles infinies
+            max_timeout = 14400  # 4 heures
+            start_loop_time = time.time()
+
             while True:
                 # Vérifie si le processus est terminé
                 if process.poll() is not None:
                     break
+
+                # Vérifie si le timeout maximum est atteint
+                current_time = time.time()
+                if (current_time - start_loop_time) > max_timeout:
+                    logger.error(f"⏰ TIMEOUT: La conversion a dépassé le temps maximum autorisé ({max_timeout//3600} heures)")
+                    process.terminate()  # Tente de terminer proprement le processus
+                    try:
+                        process.wait(timeout=5)  # Attend 5 secondes pour une terminaison propre
+                    except subprocess.TimeoutExpired:
+                        process.kill()  # Force la terminaison si nécessaire
+                    raise Exception(f"Timeout de conversion dépassé après {max_timeout//3600} heures")
                 
                 current_time = time.time()
                 elapsed = current_time - start_time

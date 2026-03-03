@@ -13,26 +13,25 @@ import re
 import json
 import shutil
 import subprocess
-import requests
+import sys
 import time
-import psutil
 import threading
-import gc
-import weakref
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
-from urllib.parse import quote
 import logging
 import unicodedata
-from bs4 import BeautifulSoup
 import tempfile
+import zipfile
+import rarfile
+import gc
+from pathlib import Path
+from typing import List, Dict, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from urllib.parse import quote
+from bs4 import BeautifulSoup
 from PIL import Image
 import mutagen
 from mutagen.mp4 import MP4, MP4Cover
 from mutagen.id3 import ID3, APIC, TPE1, TIT2, TALB
-import zipfile
-import rarfile
 from .config import ProcessingConfig
 
 # Configuration
@@ -199,7 +198,136 @@ class AudiobookProcessor:
         except:
             return False
     
-    def concat_fast_m4b(self, audio_files: List[Path], output_path: Path, metadata: AudiobookMetadata) -> bool:
+    def analyze_audio_quality(self, audio_file: Path) -> Dict[str, any]:
+        """Analyse la qualité d'un fichier audio"""
+        try:
+            result = subprocess.run([
+                'ffmpeg', '-i', str(audio_file)
+            ], capture_output=True, text=True, timeout=10)
+            
+            # Parse les informations
+            info = {
+                'bitrate': 128,  # défaut
+                'sample_rate': 44100,  # défaut
+                'channels': 2,  # défaut
+                'codec': 'mp3',
+                'duration': 0
+            }
+            
+            stderr = result.stderr
+            for line in stderr.split('\n'):
+                if 'bitrate:' in line and 'kb/s' in line:
+                    try:
+                        info['bitrate'] = int(line.split('bitrate:')[1].split('kb/s')[0].strip())
+                    except:
+                        pass
+                elif 'Hz' in line and 'Audio:' in line:
+                    try:
+                        parts = line.split(',')
+                        for part in parts:
+                            if 'Hz' in part:
+                                info['sample_rate'] = int(part.split('Hz')[0].strip().split()[-1])
+                            elif 'stereo' in part:
+                                info['channels'] = 2
+                            elif 'mono' in part:
+                                info['channels'] = 1
+                    except:
+                        pass
+                elif 'Duration:' in line:
+                    try:
+                        duration_str = line.split('Duration:')[1].split(',')[0].strip()
+                        h, m, s = duration_str.split(':')
+                        info['duration'] = int(h) * 3600 + int(m) * 60 + float(s)
+                    except:
+                        pass
+            
+            return info
+            
+        except Exception as e:
+            logger.error(f"Erreur analyse {audio_file}: {e}")
+            return {
+                'bitrate': 128, 'sample_rate': 44100, 'channels': 2, 
+                'codec': 'mp3', 'duration': 0
+            }
+    
+    def get_optimal_encoding_params(self, current_quality: Dict[str, any]) -> Dict[str, any]:
+        """Détermine les paramètres de réencodage optimaux"""
+        target_bitrate = 128  # Cible 128k
+        target_sample_rate = 48000  # Cible 48kHz
+        
+        # Stratégie adaptative
+        if current_quality['bitrate'] <= 128 and current_quality['sample_rate'] <= 48000:
+            # Qualité déjà bonne: simple conversion de codec
+            return {
+                'action': 'codec_only',
+                'bitrate': current_quality['bitrate'],
+                'sample_rate': current_quality['sample_rate'],
+                'channels': current_quality['channels'],
+                'reason': 'Qualité déjà optimale, conversion codec uniquement'
+            }
+        elif current_quality['bitrate'] > 128 and current_quality['sample_rate'] > 48000:
+            # Les deux sont supérieurs: réduire les deux
+            return {
+                'action': 'reduce_both',
+                'bitrate': target_bitrate,
+                'sample_rate': target_sample_rate,
+                'channels': current_quality['channels'],
+                'reason': f"Réduction bitrate {current_quality['bitrate']}→{target_bitrate}k et sample rate {current_quality['sample_rate']}→{target_sample_rate}Hz"
+            }
+        elif current_quality['bitrate'] > 128:
+            # Bitrate seulement supérieur
+            return {
+                'action': 'reduce_bitrate',
+                'bitrate': target_bitrate,
+                'sample_rate': current_quality['sample_rate'],
+                'channels': current_quality['channels'],
+                'reason': f"Réduction bitrate {current_quality['bitrate']}→{target_bitrate}k uniquement"
+            }
+        elif current_quality['sample_rate'] > 48000:
+            # Sample rate seulement supérieur
+            return {
+                'action': 'reduce_sample_rate',
+                'bitrate': current_quality['bitrate'],
+                'sample_rate': target_sample_rate,
+                'channels': current_quality['channels'],
+                'reason': f"Réduction sample rate {current_quality['sample_rate']}→{target_sample_rate}Hz uniquement"
+            }
+        else:
+            # Amélioration possible (pour pytorchaudio plus tard)
+            return {
+                'action': 'upgrade_needed',
+                'bitrate': target_bitrate,
+                'sample_rate': target_sample_rate,
+                'channels': current_quality['channels'],
+                'reason': f"Amélioration nécessaire (pytorchaudio future): {current_quality['bitrate']}k→{target_bitrate}k, {current_quality['sample_rate']}Hz→{target_sample_rate}Hz"
+            }
+    
+    def encode_single_file_aac(self, input_file: Path, output_file: Path, encoding_params: Dict[str, any]) -> bool:
+        """Encode un fichier individuel vers AAC avec paramètres optimisés"""
+        try:
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', str(input_file),
+                '-c:a', 'aac',
+                '-b:a', f"{encoding_params['bitrate']}k",
+                '-ar', str(encoding_params['sample_rate']),
+                '-ac', str(encoding_params['channels']),
+                '-aac_coder', 'twoloop',
+                '-movflags', '+faststart',
+                str(output_file)
+            ]
+            
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if process.returncode == 0:
+                return True
+            else:
+                logger.error(f"Erreur encodage {input_file}: {process.stderr}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Erreur encodage {input_file}: {e}")
+            return False
         """Concaténation 1:1 rapide sans réencodage - Phase 1"""
         try:
             logger.info(f"🚀 CONCATÉNATION 1:1 RAPIDE: {len(audio_files)} fichiers")
@@ -354,7 +482,889 @@ class AudiobookProcessor:
         except Exception as e:
             logger.error(f"💥 Erreur concaténation: {e}")
             return False
-        """Convertit des fichiers audio en M4B avec optimisations AAC HAUTE QUALITÉ"""
+    
+    def encode_single_file_parallel(self, task_data: Tuple[Path, Path, Dict, int]) -> Tuple[bool, str, Dict]:
+        """Encode un fichier individuel en parallèle"""
+        input_file, output_file, encoding_params, file_index = task_data
+        
+        try:
+            logger.info(f"🔄 [{file_index}] Encodage parallèle: {input_file.name}")
+            
+            # Analyse qualité
+            quality = self.analyze_audio_quality(input_file)
+            
+            # Paramètres optimaux
+            optimal_params = self.get_optimal_encoding_params(quality)
+            
+            logger.info(f"   📊 {optimal_params['reason']}")
+            
+            # Commande d'encodage
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', str(input_file),
+                '-c:a', 'aac',
+                '-b:a', f"{optimal_params['bitrate']}k",
+                '-ar', str(optimal_params['sample_rate']),
+                '-ac', str(optimal_params['channels']),
+                '-aac_coder', 'twoloop',
+                '-movflags', '+faststart',
+                str(output_file)
+            ]
+            
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if process.returncode == 0:
+                return True, input_file.name, optimal_params
+            else:
+                logger.error(f"❌ Erreur encodage {input_file.name}: {process.stderr}")
+                return False, input_file.name, optimal_params
+                
+        except Exception as e:
+            logger.error(f"💥 Erreur encodage {input_file.name}: {e}")
+            return False, input_file.name, {}
+    
+    def encode_single_file_gpu_hybrid(self, task_data: Tuple[Path, Path, Dict, int]) -> Tuple[bool, str, Dict]:
+        """Encode un fichier individuel avec GPU CUDA si disponible"""
+        input_file, output_file, encoding_params, file_index = task_data
+        
+        try:
+            logger.info(f"🚀 [{file_index}] Encodage GPU-hybrid: {input_file.name}")
+            
+            # Analyse qualité
+            quality = self.analyze_audio_quality(input_file)
+            
+            # Paramètres optimaux
+            optimal_params = self.get_optimal_encoding_params(quality)
+            
+            # Détection GPU CUDA
+            use_cuda = self.detect_cuda_support()
+            
+            if use_cuda:
+                logger.info(f"   🎯 GPU CUDA disponible pour {input_file.name}")
+                # Commande d'encodage avec accélération GPU
+                cmd = [
+                    'ffmpeg', '-y',
+                    '-hwaccel', 'cuda',
+                    '-hwaccel_output_format', 'cuda',
+                    '-i', str(input_file),
+                    '-c:a', 'aac',
+                    '-b:a', f"{optimal_params['bitrate']}k",
+                    '-ar', str(optimal_params['sample_rate']),
+                    '-ac', str(optimal_params['channels']),
+                    '-aac_coder', 'twoloop',
+                    '-movflags', '+faststart',
+                    str(output_file)
+                ]
+            else:
+                logger.info(f"   ⚙️ CPU fallback pour {input_file.name}")
+                # Commande CPU optimisée
+                cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(input_file),
+                    '-c:a', 'aac',
+                    '-b:a', f"{optimal_params['bitrate']}k",
+                    '-ar', str(optimal_params['sample_rate']),
+                    '-ac', str(optimal_params['channels']),
+                    '-aac_coder', 'twoloop',
+                    '-threads', '4',  # Multi-threading CPU
+                    '-movflags', '+faststart',
+                    str(output_file)
+                ]
+            
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if process.returncode == 0:
+                return True, input_file.name, {**optimal_params, 'gpu_used': use_cuda}
+            else:
+                logger.error(f"❌ Erreur encodage {input_file.name}: {process.stderr}")
+                return False, input_file.name, {'gpu_used': use_cuda}
+                
+        except Exception as e:
+            logger.error(f"💥 Erreur encodage {input_file.name}: {e}")
+            return False, input_file.name, {'gpu_used': False}
+    
+    def normalize_batch_gpu_optimized(self, aac_files: List[Path], aac_temp_dir: Path, config) -> List[Path]:
+        """Normalisation par lots optimisée pour GPU"""
+        logger.info("🔧 Normalisation batch GPU-optimisée...")
+        
+        # Configuration loudnorm
+        loudnorm_params = f"I={config.loudnorm_target}:LRA={config.loudnorm_range}:TP={config.loudnorm_true_peak}"
+        
+        # Traitement par lots de 4 fichiers (optimisé pour GPU)
+        batch_size = 4
+        normalized_files = []
+        
+        for i in range(0, len(aac_files), batch_size):
+            batch = aac_files[i:i+batch_size]
+            logger.info(f"🔧 Batch {i//batch_size + 1}/{(len(aac_files)-1)//batch_size + 1}: {len(batch)} fichiers")
+            
+            # Crée un filtre loudnorm complexe pour le batch
+            filter_complex = []
+            output_map = []
+            
+            for j, aac_file in enumerate(batch):
+                normalized_file = aac_temp_dir / f"normalized_{i+j+1:04d}.aac"
+                filter_complex.append(f"[{j}:a]loudnorm={loudnorm_params}[a{j}]")
+                output_map.extend(['-map', f'[a{j}]', str(normalized_file)])
+                normalized_files.append(normalized_file)
+            
+            # Commande batch FFmpeg
+            cmd = [
+                'ffmpeg', '-y'
+            ]
+            
+            # Ajoute les fichiers d'entrée
+            for aac_file in batch:
+                cmd.extend(['-i', str(aac_file)])
+            
+            # Ajoute le filtre complexe
+            filter_spec = ";".join(filter_complex)
+            cmd.extend(['-filter_complex', filter_spec])
+            
+            # Ajoute les mappings de sortie
+            cmd.extend(output_map)
+            
+            # Options optimisées
+            cmd.extend([
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-ar', '48000',
+                '-ac', '2',
+                '-threads', '8'  # Multi-threading pour le batch
+            ])
+            
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            
+            if process.returncode != 0:
+                logger.error(f"❌ Erreur batch {i//batch_size + 1}: {process.stderr}")
+                # Fallback: traitement individuel
+                for j, aac_file in enumerate(batch):
+                    normalized_file = aac_temp_dir / f"normalized_{i+j+1:04d}.aac"
+                    cmd_single = [
+                        'ffmpeg', '-y',
+                        '-i', str(aac_file),
+                        '-af', f'loudnorm={loudnorm_params}',
+                        '-c:a', 'aac',
+                        '-b:a', '128k',
+                        '-ar', '48000',
+                        '-ac', '2',
+                        str(normalized_file)
+                    ]
+                    process_single = subprocess.run(cmd_single, capture_output=True, text=True, timeout=300)
+                    if process_single.returncode == 0:
+                        logger.info(f"   ✅ Fallback normalisé: {aac_file.name}")
+                    else:
+                        logger.warning(f"   ⚠️ Fallback échoué, utilisation original: {aac_file.name}")
+                        normalized_files[i+j] = aac_file
+            else:
+                logger.info(f"   ✅ Batch {i//batch_size + 1} terminé avec succès")
+        
+        return normalized_files
+    
+    def encode_single_file_cpu_optimized(self, task_data: Tuple[Path, Path, Dict, int]) -> Tuple[bool, str, Dict]:
+        """Encode un fichier individuel avec optimisation CPU multi-cœurs"""
+        input_file, output_file, encoding_params, file_index = task_data
+        
+        try:
+            logger.info(f"⚡ [{file_index}] Encodage CPU optimisé: {input_file.name}")
+            
+            # Analyse qualité
+            quality = self.analyze_audio_quality(input_file)
+            
+            # Paramètres optimaux
+            optimal_params = self.get_optimal_encoding_params(quality)
+            
+            # Configuration CPU optimisée pour double Xeon
+            cpu_threads = max(2, (os.cpu_count() or 8) // 2)  # Thread_max / 2
+            logger.info(f"   🔧 {input_file.name}: {optimal_params['reason']} ({cpu_threads} threads)")
+            
+            # Commande d'encodage CPU optimisée
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', str(input_file),
+                '-c:a', 'aac',
+                '-b:a', f"{optimal_params['bitrate']}k",
+                '-ar', str(optimal_params['sample_rate']),
+                '-ac', str(optimal_params['channels']),
+                '-aac_coder', 'twoloop',
+                '-threads', str(cpu_threads),  # Optimisé pour Xeon
+                '-movflags', '+faststart',
+                str(output_file)
+            ]
+            
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if process.returncode == 0:
+                return True, input_file.name, {**optimal_params, 'cpu_threads': cpu_threads}
+            else:
+                logger.error(f"❌ Erreur encodage {input_file.name}: {process.stderr}")
+                return False, input_file.name, {'cpu_threads': cpu_threads}
+                
+        except Exception as e:
+            logger.error(f"💥 Erreur encodage {input_file.name}: {e}")
+            return False, input_file.name, {'cpu_threads': 0}
+    
+    def normalize_batch_cpu_optimized(self, aac_files: List[Path], aac_temp_dir: Path, config) -> List[Path]:
+        """Normalisation par lots optimisée pour CPU multi-cœurs"""
+        logger.info("🔧 Normalisation batch CPU optimisée...")
+        
+        # Configuration loudnorm
+        loudnorm_params = f"I={config.loudnorm_target}:LRA={config.loudnorm_range}:TP={config.loudnorm_true_peak}"
+        
+        # Configuration optimisée pour double Xeon 32 cœurs
+        total_cores = os.cpu_count() or 8
+        batch_threads = max(4, total_cores // 4)  # Thread_max / 4 pour normalisation
+        batch_size = min(8, total_cores // 8)  # Plus de fichiers par batch avec plus de cœurs
+        
+        logger.info(f"   🔧 Configuration: {total_cores} cœurs, {batch_threads} threads/batch, {batch_size} fichiers/batch")
+        
+        normalized_files = []
+        
+        for i in range(0, len(aac_files), batch_size):
+            batch = aac_files[i:i+batch_size]
+            batch_num = i // batch_size + 1
+            total_batches = (len(aac_files) - 1) // batch_size + 1
+            
+            logger.info(f"🔧 Batch {batch_num}/{total_batches}: {len(batch)} fichiers ({batch_threads} threads)")
+            
+            # Crée un filtre loudnorm complexe pour le batch
+            filter_complex = []
+            output_map = []
+            
+            for j, aac_file in enumerate(batch):
+                normalized_file = aac_temp_dir / f"normalized_{i+j+1:04d}.aac"
+                filter_complex.append(f"[{j}:a]loudnorm={loudnorm_params}[a{j}]")
+                output_map.extend(['-map', f'[a{j}]', str(normalized_file)])
+                normalized_files.append(normalized_file)
+            
+            # Commande batch FFmpeg optimisée pour Xeon
+            cmd = ['ffmpeg', '-y']
+            
+            # Ajoute les fichiers d'entrée
+            for aac_file in batch:
+                cmd.extend(['-i', str(aac_file)])
+            
+            # Ajoute le filtre complexe
+            filter_spec = ";".join(filter_complex)
+            cmd.extend(['-filter_complex', filter_spec])
+            
+            # Ajoute les mappings de sortie
+            cmd.extend(output_map)
+            
+            # Options optimisées CPU
+            cmd.extend([
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-ar', '48000',
+                '-ac', '2',
+                '-threads', str(batch_threads),  # Multi-threading pour le batch
+                '-thread_type', 'slice'  # Optimisé pour Xeon
+            ])
+            
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            
+            if process.returncode != 0:
+                logger.error(f"❌ Erreur batch {batch_num}: {process.stderr}")
+                # Fallback: traitement individuel avec threads optimisés
+                for j, aac_file in enumerate(batch):
+                    normalized_file = aac_temp_dir / f"normalized_{i+j+1:04d}.aac"
+                    cmd_single = [
+                        'ffmpeg', '-y',
+                        '-i', str(aac_file),
+                        '-af', f'loudnorm={loudnorm_params}',
+                        '-c:a', 'aac',
+                        '-b:a', '128k',
+                        '-ar', '48000',
+                        '-ac', '2',
+                        '-threads', str(batch_threads),
+                        '-thread_type', 'slice',
+                        str(normalized_file)
+                    ]
+                    process_single = subprocess.run(cmd_single, capture_output=True, text=True, timeout=300)
+                    if process_single.returncode == 0:
+                        logger.info(f"   ✅ Fallback normalisé: {aac_file.name}")
+                    else:
+                        logger.warning(f"   ⚠️ Fallback échoué, utilisation original: {aac_file.name}")
+                        normalized_files[i+j] = aac_file
+            else:
+                logger.info(f"   ✅ Batch {batch_num} terminé avec succès")
+        
+        return normalized_files
+    
+    def encode_cpu_optimized_phase2(self, audio_files: List[Path], output_path: Path, metadata: AudiobookMetadata) -> bool:
+        """Phase 2: Encodage CPU multi-cœurs optimisé pour double Xeon"""
+        try:
+            logger.info(f"⚡ PHASE 2 CPU OPTIMISÉE: {len(audio_files)} fichiers")
+            
+            # Configuration optimisée pour double Xeon 32 cœurs
+            total_cores = os.cpu_count() or 8
+            max_workers = max(4, total_cores // 2)  # Thread_max / 2
+            
+            logger.info(f"🖥️ Configuration CPU: {total_cores} cœurs disponibles")
+            logger.info(f"⚡ Multithreading: {max_workers} workers parallèles")
+            logger.info(f"🔧 Optimisé pour: Double Xeon 32 cœurs")
+            
+            # Analyse qualité rapide
+            logger.info("🔍 Analyse qualité (échantillon 5 fichiers)...")
+            quality_summary = {'codec': {}, 'bitrate': {}, 'sample_rate': {}}
+            
+            for i, audio_file in enumerate(audio_files[:5]):
+                quality = self.analyze_audio_quality(audio_file)
+                logger.info(f"   {i+1}. {audio_file.name}: {quality['bitrate']}k, {quality['sample_rate']}Hz")
+                
+                quality_summary['codec'][quality['codec']] = quality_summary['codec'].get(quality['codec'], 0) + 1
+                quality_summary['bitrate'][quality['bitrate']] = quality_summary['bitrate'].get(quality['bitrate'], 0) + 1
+                quality_summary['sample_rate'][quality['sample_rate']] = quality_summary['sample_rate'].get(quality['sample_rate'], 0) + 1
+            
+            logger.info(f"📊 Résumé qualité: {quality_summary}")
+            
+            # Dossier temporaire
+            aac_temp_dir = self.temp_dir / "aac_encoded"
+            aac_temp_dir.mkdir(exist_ok=True)
+            
+            # Préparation des tâches
+            tasks = []
+            for i, audio_file in enumerate(audio_files):
+                aac_filename = f"track_{i+1:04d}.aac"
+                aac_file = aac_temp_dir / aac_filename
+                tasks.append((audio_file, aac_file, {}, i+1))
+            
+            # Encodage parallèle CPU optimisé
+            logger.info(f"🚀 Démarrage encodage CPU optimisé ({max_workers} workers)...")
+            start_time = time.time()
+            
+            aac_files = []
+            encoding_stats = {'codec_only': 0, 'reduce_bitrate': 0, 'reduce_sample_rate': 0, 'reduce_both': 0, 'upgrade_needed': 0, 'errors': 0}
+            thread_usage = {}
+            
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_file = {executor.submit(self.encode_single_file_cpu_optimized, task): task for task in tasks}
+                
+                for future in as_completed(future_to_file):
+                    success, filename, params = future.result()
+                    
+                    if success:
+                        aac_files.append(aac_temp_dir / f"track_{future_to_file[future][3]:04d}.aac")
+                        action = params.get('action', 'unknown')
+                        encoding_stats[action] += 1
+                        
+                        threads_used = params.get('cpu_threads', 0)
+                        thread_usage[threads_used] = thread_usage.get(threads_used, 0) + 1
+                            
+                        logger.info(f"   ✅ [{len(aac_files)}/{len(audio_files)}] {filename} - {action} ({threads_used} threads)")
+                    else:
+                        encoding_stats['errors'] += 1
+                        logger.error(f"   ❌ Échec: {filename}")
+            
+            # Vérification erreurs
+            if encoding_stats['errors'] > len(audio_files) * 0.1:
+                logger.error(f"💥 Trop d'erreurs: {encoding_stats['errors']}/{len(audio_files)}")
+                return False
+            
+            parallel_time = time.time() - start_time
+            logger.info(f"⚡ Encodage CPU optimisé terminé en {parallel_time//60:.0f}m{parallel_time%60:.0f}s")
+            logger.info(f"📊 Statistiques: {encoding_stats}")
+            logger.info(f"🔧 Utilisation threads: {thread_usage}")
+            
+            # Normalisation batch CPU optimisée
+            config = getattr(self, 'config', ProcessingConfig())
+            loudnorm_params = f"I={config.loudnorm_target}:LRA={config.loudnorm_range}:TP={config.loudnorm_true_peak}"
+            logger.info(f"🔧 Normalisation batch CPU optimisée: {loudnorm_params}")
+            
+            norm_start = time.time()
+            normalized_files = self.normalize_batch_cpu_optimized(aac_files, aac_temp_dir, config)
+            norm_time = time.time() - norm_start
+            
+            logger.info(f"🔧 Normalisation terminée en {norm_time//60:.0f}m{norm_time%60:.0f}s")
+            
+            # Concaténation finale
+            logger.info("🔗 Concaténation finale...")
+            
+            file_list = aac_temp_dir / "aac_filelist.txt"
+            with open(file_list, 'w') as f:
+                for aac_file in normalized_files:
+                    f.write(f"file '{aac_file.absolute()}'\n")
+            
+            # Métadonnées
+            metadata_dict = metadata.get_metadata_dict()
+            metadata_args = []
+            for key, value in metadata_dict.items():
+                metadata_args.extend(['-metadata', f'{key}={value}'])
+            
+            # Commande concaténation
+            cmd = [
+                'ffmpeg', '-y',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(file_list),
+                '-c', 'copy',
+                *metadata_args,
+                str(output_path)
+            ]
+            
+            logger.info("🚀 LANCEMENT CONCATÉNATION FINALE...")
+            concat_start = time.time()
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+            
+            if process.returncode != 0:
+                logger.error(f'❌ Erreur concaténation: {process.stderr}')
+                return False
+            
+            concat_time = time.time() - concat_start
+            total_time = time.time() - start_time
+            
+            # Statistiques finales
+            input_size = sum(f.stat().st_size for f in audio_files) / (1024*1024)
+            output_size = output_path.stat().st_size / (1024*1024) if output_path.exists() else 0
+            
+            logger.info(f"✅ Phase 2 CPU optimisée terminée!")
+            logger.info(f"🖥️ Configuration: {total_cores} cœurs, {max_workers} workers")
+            logger.info(f"🚀 Performance: {parallel_time:.1f}s encodage, {norm_time:.1f}s normalisation, {concat_time:.1f}s concaténation")
+            logger.info(f"🔧 Threads utilisés: {thread_usage}")
+            logger.info(f"📊 Taille: {input_size:.1f}MB → {output_size:.1f}MB ({((1-output_size/input_size)*100):.1f}% compression)")
+            logger.info(f"📊 Qualité: AAC 128k, 48kHz, normalisé -18 LUFS")
+            logger.info(f"🎯 Optimisé pour: Double Xeon 32 cœurs")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"💥 Erreur Phase 2 CPU optimisée: {e}")
+            return False
+        """Phase 2: Encodage GPU-hybrid + normalisation batch optimisée"""
+        try:
+            logger.info(f"🚀 PHASE 2 GPU-HYBRID: {len(audio_files)} fichiers")
+            
+            # Détection GPU
+            cuda_available = self.detect_cuda_support()
+            logger.info(f"🎯 CUDA disponible: {cuda_available}")
+            
+            # Configuration multithreading optimisée
+            if cuda_available:
+                max_workers = min(os.cpu_count() or 8, 16)  # Plus de threads avec GPU
+                logger.info(f"⚡ Mode GPU: {max_workers} threads")
+            else:
+                max_workers = min(os.cpu_count() or 8, 12)
+                logger.info(f"⚙️ Mode CPU: {max_workers} threads")
+            
+            # Analyse qualité rapide
+            logger.info("🔍 Analyse qualité (échantillon 5 fichiers)...")
+            quality_summary = {'codec': {}, 'bitrate': {}, 'sample_rate': {}}
+            
+            for i, audio_file in enumerate(audio_files[:5]):
+                quality = self.analyze_audio_quality(audio_file)
+                logger.info(f"   {i+1}. {audio_file.name}: {quality['bitrate']}k, {quality['sample_rate']}Hz")
+                
+                quality_summary['codec'][quality['codec']] = quality_summary['codec'].get(quality['codec'], 0) + 1
+                quality_summary['bitrate'][quality['bitrate']] = quality_summary['bitrate'].get(quality['bitrate'], 0) + 1
+                quality_summary['sample_rate'][quality['sample_rate']] = quality_summary['sample_rate'].get(quality['sample_rate'], 0) + 1
+            
+            logger.info(f"📊 Résumé qualité: {quality_summary}")
+            
+            # Dossier temporaire
+            aac_temp_dir = self.temp_dir / "aac_encoded"
+            aac_temp_dir.mkdir(exist_ok=True)
+            
+            # Préparation des tâches
+            tasks = []
+            for i, audio_file in enumerate(audio_files):
+                aac_filename = f"track_{i+1:04d}.aac"
+                aac_file = aac_temp_dir / aac_filename
+                tasks.append((audio_file, aac_file, {}, i+1))
+            
+            # Encodage parallèle GPU-hybrid
+            logger.info(f"🚀 Démarrage encodage GPU-hybrid ({max_workers} workers)...")
+            start_time = time.time()
+            
+            aac_files = []
+            encoding_stats = {'codec_only': 0, 'reduce_bitrate': 0, 'reduce_sample_rate': 0, 'reduce_both': 0, 'upgrade_needed': 0, 'errors': 0, 'gpu_used': 0, 'cpu_used': 0}
+            
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_file = {executor.submit(self.encode_single_file_gpu_hybrid, task): task for task in tasks}
+                
+                for future in as_completed(future_to_file):
+                    success, filename, params = future.result()
+                    
+                    if success:
+                        aac_files.append(aac_temp_dir / f"track_{future_to_file[future][3]:04d}.aac")
+                        action = params.get('action', 'unknown')
+                        encoding_stats[action] += 1
+                        
+                        if params.get('gpu_used', False):
+                            encoding_stats['gpu_used'] += 1
+                        else:
+                            encoding_stats['cpu_used'] += 1
+                            
+                        gpu_status = "🎯GPU" if params.get('gpu_used', False) else "⚙️CPU"
+                        logger.info(f"   ✅ [{len(aac_files)}/{len(audio_files)}] {filename} - {action} ({gpu_status})")
+                    else:
+                        encoding_stats['errors'] += 1
+                        logger.error(f"   ❌ Échec: {filename}")
+            
+            # Vérification erreurs
+            if encoding_stats['errors'] > len(audio_files) * 0.1:
+                logger.error(f"💥 Trop d'erreurs: {encoding_stats['errors']}/{len(audio_files)}")
+                return False
+            
+            parallel_time = time.time() - start_time
+            logger.info(f"⚡ Encodage GPU-hybrid terminé en {parallel_time//60:.0f}m{parallel_time%60:.0f}s")
+            logger.info(f"📊 Statistiques: {encoding_stats}")
+            logger.info(f"🎯 GPU utilisés: {encoding_stats['gpu_used']}, CPU: {encoding_stats['cpu_used']}")
+            
+            # Normalisation batch optimisée
+            config = getattr(self, 'config', ProcessingConfig())
+            loudnorm_params = f"I={config.loudnorm_target}:LRA={config.loudnorm_range}:TP={config.loudnorm_true_peak}"
+            logger.info(f"🔧 Normalisation batch optimisée: {loudnorm_params}")
+            
+            norm_start = time.time()
+            normalized_files = self.normalize_batch_gpu_optimized(aac_files, aac_temp_dir, config)
+            norm_time = time.time() - norm_start
+            
+            logger.info(f"🔧 Normalisation terminée en {norm_time//60:.0f}m{norm_time%60:.0f}s")
+            
+            # Concaténation finale
+            logger.info("🔗 Concaténation finale...")
+            
+            file_list = aac_temp_dir / "aac_filelist.txt"
+            with open(file_list, 'w') as f:
+                for aac_file in normalized_files:
+                    f.write(f"file '{aac_file.absolute()}'\n")
+            
+            # Métadonnées
+            metadata_dict = metadata.get_metadata_dict()
+            metadata_args = []
+            for key, value in metadata_dict.items():
+                metadata_args.extend(['-metadata', f'{key}={value}'])
+            
+            # Commande concaténation
+            cmd = [
+                'ffmpeg', '-y',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(file_list),
+                '-c', 'copy',
+                *metadata_args,
+                str(output_path)
+            ]
+            
+            logger.info("🚀 LANCEMENT CONCATÉNATION FINALE...")
+            concat_start = time.time()
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+            
+            if process.returncode != 0:
+                logger.error(f'❌ Erreur concaténation: {process.stderr}')
+                return False
+            
+            concat_time = time.time() - concat_start
+            total_time = time.time() - start_time
+            
+            # Statistiques finales
+            input_size = sum(f.stat().st_size for f in audio_files) / (1024*1024)
+            output_size = output_path.stat().st_size / (1024*1024) if output_path.exists() else 0
+            
+            logger.info(f"✅ Phase 2 GPU-hybrid terminée!")
+            logger.info(f"🚀 Performance: {max_workers} threads, {parallel_time:.1f}s encodage, {norm_time:.1f}s normalisation, {concat_time:.1f}s concaténation")
+            logger.info(f"🎯 GPU/CPU: {encoding_stats['gpu_used']}/{encoding_stats['cpu_used']} fichiers")
+            logger.info(f"📊 Taille: {input_size:.1f}MB → {output_size:.1f}MB ({((1-output_size/input_size)*100):.1f}% compression)")
+            logger.info(f"📊 Qualité: AAC 128k, 48kHz, normalisé -18 LUFS")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"💥 Erreur Phase 2 GPU-hybrid: {e}")
+            return False
+        """Phase 2: Encodage parallèle multicœur + concaténation"""
+        try:
+            logger.info(f"🚀 PHASE 2 PARALLÈLE: {len(audio_files)} fichiers")
+            
+            # Configuration multithreading
+            max_workers = min(os.cpu_count() or 8, 12)  # Max 12 threads
+            logger.info(f"⚡ Utilisation de {max_workers} threads en parallèle")
+            
+            # Analyse qualité rapide (échantillon)
+            logger.info("🔍 Analyse qualité (échantillon 5 fichiers)...")
+            quality_summary = {'codec': {}, 'bitrate': {}, 'sample_rate': {}}
+            
+            for i, audio_file in enumerate(audio_files[:5]):
+                quality = self.analyze_audio_quality(audio_file)
+                logger.info(f"   {i+1}. {audio_file.name}: {quality['bitrate']}k, {quality['sample_rate']}Hz")
+                
+                quality_summary['codec'][quality['codec']] = quality_summary['codec'].get(quality['codec'], 0) + 1
+                quality_summary['bitrate'][quality['bitrate']] = quality_summary['bitrate'].get(quality['bitrate'], 0) + 1
+                quality_summary['sample_rate'][quality['sample_rate']] = quality_summary['sample_rate'].get(quality['sample_rate'], 0) + 1
+            
+            logger.info(f"📊 Résumé qualité: {quality_summary}")
+            
+            # Dossier temporaire pour fichiers AAC
+            aac_temp_dir = self.temp_dir / "aac_encoded"
+            aac_temp_dir.mkdir(exist_ok=True)
+            
+            # Préparation des tâches parallèles
+            tasks = []
+            for i, audio_file in enumerate(audio_files):
+                aac_filename = f"track_{i+1:04d}.aac"
+                aac_file = aac_temp_dir / aac_filename
+                tasks.append((audio_file, aac_file, {}, i+1))
+            
+            # Encodage parallèle
+            logger.info(f"🚀 Démarrage encodage parallèle ({max_workers} workers)...")
+            start_time = time.time()
+            
+            aac_files = []
+            encoding_stats = {'codec_only': 0, 'reduce_bitrate': 0, 'reduce_sample_rate': 0, 'reduce_both': 0, 'upgrade_needed': 0, 'errors': 0}
+            
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Soumettre toutes les tâches
+                future_to_file = {executor.submit(self.encode_single_file_parallel, task): task for task in tasks}
+                
+                # Traiter les résultats au fur et à mesure
+                for future in as_completed(future_to_file):
+                    success, filename, params = future.result()
+                    
+                    if success:
+                        aac_files.append(aac_temp_dir / f"track_{future_to_file[future][3]:04d}.aac")
+                        encoding_stats[params.get('action', 'unknown')] += 1
+                        logger.info(f"   ✅ [{len(aac_files)}/{len(audio_files)}] {filename} - {params.get('action', 'unknown')}")
+                    else:
+                        encoding_stats['errors'] += 1
+                        logger.error(f"   ❌ Échec: {filename}")
+            
+            # Vérification des erreurs
+            if encoding_stats['errors'] > 0:
+                logger.error(f"💥 {encoding_stats['errors']} fichiers ont échoué")
+                if encoding_stats['errors'] > len(audio_files) * 0.1:  # Plus de 10% d'erreurs
+                    return False
+            
+            parallel_time = time.time() - start_time
+            logger.info(f"⚡ Encodage parallèle terminé en {parallel_time//60:.0f}m{parallel_time%60:.0f}s")
+            logger.info(f"📊 Statistiques: {encoding_stats}")
+            
+            # Normalisation EBU R128 (-18 LUFS / 11 LU LRA / TP -1.5)
+            logger.info("🔧 Normalisation EBU R128 (-18 LUFS / 11 LU LRA / TP -1.5)...")
+            normalized_files = []
+            
+            config = getattr(self, 'config', ProcessingConfig())
+            loudnorm_params = f"I={config.loudnorm_target}:LRA={config.loudnorm_range}:TP={config.loudnorm_true_peak}"
+            logger.info(f"   📊 Paramètres: {loudnorm_params}")
+            
+            # Normalisation séquentielle (plus sûr pour loudnorm)
+            norm_start = time.time()
+            for i, aac_file in enumerate(aac_files):
+                logger.info(f"🔧 [{i+1}/{len(aac_files)}] Normalisation: {aac_file.name}")
+                
+                normalized_file = aac_temp_dir / f"normalized_{i+1:04d}.aac"
+                
+                cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(aac_file),
+                    '-af', f'loudnorm={loudnorm_params}',
+                    '-c:a', 'aac',
+                    '-b:a', '128k',
+                    '-ar', '48000',
+                    '-ac', '2',
+                    str(normalized_file)
+                ]
+                
+                process = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                
+                if process.returncode == 0:
+                    normalized_files.append(normalized_file)
+                    logger.info(f"   ✅ Normalisé: {normalized_file.name}")
+                else:
+                    logger.warning(f"   ⚠️ Normalisation échouée, utilisation fichier original")
+                    normalized_files.append(aac_file)
+            
+            norm_time = time.time() - norm_start
+            logger.info(f"🔧 Normalisation terminée en {norm_time//60:.0f}m{norm_time%60:.0f}s")
+            
+            # Concaténation finale
+            logger.info("🔗 Concaténation finale des fichiers AAC...")
+            
+            file_list = aac_temp_dir / "aac_filelist.txt"
+            with open(file_list, 'w') as f:
+                for aac_file in normalized_files:
+                    f.write(f"file '{aac_file.absolute()}'\n")
+            
+            # Métadonnées
+            metadata_dict = metadata.get_metadata_dict()
+            metadata_args = []
+            for key, value in metadata_dict.items():
+                metadata_args.extend(['-metadata', f'{key}={value}'])
+            
+            # Commande concaténation finale
+            cmd = [
+                'ffmpeg', '-y',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(file_list),
+                '-c', 'copy',
+                *metadata_args,
+                str(output_path)
+            ]
+            
+            logger.info("🚀 LANCEMENT CONCATÉNATION FINALE...")
+            concat_start = time.time()
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+            
+            if process.returncode != 0:
+                logger.error(f'❌ Erreur concaténation finale: {process.stderr}')
+                return False
+            
+            concat_time = time.time() - concat_start
+            total_time = time.time() - start_time
+            
+            # Statistiques finales
+            input_size = sum(f.stat().st_size for f in audio_files) / (1024*1024)
+            output_size = output_path.stat().st_size / (1024*1024) if output_path.exists() else 0
+            
+            logger.info(f"✅ Phase 2 parallèle terminée avec succès!")
+            logger.info(f"⚡ Performance: {max_workers} threads, {parallel_time:.1f}s encodage, {norm_time:.1f}s normalisation, {concat_time:.1f}s concaténation")
+            logger.info(f"📊 Taille: {input_size:.1f}MB → {output_size:.1f}MB ({((1-output_size/input_size)*100):.1f}% compression)")
+            logger.info(f"📊 Qualité: AAC 128k, 48kHz, normalisé -18 LUFS")
+            logger.info(f"🚀 Gain temps: ~{len(audio_files)/max_workers:.1f}x plus rapide que séquentiel")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"💥 Erreur Phase 2 parallèle: {e}")
+            return False
+        """Phase 2: Réencodage adaptatif AAC individuel + concaténation"""
+        try:
+            logger.info(f"🎵 PHASE 2: RÉENCODAGE ADAPTATIF AAC: {len(audio_files)} fichiers")
+            
+            # Analyse qualité de tous les fichiers
+            logger.info("🔍 Analyse qualité des fichiers source...")
+            quality_summary = {'codec': {}, 'bitrate': {}, 'sample_rate': {}}
+            
+            for i, audio_file in enumerate(audio_files[:5]):  # Analyse 5 premiers fichiers
+                quality = self.analyze_audio_quality(audio_file)
+                logger.info(f"   {i+1}. {audio_file.name}: {quality['bitrate']}k, {quality['sample_rate']}Hz, {quality['codec']}")
+                
+                # Statistiques
+                quality_summary['codec'][quality['codec']] = quality_summary['codec'].get(quality['codec'], 0) + 1
+                quality_summary['bitrate'][quality['bitrate']] = quality_summary['bitrate'].get(quality['bitrate'], 0) + 1
+                quality_summary['sample_rate'][quality['sample_rate']] = quality_summary['sample_rate'].get(quality['sample_rate'], 0) + 1
+            
+            logger.info(f"📊 Résumé qualité: {quality_summary}")
+            
+            # Dossier temporaire pour fichiers AAC
+            aac_temp_dir = self.temp_dir / "aac_encoded"
+            aac_temp_dir.mkdir(exist_ok=True)
+            
+            # Encodage individuel adaptatif
+            aac_files = []
+            encoding_stats = {'codec_only': 0, 'reduce_bitrate': 0, 'reduce_sample_rate': 0, 'reduce_both': 0, 'upgrade_needed': 0}
+            
+            for i, audio_file in enumerate(audio_files):
+                logger.info(f"🔄 [{i+1}/{len(audio_files)}] Encodage: {audio_file.name}")
+                
+                # Analyse qualité
+                quality = self.analyze_audio_quality(audio_file)
+                
+                # Paramètres optimaux
+                encoding_params = self.get_optimal_encoding_params(quality)
+                encoding_stats[encoding_params['action']] += 1
+                
+                logger.info(f"   📊 {encoding_params['reason']}")
+                
+                # Fichier de sortie AAC
+                aac_filename = f"track_{i+1:04d}.aac"
+                aac_file = aac_temp_dir / aac_filename
+                
+                # Encodage
+                success = self.encode_single_file_aac(audio_file, aac_file, encoding_params)
+                
+                if success:
+                    aac_files.append(aac_file)
+                    logger.info(f"   ✅ {aac_filename} ({encoding_params['bitrate']}k, {encoding_params['sample_rate']}Hz)")
+                else:
+                    logger.error(f"   ❌ Échec encodage {audio_file.name}")
+                    return False
+            
+            # Statistiques d'encodage
+            logger.info(f"📊 Statistiques encodage: {encoding_stats}")
+            
+            # Normalisation EBU R128 (-18 LUFS / 11 LU LRA / TP -1.5)
+            logger.info("🔧 Normalisation EBU R128 (-18 LUFS / 11 LU LRA / TP -1.5)...")
+            normalized_files = []
+            
+            config = getattr(self, 'config', ProcessingConfig())
+            loudnorm_params = f"I={config.loudnorm_target}:LRA={config.loudnorm_range}:TP={config.loudnorm_true_peak}"
+            logger.info(f"   📊 Paramètres: {loudnorm_params}")
+            
+            for i, aac_file in enumerate(aac_files):
+                logger.info(f"🔧 [{i+1}/{len(aac_files)}] Normalisation: {aac_file.name}")
+                
+                normalized_file = aac_temp_dir / f"normalized_{i+1:04d}.aac"
+                
+                # Commande normalisation avec standards audiobooks
+                cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(aac_file),
+                    '-af', f'loudnorm={loudnorm_params}',
+                    '-c:a', 'aac',
+                    '-b:a', '128k',
+                    '-ar', '48000',
+                    '-ac', '2',
+                    str(normalized_file)
+                ]
+                
+                process = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                
+                if process.returncode == 0:
+                    normalized_files.append(normalized_file)
+                    logger.info(f"   ✅ Normalisé: {normalized_file.name}")
+                else:
+                    logger.warning(f"   ⚠️ Normalisation échouée, utilisation fichier original")
+                    normalized_files.append(aac_file)
+            
+            # Concaténation finale des fichiers AAC normalisés
+            logger.info("🔗 Concaténation finale des fichiers AAC...")
+            
+            # Crée liste des fichiers normalisés
+            file_list = aac_temp_dir / "aac_filelist.txt"
+            with open(file_list, 'w') as f:
+                for aac_file in normalized_files:
+                    f.write(f"file '{aac_file.absolute()}'\n")
+            
+            # Métadonnées
+            metadata_dict = metadata.get_metadata_dict()
+            metadata_args = []
+            for key, value in metadata_dict.items():
+                metadata_args.extend(['-metadata', f'{key}={value}'])
+            
+            # Commande concaténation finale
+            cmd = [
+                'ffmpeg', '-y',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(file_list),
+                '-c', 'copy',  # Pas de réencodage, juste concaténation
+                *metadata_args,
+                str(output_path)
+            ]
+            
+            logger.info("🚀 LANCEMENT CONCATÉNATION FINALE...")
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+            
+            if process.returncode != 0:
+                logger.error(f'❌ Erreur concaténation finale: {process.stderr}')
+                return False
+            
+            # Statistiques finales
+            input_size = sum(f.stat().st_size for f in audio_files) / (1024*1024)
+            output_size = output_path.stat().st_size / (1024*1024) if output_path.exists() else 0
+            
+            logger.info(f"✅ Phase 2 terminée avec succès!")
+            logger.info(f"📊 Taille: {input_size:.1f}MB → {output_size:.1f}MB ({((1-output_size/input_size)*100):.1f}% compression)")
+            logger.info(f"📊 Qualité: AAC 128k, 48kHz, normalisé -18 LUFS")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"💥 Erreur Phase 2: {e}")
+            return False
+    
+    def convert_to_m4b(self, audio_files: List[Path], output_path: Path, metadata: AudiobookMetadata) -> bool:
         try:
             logger.info(f"🎵 CONVERSION M4B HAUTE QUALITÉ: {len(audio_files)} fichiers")
             
@@ -656,12 +1666,12 @@ class AudiobookProcessor:
                 success = self.concat_fast_m4b(audio_files, output_path, metadata)
                 
             elif config.processing_mode == "encode_aac":
-                # Phase 2: Réencodage AAC individuel
-                logger.info("🔄 Phase 2: Réencodage AAC individuel...")
+                # Phase 2: Encodage CPU multi-cœurs optimisé pour double Xeon
+                logger.info("🔄 Phase 2: Encodage CPU optimisé pour double Xeon...")
                 output_filename = f"{metadata.get_filename_format()}.m4b"
                 output_path = self.output_dir / output_filename
                 
-                success = self.convert_to_m4b(audio_files, output_path, metadata)
+                success = self.encode_cpu_optimized_phase2(audio_files, output_path, metadata)
                 
             else:
                 # Phase 3: M4B final (par défaut)

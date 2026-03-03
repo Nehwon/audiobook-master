@@ -87,175 +87,37 @@ Système professionnel de traitement et conversion d'audiobooks avec interface w
 - **Bitrates flexibles** : 64k, 96k, 128k, 192k
 - **Normalisation EBU R128** optionnelle
 - **Compression dynamique** pour voix
-- **Support multi-formats** : MP3, M4A, WAV, FLAC, AAC
-- **Archives** : ZIP, RAR
-
-### 🚀 Accélération GPU NVIDIA
-- **Détection automatique** RTX 4070/3050
-- **Filtres audio accélérés** (normalisation, compression)
-- **Surveillance CPU/GPU** en temps réel
-- **Optimisation multi-GPU**
-
-### 📊 Monitoring Avancé
-- **Barre de progression** précise et fiable
-- **Indicateurs d'activité** CPU/GPU
-- **Statistiques de performance** en temps réel
-- **Analyse des vitesses** de conversion
-
-### 🌐 Scraping Web Intégré
-- **Sources multiples** : Google Books API, Babelio
-- **Métadonnées complètes** : éditeur, date, description
-- **Pochettes HD** automatiques (600x600 JPEG)
-- **Validation intelligente** par similarité
-
-### 📚 Métadonnées Riches
-- **Parsing intelligent** des noms de fichiers
-- **Format série** : Auteur - Série - Tome X - Titre
-- **8+ champs FFmpeg** : titre, auteur, éditeur, genre
-- **Support Apple Books** compatible
-
-## 🚀 Installation
 
 ### Prérequis
 ```bash
 # Python 3.11+
-sudo apt update && sudo apt install python3.11 python3.11-pip
+sudo apt update && sudo apt install python3-pip
 
-# FFmpeg avec support NVIDIA
+# FFmpeg avec support multithreading
 sudo apt install ffmpeg
 
-# NVIDIA CUDA (pour GPU)
-sudo apt install nvidia-cuda-toolkit
-
 # Dépendances Python
-pip install mutagen requests beautifulsoup4 pillow
-```
-
-### Installation Complète
-```bash
-# Cloner le dépôt
-git clone https://gitea.lamachere.fr/fabrice/audiobooks-master.git
-cd audiobooks-master
-
-# Installer les dépendances principales
 pip install -r requirements.txt
-
-# Installer les dépendances web
-pip install -r requirements_web.txt
-
-# Configurer
-cp config.example.py config.py
-# Éditer config.py avec vos préférences
 ```
 
-## 🌐 Lancement de l'Interface Web
-
-### Démarrage
+### Configuration Rapide
 ```bash
-# Lancer l'interface web
-python start_web.py
+# Clone du dépôt
+git clone https://github.com/fabrice/audiobooks-manager.git
+cd audiobooks-manager
 
-# Interface disponible sur :
-# http://localhost:5000 (local)
-# http://192.168.0.120:5000 (réseau)
+# Configuration des dossiers
+nano core/config.py  # Modifier source_directory et output_directory
+
+# Lancement rapide
+python3 -m core.main --single "Mon Audiobook"
 ```
 
-### Accès
-- **URL locale** : http://localhost:5000
-- **URL réseau** : http://VOTRE_IP:5000
-- **WebSocket** : Communication temps réel
-- **API REST** : Endpoints pour intégration
+## � **Utilisation**
 
-## 📖 Utilisation
+### 🎯 **Modes de Traitement**
 
-### Interface Web
-1. **Ouvrez** http://localhost:5000
-2. **Sélectionnez** un fichier source
-3. **Configurez** les options (bitrate, GPU, etc.)
-4. **Lancez** la conversion
-5. **Suivez** la progression en temps réel
-6. **Téléchargez** le fichier M4B
-
-### Ligne de Commande
-```bash
-# Traiter un seul audiobook
-python run.py --source "/path/to/audiobook" --output "/path/to/output"
-
-# Traiter tout un dossier
-python run.py --source "/path/to/audiobooks" --output "/path/to/output" --all
-
-# Options avancées
-python run.py --source "/path/to/audiobook" --output "/path/to/output" \
-  --bitrate 128k --gpu --verbose
-```
-
-## ⚙️ Configuration
-
-### `config.py`
-```python
-# GPU
-enable_gpu_acceleration = True
-
-# Audio
-audio_bitrate = "192k"
-audio_channels = 2
-sample_rate = 44100
-
-# Normalisation
-enable_loudnorm = True
-loudnorm_target = -16
-loudnorm_range = 11
-
-# Compression
-enable_compressor = True
-compressor_settings = "acompressor=threshold=-12dB:ratio=4:attack=5:release=100"
-
-# Scraping
-enable_scraping = True
-
-# Dossiers
-source_directory = "/home/fabrice/Documents/Audiobooks"
-output_directory = "/home/fabrice/Documents/Audiobooks_Processed"
-```
-
-## 📁 Structure des Dossiers
-
-```
-audiobooks-master/
-├── .clinerules/             # Règles CLI et standards
-├── .windsurf/               # Configuration Windsurf
-├── .git/                    # Dépôt Git
-├── ai/                      # Modules IA (synopsis, classification)
-│   ├── synopsis/            # Génération de synopsis
-│   ├── classification/      # Classification de contenu
-│   └── validation/          # Validation métadonnées
-├── core/                    # Cœur du projet
-│   ├── config.py            # Configuration centralisée
-│   ├── main.py              # Point d'entrée principal
-│   ├── metadata.py          # Gestion métadonnées
-│   └── processor.py         # Logique de traitement
-├── integrations/            # Intégrations externes
-│   └── audiobookshelf.py    # Client Audiobookshelf
-├── web/                     # Interface web
-│   └── app.py               # Application Flask
-├── src/                     # Sources additionnelles
-├── templates/               # Templates HTML
-├── static/                  # Ressources statiques (CSS/JS)
-├── tests/                   # Tests unitaires
-├── logs/                    # Logs applicatifs
-├── docs/                    # Documentation
-├── Archives/                # Versions précédentes
-├── run.py                   # Point d'entrée CLI
-├── start_web.py             # Lancement interface web
-├── requirements.txt         # Dépendances principales
-├── requirements_web.txt     # Dépendances web
-├── README.md                # Documentation projet
-├── CHANGELOG.md             # Historique versions
-├── TODO.md                  # Tâches en cours
-├── ROADMAP.md               # Plan de développement
-└── LICENSE                  # Licence MIT
-```
-
+#### Phase 1 - Concaténation Rapide
 ## 🎯 Formats de Noms Supportés
 
 Le système parse automatiquement ces formats :

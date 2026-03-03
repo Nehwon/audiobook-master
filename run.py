@@ -15,7 +15,7 @@ if str(src_path) not in sys.path:
 
 # Importer les modules depuis src/
 from audiobook_processor import AudiobookProcessor, AudiobookMetadata
-from config import ProcessingConfig
+from core.config import ProcessingConfig
 from audiobookshelf_client import AudiobookshelfClient, AudiobookshelfConfig
 from scraper import BookScraper
 

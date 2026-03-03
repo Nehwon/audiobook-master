@@ -4,10 +4,10 @@ Configuration du système de traitement d'audiobooks
 """
 
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
 import weakref
-from typing import Optional
+from typing import Optional, List
 
 @dataclass
 class ProcessingConfig:
@@ -26,7 +26,7 @@ class ProcessingConfig:
     aac_profile: str = "aac_low"  # Non utilisé en phase 1
     
     # Mode de traitement
-    processing_mode: str = "concat_fast"  # "concat_fast" | "encode_aac" | "final_m4b"
+    processing_mode: str = "encode_aac"  # "concat_fast" | "encode_aac" | "final_m4b"
     
     # GPU et optimisations (pour compatibilité)
     enable_gpu_acceleration: bool = True
@@ -34,10 +34,18 @@ class ProcessingConfig:
     aac_low_latency: bool = False  # Désactivé pour meilleure compression
     aac_vbr: bool = False  # CBR pour taille prévisible (plus petit que VBR)
     
-    # Normalisation audio (EBU R128 standard pour audiobooks)
-    enable_loudnorm: bool = True
-    loudnorm_target: float = -16.0  # Niveau cible EBU R128
-    loudnorm_range: float = 11.0  # Dynamic range préservée
+    # Paramètres avancés (interface)
+    enable_vbr: bool = False  # VBR optionnel (décoché par défaut)
+    vbr_quality: int = 5  # Qualité VBR (1-9)
+    
+    # Loudnorm avancé (modifiable interface)
+    loudnorm_target: float = -18.0  # Integrated Loudness (-23 à -14 LUFS)
+    loudnorm_range: float = 11.0  # Loudness Range (4-20 LU)
+    loudnorm_true_peak: float = -1.5  # True Peak (-3 à -1 dBTP)
+    
+    # Bitrates disponibles
+    available_bitrates: List[str] = field(default_factory=lambda: ["64k", "96k", "128k", "160k", "192k", "256k", "320k"])
+    default_bitrate: str = "128k"
     
     # Compression dynamique optionnelle
     enable_compressor: bool = True

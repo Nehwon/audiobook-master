@@ -52,14 +52,14 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 - [ ] Mode dark/light interface thématique
 - [ ] Profils de conversion prédéfinis
 
-#### Version 2.1.1 (Juin 2026)
+#### Version 2.2.0 (Juin 2026)
 - [ ] Drag & drop fichiers upload intuitif
 - [ ] Batch operations multi-fichiers
 - [ ] Preview audio avant conversion
 - [ ] Waveform visualization interactive
 - [ ] Notifications desktop natives
 
-#### Version 2.2.0 (Juillet 2026)
+#### Version 2.3.0 (Juillet 2026)
 - [ ] Queue de conversions avec priorités
 - [ ] Scheduled conversions automatiques
 - [ ] Plugin system MVP extensible
@@ -71,21 +71,21 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 ### 📊 Phase 3: Analytics & Intelligence (Q3 2026)
 **Objectif**: Intelligence artificielle et analytics avancés
 
-#### Version 2.3.0 (Août 2026)
+#### Version 2.4.0 (Août 2026)
 - [ ] Tableau de bord avec graphiques interactifs
 - [ ] Rapports PDF conversions détaillées
 - [ ] Alertes email erreurs automatiques
 - [ ] Integration Grafana monitoring avancé
 - [ ] Metrics Prometheus export
 
-#### Version 2.3.1 (Septembre 2026)
+#### Version 2.5.0 (Septembre 2026)
 - [ ] Synopsis IA avancé (GPT-4/Claude)
 - [ ] Classification automatique genres
 - [ ] Recommandations basées bibliothèque
 - [ ] Traduction automatique multi-langues
 - [ ] Voice synthesis narration
 
-#### Version 2.4.0 (Octobre 2026)
+#### Version 2.6.0 (Octobre 2026)
 - [ ] Benchmark suite automatisée
 - [ ] Machine learning optimisation performance
 - [ ] Audio quality analysis automatique
@@ -97,7 +97,7 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 ### 🔗 Phase 4: Écosystème & Intégrations (Q4 2026)
 **Objectif**: Intégrations tierces et écosystème développeur
 
-#### Version 2.5.0 (Novembre 2026)
+#### Version 3.0.0 (Novembre 2026)
 - [ ] système de plugins facilement développable
 - [ ] Plugin dépôt et configuration métadonnées dans Audiobookshelf
 - [ ] Plugin Plex Media Server import automatique
@@ -107,14 +107,14 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 - [ ] Plugin Mega/Dropbox/Google Drive cloud storage
 - [ ] Plugin Pcloud/OneDrive integration
 
-#### Version 2.5.1 (Décembre 2026)
+#### Version 3.1.0 (Décembre 2026)
 - [ ] API publique développeurs complète
 - [ ] Plugin system avancé avec marketplace
 - [ ] Documentation Swagger interactive
 - [ ] SDK Python/JavaScript/TypeScript
 - [ ] Webhooks pour intégrations
 
-#### Version 3.0.0 (Janvier 2027)
+#### Version 3.2.0 (Janvier 2027)
 - [ ] Architecture microservices scalable
 - [ ] Base données PostgreSQL avec sharding
 - [ ] CDN mondial distribution optimisée
@@ -126,21 +126,21 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 ### 🚀 Phase 5: Distribution & Déploiement (Q1 2027)
 **Objectif**: Distribution multi-plateformes et déploiement automatisé
 
-#### Version 4.1.0 (Février 2027)
+#### Version 4.0.0 (Février 2027)
 - [ ] **AppImage Linux** - Exécutable autonome pour distributions Linux
 - [ ] **Windows Installer** - Package .exe avec installeur MSI
 - [ ] **macOS Bundle** - Application .app signée pour macOS
 - [ ] **GitHub Releases** - Publication automatisée des builds
 - [ ] **Code signing** - Signatures numériques pour sécurité
 
-#### Version 4.2.0 (Mars 2027)
+#### Version 4.1.0 (Mars 2027)
 - [ ] **Auto-update system** - Mises à jour automatiques intégrées
 - [ ] **Package managers** - Snap, Flatpak, Homebrew, Chocolatey, Winget
 - [ ] **Docker images** - Images multi-architectures (x86_64, ARM64)
 - [ ] **Portable versions** - Versions portables sans installation
 - [ ] **CI/CD pipelines** - Build et déploiement automatisés
 
-#### Version 4.3.0 (Avril 2027)
+#### Version 4.2.0 (Avril 2027)
 - [ ] **GitHub/Gitea sync** - Releases synchronisées entre plateformes
 - [ ] **Version tagging** - Tags automatiques sur versions
 - [ ] **Changelog generation** - Génération automatique depuis commits
@@ -152,28 +152,28 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 ### 🚀 Phase 6: Innovation & Future (Q2 2027+)
 **Objectif**: Innovation de rupture et leadership technologique
 
-#### Version 3.1.0 (Q1 2027)
+#### Version 5.0.0 (Mai 2027)
 - [ ] Application mobile iOS/Android native
 - [ ] Desktop app Electron multi-OS
 - [ ] Browser extension intégration navigateur
 - [ ] CLI avancée complète
 - [ ] Raspberry Pi support embarqué
 
-#### Version 3.2.0 (Q2 2027)
+#### Version 5.1.0 (Juin 2027)
 - [ ] Support FLAC lossless audiophiles
 - [ ] Égaliseur automatique intelligent
 - [ ] Denoising IA vieux enregistrements
 - [ ] Chapters detection automatique avancée
 - [ ] Multi-canaux (5.1/7.1) support
 
-#### Version 3.3.0 (Q3 2027)
+#### Version 5.2.0 (Juillet 2027)
 - [ ] 3D Audio spatial support immersif
 - [ ] Hi-Res Audio 24bit/192kHz
 - [ ] Multi-langues pistes synchronisées
 - [ ] Adaptive streaming qualité dynamique
 - [ ] AI mastering automatique
 
-#### Version 4.0.0 (Q4 2027)
+#### Version 6.0.0 (Août 2027)
 - [ ] Machine learning optimisation avancée
 - [ ] Place de marché métadonnées/pochettes
 - [ ] Community features social reviews

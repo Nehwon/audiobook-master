@@ -24,11 +24,11 @@ Règles de développement et workflow :
 - Bonnes pratiques
 
 ### 🔒 [git-workflow.md](./git-workflow.md)
-Règles strictes de push et merge :
-- Restrictions push GitHub (confirmation obligatoire)
+Règles de push et merge pour Gitea :
 - Workflow branches (dev → main)
 - Processus de validation
-- Hooks de sécurité
+- Release process
+- Monitoring et suivi
 
 ### ⚙️ [ai-config.md](./ai-config.md)
 Configuration technique de l'IA :

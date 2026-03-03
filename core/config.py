@@ -4,38 +4,48 @@ Configuration du système de traitement d'audiobooks
 """
 
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
-from typing import Optional
+import weakref
+from typing import Optional, List
 
 @dataclass
 class ProcessingConfig:
     """Configuration principale du traitement"""
     source_directory: str = "/home/fabrice/Documents/Audiobooks"
-    output_directory: str = "/home/fabrice/Documents/Audiobooks_Processed"
+    output_directory: str = "/home/fabrice/Documents/Projets/scripts_audiobooks/test_audio"
     temp_directory: str = "/tmp/audiobooks"
     
-    # Conversion HAUTE QUALITÉ
-    audio_bitrate: str = "192k"  # 192k pour stéréo haute qualité (96k par canal)
-    audio_codec: str = "aac"
-    audio_channels: int = 2  # Force stéréo pour effets spatiaux
-    sample_rate: int = 44100  # Préserve sample rate source
-    aac_coder: str = "twoloop"  # Meilleur preset AAC natif
-    cutoff_freq: int = 20000  # Fréquence haute conservée pour clarté
-    aac_profile: str = "aac_lc"  # Low Complexity pour compatibilité
+    # Phase 1: Concaténation 1:1 Rapide (sans réencodage)
+    audio_bitrate: str = "copy"  # COPY = pas de réencodage, vitesse maximale
+    audio_codec: str = "copy"  # Copie directe du codec source
+    audio_channels: int = 2  # Conserve les canaux originaux
+    sample_rate: int = 48000  # 48kHz haute qualité (conservé si possible)
+    aac_coder: str = "fast"  # Non utilisé en phase 1
+    cutoff_freq: int = 24000  # Non utilisé en phase 1
+    aac_profile: str = "aac_low"  # Non utilisé en phase 1
     
-    # GPU et optimisations
+    # Mode de traitement
+    processing_mode: str = "encode_aac"  # "concat_fast" | "encode_aac" | "final_m4b"
+    
+    # GPU et optimisations (pour compatibilité)
     enable_gpu_acceleration: bool = True
-    gpu_encoder: str = "h264_nvenc"  # NVIDIA NVENC
-    gpu_preset: str = "fast"
-    gpu_profile: str = "high"
-    gpu_level: str = "4.1"
-    gpu_pix_fmt: str = "yuv420p"
+    enable_aac_optimization: bool = True
+    aac_low_latency: bool = False  # Désactivé pour meilleure compression
+    aac_vbr: bool = False  # CBR pour taille prévisible (plus petit que VBR)
     
-    # Normalisation audio (EBU R128 standard pour audiobooks)
-    enable_loudnorm: bool = True
-    loudnorm_target: float = -16.0  # Niveau cible EBU R128
-    loudnorm_range: float = 11.0  # Dynamic range préservée
+    # Paramètres avancés (interface)
+    enable_vbr: bool = False  # VBR optionnel (décoché par défaut)
+    vbr_quality: int = 5  # Qualité VBR (1-9)
+    
+    # Loudnorm avancé (modifiable interface)
+    loudnorm_target: float = -18.0  # Integrated Loudness (-23 à -14 LUFS)
+    loudnorm_range: float = 11.0  # Loudness Range (4-20 LU)
+    loudnorm_true_peak: float = -1.5  # True Peak (-3 à -1 dBTP)
+    
+    # Bitrates disponibles
+    available_bitrates: List[str] = field(default_factory=lambda: ["64k", "96k", "128k", "160k", "192k", "256k", "320k"])
+    default_bitrate: str = "128k"
     
     # Compression dynamique optionnelle
     enable_compressor: bool = True
@@ -52,8 +62,8 @@ class ProcessingConfig:
     default_language: str = "fr"
     default_genre: str = "Audiobook"
     
-    # Scraping
-    enable_scraping: bool = True
+    # Scraping DÉSACTIVÉ pour vitesse maximale
+    enable_scraping: bool = False
     scraping_sources: list = None
     
     # IA
@@ -70,8 +80,13 @@ class ProcessingConfig:
     def __post_init__(self):
         if self.scraping_sources is None:
             self.scraping_sources = ["babelio", "fnac"]
-        
+        # Purge des références faibles (si disponible)
+        try:
+            weakref.collect()
+        except AttributeError:
+            pass  # weakref.collect n'existe pas dans toutes les versions
         # Crée les répertoires nécessaires
+        Path(self.source_directory).mkdir(parents=True, exist_ok=True)
         Path(self.output_directory).mkdir(parents=True, exist_ok=True)
         Path(self.temp_directory).mkdir(parents=True, exist_ok=True)
 

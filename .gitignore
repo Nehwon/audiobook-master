@@ -75,11 +75,16 @@ converted/
 benchmark_output/
 *.benchmark
 
-# Fichiers de test
+# Fichiers de test (sauf fichiers de test spécifiques)
 test_*
 *_test.*
 tests/output/
 tests/temp/
+tests/__pycache__/
+tests/.pytest_cache/
+
+# Exceptions : fichiers de test autorisés
+!tests/test_*.py
 
 # Fichiers de backup
 *.bak
@@ -125,6 +130,11 @@ keys/
 .github_push_confirmed
 .github_push_request_*.md
 
+# Fichiers spécifiques à GitHub
+GITHUB_DESCRIPTION.md
+merge_request_*.md
+.github/
+
 # Fichiers d'archives (sauf documentation)
 Archives/*/
 !Archives/README.md
@@ -156,3 +166,6 @@ covers_cache/
 # Fichiers d'export
 exports/
 *.export
+
+# Environnement virtuel
+venv/

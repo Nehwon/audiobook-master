@@ -15,7 +15,7 @@ if str(src_path) not in sys.path:
 
 # Importer les modules depuis src/
 from audiobook_processor import AudiobookProcessor, AudiobookMetadata
-from config import ProcessingConfig
+from core.config import ProcessingConfig
 from audiobookshelf_client import AudiobookshelfClient, AudiobookshelfConfig
 from scraper import BookScraper
 
@@ -51,15 +51,19 @@ def main():
     try:
         # Configuration
         config = ProcessingConfig(
-            source_dir=Path(args.source),
-            output_dir=Path(args.output),
-            bitrate=args.bitrate,
-            enable_gpu=args.gpu,
-            verbose=args.verbose
+            source_directory=args.source,
+            output_directory=args.output,
+            audio_bitrate=args.bitrate,
+            enable_gpu_acceleration=args.gpu,
+            sample_rate=44100 if "44k" in args.output else 48000
         )
         
         # Traitement
-        processor = AudiobookProcessor(config)
+        processor = AudiobookProcessor(
+            source_dir=args.source,
+            output_dir=args.output,
+            temp_dir="/tmp/audiobooks"
+        )
         
         logger.info(f"🎧 Démarrage traitement de: {args.source}")
         logger.info(f"📁 Sortie vers: {args.output}")
@@ -92,33 +96,31 @@ def main():
         
         logger.info(f"📊 {len(audio_files)} fichier(s) à traiter")
         
-        # Traiter chaque fichier
-        success_count = 0
-        for i, audio_file in enumerate(audio_files, 1):
-            logger.info(f"🎵 Fichier {i}/{len(audio_files)}: {audio_file.name}")
-            
-            try:
-                # Parser le nom de fichier pour métadonnées
-                metadata = processor.parse_filename(audio_file.name)
-                
-                # Créer le chemin de sortie
-                output_file = Path(args.output) / f"{metadata.title}.m4b"
-                
-                # Convertir
-                success = processor.convert_to_m4b(audio_file, output_file)
-                
-                if success:
-                    success_count += 1
-                    logger.info(f"✅ Conversion réussie: {output_file.name}")
-                else:
-                    logger.error(f"❌ Échec conversion: {audio_file.name}")
-                    
-            except Exception as e:
-                logger.error(f"❌ Erreur traitement {audio_file.name}: {e}")
-                continue
+        # Trier les fichiers par ordre alphabétique
+        audio_files.sort()
         
-        logger.info(f"🎉 Traitement terminé: {success_count}/{len(audio_files)} succès")
-        return 0 if success_count > 0 else 1
+        # Créer les métadonnées à partir du premier fichier
+        metadata = processor.parse_filename(audio_files[0].name)
+        
+        # Créer le chemin de sortie
+        output_file = Path(args.output) / f"{metadata.title}.m4b"
+        
+        # Configurer le bitrate et sample rate
+        processor.config = ProcessingConfig(
+            audio_bitrate=args.bitrate,
+            sample_rate=44100 if "44k" in args.output else 48000,
+            enable_gpu_acceleration=args.gpu
+        )
+        
+        # Convertir tous les fichiers en un seul M4B
+        success = processor.convert_to_m4b(audio_files, output_file, metadata)
+        
+        if success:
+            logger.info(f"✅ Conversion réussie: {output_file.name}")
+            return 0
+        else:
+            logger.error(f"❌ Échec conversion")
+            return 1
         
     except KeyboardInterrupt:
         logger.info("⏹️ Interruption utilisateur")

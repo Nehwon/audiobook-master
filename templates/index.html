@@ -96,39 +96,150 @@
 
         <!-- Control Panel -->
         <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-            <h3 class="text-lg font-semibold mb-4">Options de conversion</h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Bitrate audio</label>
-                    <select id="bitrate" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="64k">64k (Economique)</option>
-                        <option value="96k">96k (Standard)</option>
-                        <option value="128k" selected>128k (Haute qualité)</option>
-                        <option value="192k">192k (Premium)</option>
-                    </select>
+            <!-- Tabs -->
+            <div class="border-b border-gray-200 mb-4">
+                <nav class="-mb-px flex space-x-8">
+                    <button onclick="showTab('basic')" id="basic-tab" class="tab-button py-2 px-1 border-b-2 border-blue-500 font-medium text-sm text-blue-600">
+                        <i class="fas fa-sliders-h mr-2"></i>Options de base
+                    </button>
+                    <button onclick="showTab('advanced')" id="advanced-tab" class="tab-button py-2 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        <i class="fas fa-cogs mr-2"></i>Avancé
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Basic Tab -->
+            <div id="basic-content" class="tab-content">
+                <h3 class="text-lg font-semibold mb-4">Options de conversion</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Bitrate audio</label>
+                        <select id="bitrate" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="64k">64k (Economique)</option>
+                            <option value="96k">96k (Standard)</option>
+                            <option value="128k" selected>128k (Haute qualité)</option>
+                            <option value="192k">192k (Premium)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Échantillonnage</label>
+                        <select id="samplerate" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="22050">22050 Hz</option>
+                            <option value="44100" selected>44100 Hz</option>
+                            <option value="48000">48000 Hz</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Options rapides</label>
+                        <div class="space-y-2">
+                            <label class="flex items-center">
+                                <input type="checkbox" id="no-gpu" class="mr-2">
+                                <span class="text-sm">Désactiver GPU</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" id="no-normalization" class="mr-2">
+                                <span class="text-sm">Pas de normalisation</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" id="no-compression" class="mr-2">
+                                <span class="text-sm">Pas de compression</span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Échantillonnage</label>
-                    <select id="samplerate" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="22050">22050 Hz</option>
-                        <option value="44100" selected>44100 Hz</option>
-                        <option value="48000">48000 Hz</option>
-                    </select>
+            </div>
+
+            <!-- Advanced Tab -->
+            <div id="advanced-content" class="tab-content hidden">
+                <h3 class="text-lg font-semibold mb-4">Paramètres avancés</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- VBR Settings -->
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium mb-3 text-gray-800">
+                            <i class="fas fa-wave-square mr-2 text-purple-500"></i>VBR (Variable Bit Rate)
+                        </h4>
+                        <div class="space-y-3">
+                            <label class="flex items-center">
+                                <input type="checkbox" id="enable-vbr" class="mr-2">
+                                <span class="text-sm">Activer VBR</span>
+                                <span class="ml-2 text-xs text-gray-500">(pour meilleure compression)</span>
+                            </label>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Qualité VBR</label>
+                                <select id="vbr-quality" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                                    <option value="1">1 (Plus rapide)</option>
+                                    <option value="3">3 (Équilibré)</option>
+                                    <option value="5" selected>5 (Haute qualité)</option>
+                                    <option value="7">7 (Très haute qualité)</option>
+                                    <option value="9">9 (Maximum)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Loudnorm Settings -->
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <h4 class="font-medium mb-3 text-gray-800">
+                            <i class="fas fa-volume-up mr-2 text-blue-500"></i>Normalisation EBU R128
+                        </h4>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Integrated Loudness (I)
+                                    <span class="text-xs text-gray-500">-23 à -14 LUFS</span>
+                                </label>
+                                <input type="range" id="loudnorm-target" min="-23" max="-14" value="-18" step="0.5" 
+                                       class="w-full" oninput="updateLoudnormDisplay()">
+                                <span id="loudnorm-target-display" class="text-sm text-gray-600">-18.0 LUFS</span>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Loudness Range (LRA)
+                                    <span class="text-xs text-gray-500">4 à 20 LU</span>
+                                </label>
+                                <input type="range" id="loudnorm-range" min="4" max="20" value="11" step="1" 
+                                       class="w-full" oninput="updateLoudnormDisplay()">
+                                <span id="loudnorm-range-display" class="text-sm text-gray-600">11 LU</span>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    True Peak (TP)
+                                    <span class="text-xs text-gray-500">-3 à -1 dBTP</span>
+                                </label>
+                                <input type="range" id="loudnorm-true-peak" min="-3" max="-1" value="-1.5" step="0.1" 
+                                       class="w-full" oninput="updateLoudnormDisplay()">
+                                <span id="loudnorm-true-peak-display" class="text-sm text-gray-600">-1.5 dBTP</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Options avancées</label>
-                    <div class="space-y-2">
+
+                <!-- Processing Mode -->
+                <div class="mt-6 bg-yellow-50 p-4 rounded-lg">
+                    <h4 class="font-medium mb-3 text-gray-800">
+                        <i class="fas fa-cogs mr-2 text-yellow-500"></i>Mode de traitement
+                    </h4>
+                    <div class="grid grid-cols-3 gap-4">
                         <label class="flex items-center">
-                            <input type="checkbox" id="no-gpu" class="mr-2">
-                            <span class="text-sm">Désactiver GPU</span>
+                            <input type="radio" name="processing-mode" value="concat_fast" class="mr-2">
+                            <div>
+                                <span class="text-sm font-medium">Phase 1</span>
+                                <div class="text-xs text-gray-500">Concaténation rapide</div>
+                            </div>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="no-normalization" class="mr-2">
-                            <span class="text-sm">Pas de normalisation</span>
+                            <input type="radio" name="processing-mode" value="encode_aac" class="mr-2" checked>
+                            <div>
+                                <span class="text-sm font-medium">Phase 2</span>
+                                <div class="text-xs text-gray-500">Encodage AAC</div>
+                            </div>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="no-compression" class="mr-2">
-                            <span class="text-sm">Pas de compression</span>
+                            <input type="radio" name="processing-mode" value="final_m4b" class="mr-2">
+                            <div>
+                                <span class="text-sm font-medium">Phase 3</span>
+                                <div class="text-xs text-gray-500">M4B final</div>
+                            </div>
                         </label>
                     </div>
                 </div>
@@ -400,6 +511,63 @@
             console.log('Conversion stopped');
             updateStatus({ status: 'stopped' });
         });
+
+        // Tab functionality
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            
+            // Remove active state from all tabs
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('border-blue-500', 'text-blue-600');
+                button.classList.add('border-transparent', 'text-gray-500');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-content').classList.remove('hidden');
+            
+            // Activate selected tab button
+            const activeButton = document.getElementById(tabName + '-tab');
+            activeButton.classList.remove('border-transparent', 'text-gray-500');
+            activeButton.classList.add('border-blue-500', 'text-blue-600');
+        }
+
+        // Update loudnorm displays
+        function updateLoudnormDisplay() {
+            const target = document.getElementById('loudnorm-target').value;
+            const range = document.getElementById('loudnorm-range').value;
+            const truePeak = document.getElementById('loudnorm-true-peak').value;
+            
+            document.getElementById('loudnorm-target-display').textContent = `${target} LUFS`;
+            document.getElementById('loudnorm-range-display').textContent = `${range} LU`;
+            document.getElementById('loudnorm-true-peak-display').textContent = `${truePeak} dBTP`;
+        }
+
+        // Get conversion parameters
+        function getConversionParams() {
+            const params = {
+                bitrate: document.getElementById('bitrate').value,
+                samplerate: document.getElementById('samplerate').value,
+                no_gpu: document.getElementById('no-gpu').checked,
+                no_normalization: document.getElementById('no-normalization').checked,
+                no_compression: document.getElementById('no-compression').checked,
+                
+                // Advanced parameters
+                enable_vbr: document.getElementById('enable-vbr').checked,
+                vbr_quality: document.getElementById('vbr-quality').value,
+                loudnorm_target: parseFloat(document.getElementById('loudnorm-target').value),
+                loudnorm_range: parseInt(document.getElementById('loudnorm-range').value),
+                loudnorm_true_peak: parseFloat(document.getElementById('loudnorm-true-peak').value),
+                
+                // Processing mode
+                processing_mode: document.querySelector('input[name="processing-mode"]:checked').value
+            };
+            
+            console.log('Conversion params:', params);
+            return params;
+        }
 
         // Auto-refresh
         setInterval(() => {

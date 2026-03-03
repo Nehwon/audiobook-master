@@ -19,7 +19,7 @@ from pathlib import Path
 from datetime import datetime
 import subprocess
 from audiobook_processor import AudiobookProcessor, AudiobookMetadata
-from config import ProcessingConfig
+from core.config import ProcessingConfig
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'audiobook_manager_2024'

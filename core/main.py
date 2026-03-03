@@ -5,15 +5,15 @@ Audiobook Manager Pro - Point d'entrée principal
 
 import sys
 import os
+import logging
+import argparse
 from pathlib import Path
 
 # Ajouter le répertoire src au PYTHONPATH
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.audiobook_processor import AudiobookProcessor, AudiobookMetadata
-from config import ProcessingConfig
-from audiobookshelf_client import AudiobookshelfClient, AudiobookshelfConfig
-from scraper import BookScraper
+from .processor import AudiobookProcessor, AudiobookMetadata
+from .config import ProcessingConfig
 
 # Configuration du logging
 logging.basicConfig(
@@ -264,6 +264,9 @@ def main():
             logger.error("Configurez les variables d'environnement ou le fichier de configuration")
             sys.exit(1)
         
+        # TODO: Implémenter l'intégration Audiobookshelf
+        logger.warning("Intégration Audiobookshelf non implémentée")
+        """
         # Configuration du client
         abs_config = AudiobookshelfConfig(
             host=config.audiobookshelf_host,
@@ -300,6 +303,7 @@ def main():
         # Déclenchement du scan
         if upload_count > 0:
             client.scan_library(library_id)
+        """
     
     logger.info("Traitement terminé!")
 

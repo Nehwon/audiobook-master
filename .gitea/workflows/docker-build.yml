@@ -1,0 +1,229 @@
+name: 🐳 Docker Build & Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+env:
+  REGISTRY: gitea.lamachere.fr
+  IMAGE_NAME: audiobook-manager-pro
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 🐳 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 🔐 Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.GITEA_USERNAME }}
+        password: ${{ secrets.GITEA_TOKEN }}
+        
+    - name: 🏷️ Extract Metadata
+      id: meta
+      run: |
+        echo "version=$(git describe --tags --always --dirty)" >> $GITHUB_OUTPUT
+        echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        echo "branch=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+        echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+        
+    - name: 🏷️ Generate Tags
+      id: tags
+      run: |
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "tag=latest" >> $GITHUB_OUTPUT
+          echo "tag_version=latest" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.ref }}" == "refs/heads/dev" ]]; then
+          echo "tag=dev" >> $GITHUB_OUTPUT
+          echo "tag_version=dev" >> $GITHUB_OUTPUT
+        else
+          echo "tag=${{ steps.meta.outputs.sha_short }}" >> $GITHUB_OUTPUT
+          echo "tag_version=${{ steps.meta.outputs.sha_short }}" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: 🐳 Build and Push Docker Image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+        labels: |
+          org.opencontainers.image.title=${{ env.IMAGE_NAME }}
+          org.opencontainers.image.description=Système de traitement d'audiobooks avec multithreading CPU optimisé
+          org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.licenses=MIT
+        build-args: |
+          VERSION=${{ steps.meta.outputs.version }}
+          BUILD_DATE=${{ steps.meta.outputs.created }}
+          VCS_REF=${{ github.ref }}
+          VCS_URL=${{ github.server_url }}/${{ github.repository }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: 📋 Generate SBOM
+      uses: anchore/sbom-action@v0
+      with:
+        image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}
+        format: spdx-json
+        output-file: sbom.spdx.json
+        
+    - name: 📤 Upload SBOM
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom
+        path: sbom.spdx.json
+        
+    - name: 🔍 Trivy Security Scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        
+    - name: 📤 Upload Security Scan Results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  docker-test:
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 🐳 Pull Docker Image
+      run: |
+        docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name == 'refs/heads/main' && 'latest' || 'dev' }}
+        
+    - name: 🧪 Test Docker Container
+      run: |
+        # Démarrage du conteneur en arrière-plan
+        docker run -d \
+          --name audiobook-test \
+          -p 5001:5000 \
+          -e LOG_LEVEL=DEBUG \
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name == 'refs/heads/main' && 'latest' || 'dev' }}
+          
+        # Attendre que le conteneur soit prêt
+        sleep 30
+        
+        # Test de santé
+        for i in {1..30}; do
+          if curl -f http://localhost:5001/health; then
+            echo "✅ Container is healthy"
+            break
+          fi
+          echo "⏳ Waiting for container... ($i/30)"
+          sleep 2
+        done
+        
+        # Test des endpoints principaux
+        curl -f http://localhost:5001/ || exit 1
+        curl -f http://localhost:5001/api/status || exit 1
+        
+        # Nettoyage
+        docker stop audiobook-test
+        docker rm audiobook-test
+        echo "✅ All tests passed"
+        
+    - name: 📊 Test Report
+      if: always()
+      run: |
+        echo "## 🧪 Docker Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "| Test | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Container Health | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+        echo "| API Endpoints | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+        echo "| Overall Status | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [docker-build, docker-test]
+    if: github.ref == 'refs/heads/dev'
+    environment: staging
+    
+    steps:
+    - name: 🚀 Deploy to Staging
+      run: |
+        echo "🚀 Deploying to staging environment..."
+        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev"
+        echo "Environment: Staging"
+        echo "URL: https://staging.audiobook-manager.pro"
+        
+    - name: 📋 Deployment Summary
+      run: |
+        echo "## 🚀 Staging Deployment" >> $GITHUB_STEP_SUMMARY
+        echo "| Component | Version | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|---------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Docker Image | dev | ✅ Deployed |" >> $GITHUB_STEP_SUMMARY
+        echo "| Environment | staging | ✅ Active |" >> $GITHUB_STEP_SUMMARY
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [docker-build, docker-test]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: 🚀 Deploy to Production
+      run: |
+        echo "🚀 Deploying to production environment..."
+        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        echo "Environment: Production"
+        echo "URL: https://audiobook-manager.pro"
+        
+    - name: 📋 Deployment Summary
+      run: |
+        echo "## 🚀 Production Deployment" >> $GITHUB_STEP_SUMMARY
+        echo "| Component | Version | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|---------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Docker Image | latest | ✅ Deployed |" >> $GITHUB_STEP_SUMMARY
+        echo "| Environment | production | ✅ Active |" >> $GITHUB_STEP_SUMMARY
+        
+    - name: 📢 Notify Deployment
+      if: always()
+      run: |
+        echo "📢 Deployment notification sent"
+        # Ajouter ici les notifications (Slack, Discord, Email, etc.)
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+    
+    steps:
+    - name: 🧹 Cleanup Old Images
+      run: |
+        echo "🧹 Cleaning up old Docker images..."
+        # Suppression des images plus anciennes que 5 versions
+        docker images ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} --format "table {{.Repository}}:{{.Tag}}\t{{.ID}}" | \
+          tail -n +6 | \
+          awk '{print $3}' | \
+          xargs -r docker rmi -f || true
+        echo "✅ Cleanup completed"

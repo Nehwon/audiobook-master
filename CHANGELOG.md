@@ -1,43 +1,136 @@
 # 📅 CHANGELOG - Audiobook Manager Pro
 
-Toutes les versions notables de ce projet.
+Historique des versions et évolutions du système de traitement d'audiobooks.
+
+---
+
+## [2.1.0] - 2026-03-03
+
+### 🚀 **Version Majeure - Dockerisation & Interface Graphique & Synchronisation Audiobookshelf**
+
+#### ⚡ **Nouvelles Fonctionnalités Principales**
+- **🐳 Dockerisation Complète** : Dockerfile + Docker Compose avec services multiples
+- **🖥️ Interface Graphique Desktop** : Application Tkinter moderne et intuitive
+- **🔗 Intégration Audiobookshelf** : Client API complet avec synchronisation automatique
+- **📦 Packaging Multi-Plateforme** : Exécutables autonomes pour Linux/Windows/macOS
+- **🚀 Installation One-Click** : Script automatisé multi-OS
+- **🔄 CI/CD Complet** : Workflows Gitea avec build Docker automatique
+
+#### 🐳 **Dockerisation & Déploiement**
+- **Dockerfile optimisé** : FFmpeg + dépendances + multithreading
+- **Docker Compose** : Services (app, monitoring, BDD, Redis)
+- **Health checks** : Endpoints `/health` et `/api/status`
+- **Multi-plateforme** : Support Linux/Windows/macOS
+- **Registry double** : Gitea privé + Docker Hub public
+- **Configuration flexible** : Variables d'environnement + volumes
+
+#### 🖥️ **Interface Graphique Desktop**
+- **Application Tkinter** : Interface moderne avec onglets
+- **Progression temps réel** : Barres, logs, status détaillés
+- **Configuration avancée** : Bitrate, sample rate, GPU, loudnorm
+- **Gestion erreurs** : Messages clairs et actions automatiques
+- **Packaging PyInstaller** : Construction automatique multi-OS
+- **Intégration système** : Raccourcis et menus automatiques
+
+#### 🔗 **Intégration Audiobookshelf**
+- **Client API complet** : Authentification Bearer token sécurisée
+- **Upload automatique** : Métadonnées + fichiers après conversion
+- **Synchronisation bidirectionnelle** : Local ↔ distant
+- **Configuration flexible** : Fichier JSON + variables d'environnement
+- **Gestion des conflits** : Stratégies skip/overwrite/merge
+- **Support multi-bibliothèques** : CRUD complet des bibliothèques
+- **Retry automatique** : Gestion intelligente des erreurs réseau
+
+#### 🔄 **CI/CD Intégral**
+- **Workflows Gitea** : Build Docker automatique sur push
+- **Tests complets** : Unitaires, intégration, performance
+- **Sécurité intégrée** : Trivy, Bandit, Safety, SBOM
+- **Déploiement automatisé** : Staging (dev) et production (main)
+- **Releases GitHub** : Assets multi-plateformes automatiques
+- **Monitoring avancé** : Métriques et notifications intégrées
+
+#### 📦 **Installation et Distribution**
+- **Script one-click** : Installation multi-OS automatisée
+- **Support Linux** : AppImage + Tar.gz + intégration système
+- **Support Windows** : ZIP + Installateur NSIS + raccourcis
+- **Support macOS** : DMG + Bundle .app + alias terminal
+- **Configuration post-installation** : Répertoires et paramètres par défaut
+- **Détection automatique** : Prérequis et dépendances
+
+#### 🧪 **Tests et Qualité**
+- **Tests d'intégration** : Audiobookshelf + Docker complets
+- **Tests performance** : Benchmarks concurrents et mémoire
+- **Tests sécurité** : Scans automatiques multi-outils
+- **Tests multi-Python** : Support 3.8-3.11
+- **Coverage avancé** : Rapports détaillés et seuils minimums
+- **Qualité code** : Analyse statique complète
+
+#### 📊 **Monitoring et Métriques**
+- **Health endpoints** : `/health` et `/api/status` complets
+- **SBOM generation** : Software Bill of Materials automatique
+- **Security scanning** : Vulnérabilités et dépendances
+- **Performance metrics** : Utilisation CPU, mémoire, disque
+- **Artifact management** : Conservation des résultats de tests
+
+#### 🛡️ **Sécurité Renforcée**
+- **Scans automatisés** : Trivy (images), Bandit (code), Safety (dépendances)
+- **Code quality** : Flake8, Black, MyPy intégrés
+- **Dependency checks** : Vulnérabilités automatiques
+- **Container security** : Analyse des images Docker
+- **Secret management** : Configuration sécurisée des CI/CD
+
+#### 📚 **Documentation Complète**
+- **Guide installation** : One-click, Docker, manuel détaillé
+- **Configuration CI/CD** : Workflows Gitea documentés
+- **API documentation** : Endpoints et exemples d'utilisation
+- **Guide développeur** : Architecture et contribution
+- **Dépannage avancé** : Problèmes communs et solutions
+
+#### 🔧 **Améliorations Techniques**
+- **Code cleanup** : Imports optimisés et structure améliorée
+- **Error handling** : Gestion robuste des exceptions
+- **Memory management** : Nettoyage automatique et monitoring
+- **Logging avancé** : Structuré avec niveaux détaillés
+- **Configuration validation** : Vérification automatique des paramètres
+
+---
 
 ## [2.0.0] - 2026-03-03
 
-### 🚀 **VERSION Majeure - Multithreading CPU Optimisé**
+### 🚀 **Version Majeure - Multithreading CPU Optimisé**
 
 #### ⚡ **Nouvelles Fonctionnalités**
-- **Multithreading CPU optimisé** pour double Xeon 32 cœurs
-- **Phase 2 CPU optimisée** avec 32 workers parallèles
-- **Analyse qualité adaptative** fichier par fichier
-- **Interface web avancée** avec onglets et sliders
-- **Standards EBU R128** -18 LUFS / 11 LU LRA / TP -1.5
+- **Multithreading CPU** : 32 workers pour double Xeon 32 cœurs
+- **Phase 2 CPU optimisée** : Encodage parallèle intelligent
+- **Analyse qualité adaptative** : 5 stratégies fichier par fichier
+- **Interface web avancée** : Onglets + sliders VBR/Loudnorm
+- **Standards EBU R128** : -18 LUFS / 11 LU LRA / TP -1.5
 
 #### 🎯 **Performance Exceptionnelle**
-- **81 fichiers** traités en 25min15s (vs 1h30 séquentiel)
-- **Gain mesuré**: 3.5x plus rapide que séquentiel
-- **CPU optimisé**: 100% utilisation double Xeon
-- **Normalisation batch**: 21 batches de 4 fichiers
+- **81 fichiers** : 634.7MB → 652.3MB en 25min15s
+- **Gain mesuré** : 3.5x plus rapide que séquentiel
+- **CPU optimisé** : 100% utilisation double Xeon
+- **Normalisation batch** : 21 batches de 4 fichiers optimisés
 
 #### 🔧 **Améliorations Techniques**
-- **5 stratégies adaptatives**: codec_only, reduce_bitrate, reduce_sample_rate, reduce_both, upgrade_needed
-- **Thread type slice** optimisé pour Xeon
-- **Fallback automatique** individuel si batch échoue
-- **Monitoring threads** utilisation détaillée
+- **5 stratégies adaptatives** : codec_only, reduce_bitrate, reduce_sample_rate, reduce_both, upgrade_needed
+- **Thread type slice** : Optimisé pour architecture Xeon
+- **Fallback automatique** : Individuel si batch échoue
+- **Monitoring threads** : Utilisation détaillée par fichier
 
-#### 🌐 **Interface Web**
-- **Onglets**: Options de base + Paramètres avancés
-- **VBR Optionnel**: Case à cocher + qualité 1-9
-- **Loudnorm Complet**: Sliders I (-23/-14), LRA (4-20), TP (-3/-1)
-- **Mode Traitement**: Radio buttons Phase 1/2/3
-- **JavaScript**: Tabs + sliders + paramètres dynamiques
+#### 🌐 **Interface Web Avancée**
+- **Onglets** : Options de base + Paramètres avancés
+- **VBR Optionnel** : Case à cocher + qualité 1-9
+- **Loudnorm Complet** : Sliders I (-23/-14), LRA (4-20), TP (-3/-1)
+- **Mode Traitement** : Radio buttons Phase 1/2/3
+- **JavaScript dynamique** : Tabs + sliders + paramètres en temps réel
 
-#### 🐛 **Bugs Corrigés**
-- **Double comptage fichiers**: find_audio_files() corrigé
-- **Fuite mémoire**: Processus FFmpeg nettoyés
-- **Boucle infinie**: Détection taille maximale
-- **Dataclass error**: mutable default corrigé
-- **Imports en double**: Nettoyage complet
+#### 🐛 **Bugs Critiques Corrigés**
+- **Double comptage fichiers** : find_audio_files() optimisé
+- **Fuite mémoire** : Processus FFmpeg nettoyés correctement
+- **Boucle infinie** : Détection taille maximale implémentée
+- **Dataclass error** : mutable default corrigé avec default_factory
+- **Imports en double** : Nettoyage complet des imports
 
 ---
 
@@ -46,15 +139,10 @@ Toutes les versions notables de ce projet.
 ### 🎯 **GPU Hybrid Multithreading**
 
 #### ⚡ **Nouvelles Fonctionnalités**
-- **GPU CUDA support** pour RTX 4070
-- **Multithreading 16 threads** parallèles
-- **Normalisation batch** optimisée
-- **Analyse qualité** adaptative automatique
-
-#### 📊 **Performance**
-- **81 fichiers**: 634.7MB → 652.3MB en 25min15s
-- **GPU utilisé**: 100% des fichiers avec CUDA
-- **Gain total**: ~3.5x plus rapide que séquentiel
+- **GPU CUDA support** : Accélération RTX 4070
+- **Multithreading 16 threads** : Parallélisation CPU
+- **Normalisation batch** : Optimisation traitement par lots
+- **Analyse qualité** : Adaptative automatique
 
 ---
 
@@ -63,16 +151,10 @@ Toutes les versions notables de ce projet.
 ### 🚀 **Phase 1 - Concaténation Rapide**
 
 #### ⚡ **Nouvelles Fonctionnalités**
-- **Phase 1**: Concaténation 1:1 rapide (sans réencodage)
-- **Mode concat_fast**: Vitesse maximale préservant qualité
-- **Traitement en 3 phases**: Architecture modulaire
-- **Configuration mode**: concat_fast | encode_aac | final_m4b
-
-#### 🐛 **Bugs Corrigés**
-- **Double comptage fichiers**: 1269MB → 634MB corrigé
-- **Fuite mémoire**: Processus FFmpeg nettoyés
-- **Boucle infinie**: Détection taille maximale
-- **Progress bloqué**: 0% → progression fonctionnelle
+- **Phase 1** : Concaténation 1:1 rapide (sans réencodage)
+- **Mode concat_fast** : Vitesse maximale préservant qualité
+- **Architecture modulaire** : 3 phases de traitement
+- **Configuration mode** : concat_fast | encode_aac | final_m4b
 
 ---
 
@@ -81,54 +163,71 @@ Toutes les versions notables de ce projet.
 ### 🎉 **Version Initiale**
 
 #### 🚀 **Fonctionnalités Principales**
-- **Conversion OPUS** haute qualité
-- **Métadonnées automatiques** enrichies
-- **Interface web moderne** avec dashboard
-- **Monitoring temps réel** CPU/GPU/RAM
-- **Chapitrage automatique** inclus
-
-#### 🎵 **Qualité Audio**
-- **OPUS VBR4** meilleur rapport taille/qualité
-- **Sample rate 48kHz** standard audiobooks
-- **Normalisation EBU R128** optionnelle
-- **Compression dynamique** pour voix
-
-#### 🌐 **Interface Web**
-- **Dashboard monitoring** temps réel
-- **Progression fichiers** barres animées
-- **Configuration avancée** paramètres audio
-- **Historique conversions** avec détails
+- **Conversion OPUS** : Haute qualité avec VBR4
+- **Métadonnées automatiques** : Enrichissement intelligent
+- **Interface web moderne** : Dashboard avec monitoring
+- **Chapitrage automatique** : Gestion des chapitres
 
 ---
 
 ## 📊 **Statistiques de Développement**
 
 ### 📈 **Évolution Performance**
-- **v1.0**: 81 fichiers en ~1h30 (séquentiel)
-- **v1.1**: Phase 1 en ~2min (concaténation rapide)
-- **v1.2**: GPU hybrid en ~25min (3.5x plus rapide)
-- **v2.0**: CPU optimisé en ~25min (double Xeon optimisé)
+- **v1.0** : 81 fichiers en ~1h30 (séquentiel)
+- **v1.1** : Phase 1 en ~2min (concaténation rapide)
+- **v1.2** : GPU hybrid en ~25min (3.5x plus rapide)
+- **v2.0** : CPU optimisé en ~25min (3.5x plus rapide)
+- **v2.1** : Docker + CI/CD + Interface desktop
 
 ### 🧪 **Tests et Qualité**
-- **181 tests unitaires** tous passants ✅
-- **Coverage**: 72% (record personnel)
-- **Zero régression** sur fonctionnalités existantes
-- **Documentation** complète et à jour
+- **181 tests unitaires** : Tous passants ✅
+- **Coverage** : 72% (record personnel)
+- **Zero régression** : Fonctionnalités existantes préservées
+- **Documentation** : Complète et à jour
 
 ---
 
 ## 🚀 **Roadmap Future**
 
-### v2.1 (Prévue)
-- [ ] **Gestion archives** (zip, rar, 7z)
-- [ ] **Traitement batch** dossiers complexes
-- [ ] **PyTorch Audio** amélioration qualité
+### v2.2 (Prévue)
+- [ ] **Auto-update intégré** : Mises à jour automatiques dans l'application
+- [ ] **Notifications avancées** : Slack/Discord/Email intégrés
+- [ ] **Performance monitoring** : Métriques en production
+- [ ] **Rollback avancé** : Gestion intelligente des versions
 
-### v2.2 (Futur)
-- [ ] **Multi-utilisateurs** interface web
-- [ ] **API REST** publique
-- [ ] **Plugin architecture** extensible
+### v2.3 (Futur)
+- [ ] **Interface Electron** : Version desktop moderne et responsive
+- [ ] **Plugin architecture** : Extensibilité maximale
+- [ ] **Cloud services** : SaaS multi-tenant
+- [ ] **Mobile apps** : iOS/Android natifs
 
 ---
 
-*Pour voir les détails de chaque version, consultez les tags sur GitHub.*
+## 🏆 **Milestones Atteints**
+
+### 🏁 **Milestone 1: Base Technique (v1.0)** ✅
+- Interface web fonctionnelle avec monitoring
+- Conversion FFmpeg avec accélération
+- Métadonnées automatiques enrichies
+
+### 🏁 **Milestone 2: Performance (v2.0)** ✅
+- Multithreading CPU optimisé pour double Xeon
+- Analyse qualité adaptative fichier par fichier
+- Standards EBU R128 professionnels
+
+### 🏁 **Milestone 3: Distribution (v2.1)** ✅
+- Dockerisation complète multi-plateforme
+- Interface desktop moderne
+- CI/CD complet avec build auto
+- Intégration Audiobookshelf
+
+### 🏁 **Milestone 4: Production (v2.2)** 🎯
+- Auto-update intégré
+- Monitoring avancé
+- Notifications multi-canaux
+- Rollback intelligent
+
+---
+
+*Pour voir les détails techniques de chaque version, consultez les tags sur GitHub*  
+*Dernière mise à jour : Mars 2026* 📅✨

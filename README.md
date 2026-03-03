@@ -2,6 +2,60 @@
 
 Système professionnel de traitement et conversion d'audiobooks avec interface web moderne, accélération GPU NVIDIA et métadonnées enrichies.
 
+## 🚨 RAPPORT DE BUGS CRITIQUES - Mars 2026
+
+### Bugs Identifiés et Corrigés
+
+#### 🐛 **Bug #1: Double Comptage des Fichiers (CRITIQUE)**
+- **Problème**: La fonction `find_audio_files()` comptait les fichiers audio 2 fois
+- **Cause**: `glob()` + `rglob()` dans le même dossier
+- **Impact**: Taille calculée = 2× taille réelle (1269.4MB au lieu de 634.8MB)
+- **Solution**: Suppression de `glob()`, conservation de `rglob()` seul avec déduplication
+- **Statut**: ✅ **CORRIGÉ**
+
+#### 🐛 **Bug #2: Fuite Mémoire (CRITIQUE)**
+- **Problème**: Processus FFmpeg non terminés correctement
+- **Cause**: Pas de nettoyage forcé des processus
+- **Impact**: 29GB RAM utilisés anormalement
+- **Solution**: Force `terminate()` + `kill()` + `gc.collect()`
+- **Statut**: ✅ **CORRIGÉ**
+
+#### 🐛 **Bug #3: Boucle Infinie (MAJEUR)**
+- **Problème**: Fichier de sortie dépassait largement la taille d'entrée
+- **Cause**: Pas de détection de taille excessive
+- **Impact**: Fichiers de +350MB par rapport à la source
+- **Solution**: Détection taille maximale (150% de l'entrée)
+- **Statut**: ✅ **CORRIGÉ**
+
+#### 🐛 **Bug #4: Surveillance Inefficace (MOYEN)**
+- **Problème**: Boucle de progression ne lisait pas correctement FFmpeg
+- **Cause**: Mauvaise gestion du stdout/stderr
+- **Impact**: Progression bloquée à 0%, ETA incorrect
+- **Solution**: Amélioration lecture processus + timeout
+- **Statut**: ✅ **CORRIGÉ**
+
+### Approche de Développement Recommandée
+
+#### 🎯 **Phase 1: Concaténation 1:1 Rapide**
+- Objectif: Conversion rapide sans réencodage
+- Méthode: Simple concaténation des fichiers MP3/M4A existants
+- Qualité: Préservée (identique à la source)
+- Avantages: Vitesse maximale, taille optimale
+
+#### 🎯 **Phase 2: Réencodage Individuel AAC**
+- Objectif: Optimisation taille/qualité
+- Méthode: Réencodage fichier par fichier vers AAC 48k
+- Qualité: Haute (48kHz, bitrate élevé)
+- Avantages: Compression optimale, métadonnées riches
+
+#### 🎯 **Phase 3: Concaténation + Métadonnées**
+- Objectif: Fichier M4B final professionnel
+- Méthode: Assemblage des fichiers AAC + métadonnées + cover
+- Qualité: Optimisée
+- Avantages: Format standard, compatibilité maximale
+
+---
+
 ## Dernières Mises à Jour (Commit `2f362d1`)
 
 ### Nouvelle Structure de Dossiers

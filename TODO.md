@@ -46,11 +46,17 @@ Tâches en cours et planifiées pour le projet Audiobook Manager Pro.
 
 ## 🚨 Urgent (Cette semaine)
 
-### 🐛 Corrections Critiques
-- [x] **Corriger boucle infinie** résiduelle dans cas edge
-- [ ] **Optimiser memory usage** sur conversions >2h
-- [ ] **Fix GPU detection** multi-GPU instable
-- [ ] **File permissions** Windows compatibility
+### 🐛 **BUGS CRITIQUES CORRIGÉS - Mars 2026**
+- [x] **Double comptage fichiers**: `find_audio_files()` comptait 2× les fichiers (1269MB vs 634MB)
+- [x] **Fuite mémoire**: Processus FFmpeg non terminés (29GB RAM utilisés)
+- [x] **Boucle infinie**: Fichier sortie > taille entrée (+350MB)
+- [x] **Surveillance inefficace**: Progression bloquée à 0%
+- [x] **Nettoyage processus**: Force terminate/kill + gc.collect()
+
+### 🎯 **NOUVELLE APPROCHE DE DÉVELOPPEMENT**
+- [x] **Phase 1**: Implémenter concaténation 1:1 rapide (sans réencodage)
+- [ ] **Phase 2**: Réencodage individuel AAC 48k haute qualité
+- [ ] **Phase 3**: Assemblage final + métadonnées + cover
 
 ### 🔧 Stabilisation
 - [x] **Tests unitaires** couverture fonctions core

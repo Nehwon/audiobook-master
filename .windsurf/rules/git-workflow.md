@@ -49,39 +49,50 @@ git merge --no-ff feature/nouvelle-fonctionnalite
 git push origin dev
 ```
 
-### 🎯 **Merge vers main**
+### 🎯 **Merge vers main - OBLIGATOIRE via Gitea PR**
 
-#### 🚨 **Cas 1: Changement Majeur Validé**
-- **Condition** : Release majeure (v2.1.0, v3.0.0, etc.)
-- **Validation** : Confirmée par l'utilisateur (Fabrice)
-- **Processus** : Merge automatique autorisé
+#### ⚠️ **RÈGLE FONDAMENTALE**
+- **🚨 INTERDICTION ABSOLUE** de merge direct depuis CLI
+- **🚨 INTERDICTION ABSOLUE** de `git merge` sans PR
+- **🚨 INTERDICTION ABSOLUE** de bypass du processus Gitea
 
+#### ✅ **PROCESSUS OBLIGATOIRE : Pull Request Gitea**
+
+##### **Étape 1 : Préparation**
 ```bash
-# Release majeure validée
-git checkout main
-git merge --no-ff dev
-git tag v2.1.0
-git push origin main --tags
+# S'assurer d'être sur dev et pousser les changements
+git checkout dev
+git add .
+git commit -m "feat: description détaillée des changements"
+git push origin dev
 ```
 
-#### 📋 **Cas 2: Changement Standard**
-- **Condition** : Features normales, corrections, améliorations
-- **Processus** : Demande explicite obligatoire
-- **Validation** : Confirmation utilisateur requise
+##### **Étape 2 : Création PR via Gitea**
+1. **Ouvrir** : https://gitea.lamachere.fr/fabrice/audiobooks-master
+2. **Cliquer** sur "Pull Requests" → "New Pull Request"
+3. **Sélectionner** :
+   - **Source branch** : `dev`
+   - **Target branch** : `main`
+4. **Remplir** le formulaire :
+   - **Titre** : Descriptif et clair
+   - **Description** : Détail des changements
+   - **Labels** : Type de modification
+5. **Créer** la Pull Request
 
-```bash
-# Demande de merge vers main
-# Message à l'auteur:
-# "Demande de merge dev → main"
-# "Contenu: [liste des changements]"
-# "Impact: [description de l'impact]"
-# "Tests: [statut des tests]"
+##### **Étape 3 : Review et Merge**
+1. **Attendre** le review automatique (CI/CD)
+2. **Vérifier** que tous les tests passent
+3. **Approuver** la PR si tout est bon
+4. **Cliquer sur "Merge" dans l'interface Gitea
+5. **Sélectionner** le type de merge souhaité
 
-# Après confirmation:
-git checkout main
-git merge --no-ff dev
-git push origin main
-```
+#### 🚨 **Cas d'Exception Critique**
+Uniquement en cas d'urgence absolue (production down, sécurité critique) :
+
+1. **Documenter** l'urgence immédiatement
+2. **Avertir** l'équipe
+3. **Justifier** pourquoi la PR n'est pas possible
+4. **Créer une PR rétroactive** après l'intervention
 
 ## 🔐 Validation Automatique
 
@@ -159,9 +170,9 @@ rm .merge_confirmed
 ### 🚀 **Release Process**
 1. **Finaliser** features dans dev
 2. **Tester** complètement sur dev
-3. **Demander** merge vers main
+3. **Créer PR** vers main via Gitea
 4. **Attendre** validation utilisateur
-5. **Merger** dans main
+5. **Merger** via interface Gitea
 6. **Taguer** la version
 7. **Push** vers Gitea
 
@@ -171,6 +182,14 @@ rm .merge_confirmed
 - **Validation automatique** : Tests avant merges
 
 ---
+
+## 📋 **Références**
+- **Documentation complète** : `.windsurf/rules/git-workflow-pr-gitea.md`
+- **Processus détaillé** : Étapes complètes PR Gitea
+- **Checklist PR** : Validation avant merge
+
+---
 *Règles adaptées pour dépôt Gitea unique*  
-*Version: 2.0*  
-*Date: 2026-03-02*
+*Version: 2.1*  
+*Date: 2026-03-03*  
+*Règle PR obligatoire ajoutée*

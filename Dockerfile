@@ -41,7 +41,7 @@ COPY requirements.txt .
 # Installation des dépendances Python
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt && \
-    pip install gunicorn
+    pip install gunicorn psutil
 
 # Copie du code source
 COPY . .

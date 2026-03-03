@@ -58,7 +58,23 @@ Système de traitement d'audiobooks ultra-rapide avec multithreading CPU optimis
 
 ## 🚀 **EN COURS - Version 2.1**
 
-### 📦 **Gestion Archives Compressées (PRIORITÉ)**
+### 🎯 **PRIORITÉ 1 : Dockerisation & Interface Graphique**
+- [ ] **Création Dockerfile** pour déploiement simplifié
+- [ ] **Docker Compose** avec services (app, base de données)
+- [ ] **Interface graphique desktop** (Electron/Tkinter)
+- [ ] **Packaging multi-plateforme** (Windows, Linux, macOS)
+- [ ] **Installation one-click** pour utilisateurs finaux
+- [ ] **Auto-update** intégré dans l'application
+
+### 🎯 **PRIORITÉ 2 : Intégration Audiobookshelf**
+- [ ] **Client Audiobookshelf API** pour synchronisation
+- [ ] **Push métadonnées** vers serveur distant
+- [ ] **Upload automatique** fichiers encodés
+- [ ] **Synchronisation bidirectionnelle** (local ↔ distant)
+- [ ] **Gestion des conflits** de métadonnées
+- [ ] **Interface web** pour configuration Audiobookshelf
+
+### 📦 **Gestion Archives Compressées**
 - [ ] **Détection archives** dans dossiers source
 - [ ] **Extraction automatique** vers temporaire
 - [ ] **Support formats**: .zip, .rar, .7z, .tar, .gz

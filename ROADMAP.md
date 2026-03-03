@@ -37,6 +37,7 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 - [x] Documentation API complète
 
 #### Version 2.0.2 (Avril 2026)
+- [ ] Compilation Dockerisée
 - [ ] Stabilité multi-CPU améliorée
 - [ ] Performance async I/O operations
 - [ ] Cache intelligent conversions

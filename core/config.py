@@ -6,7 +6,6 @@ Configuration du système de traitement d'audiobooks
 from pathlib import Path
 from dataclasses import dataclass, field
 import os
-import weakref
 from typing import Optional, List
 
 @dataclass
@@ -39,6 +38,7 @@ class ProcessingConfig:
     vbr_quality: int = 5  # Qualité VBR (1-9)
     
     # Loudnorm avancé (modifiable interface)
+    enable_loudnorm: bool = True
     loudnorm_target: float = -18.0  # Integrated Loudness (-23 à -14 LUFS)
     loudnorm_range: float = 11.0  # Loudness Range (4-20 LU)
     loudnorm_true_peak: float = -1.5  # True Peak (-3 à -1 dBTP)
@@ -80,11 +80,6 @@ class ProcessingConfig:
     def __post_init__(self):
         if self.scraping_sources is None:
             self.scraping_sources = ["babelio", "fnac"]
-        # Purge des références faibles (si disponible)
-        try:
-            weakref.collect()
-        except AttributeError:
-            pass  # weakref.collect n'existe pas dans toutes les versions
         # Crée les répertoires nécessaires
         Path(self.source_directory).mkdir(parents=True, exist_ok=True)
         Path(self.output_directory).mkdir(parents=True, exist_ok=True)

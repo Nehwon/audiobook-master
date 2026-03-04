@@ -15,7 +15,7 @@ from integrations.audiobookshelf_client import (
     create_audiobookshelf_client,
     create_sync_manager
 )
-from core.metadata import AudiobookMetadata
+from core.processor import AudiobookMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,8 @@ class AudiobookshelfIntegration:
                 recursive=True
             )
             
-            logger.info(f"✅ Synchronisation terminée: {result.get('uploaded_files', 0)} fichiers uploadés")
+            uploaded = result.get('stats', {}).get('uploaded_files', 0)
+            logger.info(f"✅ Synchronisation terminée: {uploaded} fichiers uploadés")
             return result
             
         except Exception as e:
@@ -201,20 +202,23 @@ class AudiobookshelfIntegration:
             
     def _convert_metadata_for_abs(self, metadata: AudiobookMetadata) -> Dict[str, Any]:
         """Convertir les métadonnées pour Audiobookshelf"""
+        year = getattr(metadata, 'year', None)
+        published_year = int(year) if isinstance(year, str) and year.isdigit() else year
+
         return {
-            'title': metadata.title,
-            'author': metadata.author,
-            'series': metadata.series,
-            'series_part': metadata.series_part,
-            'description': metadata.description,
-            'narrator': metadata.narrator,
-            'publisher': metadata.publisher,
-            'published_year': metadata.published_year,
-            'language': metadata.language,
-            'duration': metadata.duration,
-            'file_format': metadata.file_format,
-            'bitrate': metadata.bitrate,
-            'sample_rate': metadata.sample_rate,
+            'title': getattr(metadata, 'title', ''),
+            'author': getattr(metadata, 'author', ''),
+            'series': getattr(metadata, 'series', None),
+            'series_part': getattr(metadata, 'series_number', None),
+            'description': getattr(metadata, 'description', None),
+            'narrator': getattr(metadata, 'narrator', None),
+            'publisher': getattr(metadata, 'publisher', None),
+            'published_year': published_year,
+            'language': getattr(metadata, 'language', 'fr'),
+            'duration': getattr(metadata, 'duration', None),
+            'file_format': getattr(metadata, 'file_format', 'm4b'),
+            'bitrate': getattr(metadata, 'bitrate', None),
+            'sample_rate': getattr(metadata, 'sample_rate', None),
             'chapters': metadata.chapters if hasattr(metadata, 'chapters') else [],
             'tags': metadata.tags if hasattr(metadata, 'tags') else []
         }

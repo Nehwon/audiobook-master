@@ -35,9 +35,7 @@ class AudiobookshelfClient:
         self.base_url = self._build_base_url()
         
         # Configuration du session
-        self.session.timeout = config.timeout
         self.session.headers.update({
-            'Content-Type': 'application/json',
             'User-Agent': 'AudiobookManagerPro/2.0.0'
         })
         
@@ -49,12 +47,19 @@ class AudiobookshelfClient:
     def _make_request(self, method: str, endpoint: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Effectuer une requête HTTP avec retry"""
         url = f"{self.base_url}{endpoint}"
+        kwargs.setdefault('timeout', self.config.timeout)
         
         for attempt in range(self.config.retry_attempts):
             try:
                 response = self.session.request(method, url, **kwargs)
                 response.raise_for_status()
-                return response.json()
+                if not response.content:
+                    return {}
+                try:
+                    return response.json()
+                except ValueError:
+                    logger.debug("Réponse non-JSON reçue pour %s %s", method, endpoint)
+                    return {}
                 
             except requests.exceptions.RequestException as e:
                 logger.warning(f"Tentative {attempt + 1}/{self.config.retry_attempts} échouée: {e}")
@@ -137,11 +142,6 @@ class AudiobookshelfClient:
             logger.error(f"❌ Fichier non trouvé: {audiobook_path}")
             return None
             
-        # Préparation des données
-        files = {
-            'file': (audiobook_path.name, open(audiobook_path, 'rb'), 'audio/m4b')
-        }
-        
         data = {
             'metadata': json.dumps(metadata),
             'title': metadata.get('title', audiobook_path.stem),
@@ -156,18 +156,20 @@ class AudiobookshelfClient:
             data['library'] = library_id
             
         try:
-            result = self._make_request('POST', '/api/upload', files=files, data=data)
-            if result:
-                logger.info(f"✅ Upload réussi: {result.get('id', 'unknown')}")
-                return result
-            else:
-                logger.error("❌ Échec de l'upload")
-                return None
+            with open(audiobook_path, 'rb') as file_handle:
+                files = {
+                    'file': (audiobook_path.name, file_handle, 'audio/m4b')
+                }
+                result = self._make_request('POST', '/api/upload', files=files, data=data)
+                if result:
+                    logger.info(f"✅ Upload réussi: {result.get('id', 'unknown')}")
+                    return result
+                else:
+                    logger.error("❌ Échec de l'upload")
+                    return None
         except Exception as e:
             logger.error(f"❌ Erreur lors de l'upload: {e}")
             return None
-        finally:
-            files['file'][1].close()
             
     def update_metadata(self, item_id: str, metadata: Dict[str, Any]) -> bool:
         """Mettre à jour les métadonnées d'un élément"""

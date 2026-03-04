@@ -8,7 +8,7 @@ Système professionnel de traitement d'audiobooks avec multithreading CPU optimi
 
 #### 🐳 **Dockerisation Complète**
 - **Dockerfile** : Configuration complète avec FFmpeg 7.1.3 et dépendances
-- **Docker Compose** : Services (app, monitoring, BDD, Redis) avec paramètres `.env`
+- **Docker Compose** : Services (app, Ollama, monitoring, BDD, Redis) avec paramètres `.env`
 - **Multi-plateforme** : Support Linux/Windows/macOS
 - **Health checks** : Endpoints `/health` et `/api/status`
 - **Installation one-click** : Script automatisé multi-OS
@@ -81,6 +81,9 @@ docker-compose up -d
 
 # Avec monitoring inclus
 docker-compose --profile monitoring up -d
+
+# Stack all-in-one (app + Ollama)
+docker-compose up -d
 ```
 
 ### 📦 **Installation Manuelle**
@@ -149,6 +152,7 @@ python3 -m web.app
 - **Monitoring** : Prometheus + Grafana (optionnel)
 - **Base de données** : PostgreSQL (optionnel)
 - **Cache** : Redis pour performances (optionnel)
+- **LLM local** : Ollama embarqué pour le scraping/extraction métadonnées
 
 ### 🔧 **Configuration**
 ```yaml

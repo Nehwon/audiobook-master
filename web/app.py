@@ -11,6 +11,8 @@ import shutil
 import subprocess
 import threading
 import time
+import urllib.error
+import urllib.request
 import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -29,6 +31,7 @@ MEDIA_DIR = Path(os.getenv("AUDIOBOOK_MEDIA_DIR", os.getenv("SOURCE_DIR", "/app/
 OUTPUT_DIR = Path(os.getenv("AUDIOBOOK_OUTPUT_DIR", os.getenv("OUTPUT_DIR", "/app/data/output")))
 TEMP_DIR = Path(os.getenv("AUDIOBOOK_TEMP_DIR", os.getenv("TEMP_DIR", "/tmp/audiobooks_web")))
 CONFIG_PATH = TEMP_DIR / "web_config.json"
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://ollama:11434")).rstrip("/")
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}
 ARCHIVE_EXTENSIONS = {".zip", ".rar"}
@@ -65,7 +68,170 @@ def _default_config() -> Dict:
         "enable_compressor": True,
         "auto_extract_archives": False,
         "ignored_folders": [],
+        "ollama_enabled": False,
+        "ollama_model": "qwen2.5:7b",
+        "ollama_extract_model": "nuextract",
+        "ollama_default_prompt": (
+            "Tu es un agent de métadonnées audiobook. À partir du nom de dossier '{folder_name}', "
+            "propose une stratégie de recherche web et retourne UNIQUEMENT un JSON valide avec les clés: "
+            "title, author, confidence, search_query, source_url, notes. "
+            "Si l'information est incertaine, laisse source_url vide et explique dans notes."
+        ),
+        "ollama_mcp_tools": json.dumps(
+            [
+                {
+                    "name": "web_search",
+                    "description": "Recherche web (Google, SearXNG, OpenLibrary, Goodreads, Audible)",
+                    "input_schema": {"query": "string", "language": "string"},
+                },
+                {
+                    "name": "fetch_page",
+                    "description": "Récupère le contenu HTML/texte d'une URL cible",
+                    "input_schema": {"url": "string"},
+                },
+                {
+                    "name": "extract_metadata",
+                    "description": "Extraction structurée title/author/series/narrator en JSON",
+                    "input_schema": {"content": "string", "template": "json"},
+                },
+            ],
+            ensure_ascii=False,
+            indent=2,
+        ),
     }
+
+
+def _run_ollama_command(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:
+    return subprocess.run(["ollama", *args], capture_output=True, text=True, timeout=timeout)
+
+
+def _ollama_api_request(path: str, payload: Optional[Dict] = None, timeout: int = 120) -> Dict:
+    url = f"{OLLAMA_BASE_URL}{path}"
+    body = None
+    headers = {}
+    if payload is not None:
+        body = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST" if payload is not None else "GET")
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode("utf-8", errors="ignore")
+    return json.loads(raw) if raw else {}
+
+
+def _list_ollama_models() -> List[Dict[str, str]]:
+    try:
+        data = _ollama_api_request("/api/tags", timeout=20)
+        models = []
+        for model in data.get("models", []):
+            name = model.get("name")
+            if name:
+                models.append({"name": name})
+        if models:
+            return models
+    except Exception:
+        pass
+
+    try:
+        result = _run_ollama_command(["list"], timeout=20)
+    except Exception:
+        return []
+
+    if result.returncode != 0:
+        return []
+
+    lines = [line for line in (result.stdout or "").splitlines() if line.strip()]
+    if len(lines) <= 1:
+        return []
+
+    models = []
+    for line in lines[1:]:
+        parts = line.split()
+        if parts:
+            models.append({"name": parts[0]})
+    return models
+
+
+def _ollama_pull_model(model: str) -> Dict:
+    try:
+        return _ollama_api_request("/api/pull", {"name": model, "stream": False}, timeout=600)
+    except Exception:
+        result = _run_ollama_command(["pull", model], timeout=600)
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or "Échec du pull").strip())
+        return {"status": "success", "raw": (result.stdout or "").strip()}
+
+
+def _ollama_delete_model(model: str) -> Dict:
+    try:
+        return _ollama_api_request("/api/delete", {"name": model}, timeout=120)
+    except Exception:
+        result = _run_ollama_command(["rm", model], timeout=120)
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or "Échec suppression").strip())
+        return {"status": "success"}
+
+
+def _extract_json_from_text(raw: str) -> Optional[Dict]:
+    text = (raw or "").strip()
+    if not text:
+        return None
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+    if not match:
+        return None
+
+    try:
+        return json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+
+
+def _run_ollama_metadata_search(folder_name: str, config: Dict) -> Dict:
+    model = config.get("ollama_model", "qwen2.5:7b")
+    tools = config.get("ollama_mcp_tools", "[]")
+    prompt_template = config.get("ollama_default_prompt", _default_config()["ollama_default_prompt"])
+    base_prompt = prompt_template.replace("{folder_name}", folder_name)
+    prompt = (
+        f"{base_prompt}\n\n"
+        "Contexte des MCP tools disponibles (JSON):\n"
+        f"{tools}\n\n"
+        "Réponds en JSON strict, sans markdown."
+    )
+
+    raw_output = ""
+    try:
+        data = _ollama_api_request(
+            "/api/generate",
+            {"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0}},
+            timeout=90,
+        )
+        raw_output = data.get("response", "")
+    except Exception:
+        try:
+            result = _run_ollama_command(["run", model, prompt], timeout=90)
+        except Exception as exc:  # noqa: BLE001
+            return {"folder": folder_name, "error": f"Ollama indisponible: {exc}"}
+
+        if result.returncode != 0:
+            return {"folder": folder_name, "error": (result.stderr or "Erreur Ollama").strip()}
+        raw_output = result.stdout or ""
+
+    payload = _extract_json_from_text(raw_output)
+    if payload is None:
+        return {
+            "folder": folder_name,
+            "error": "Réponse non JSON du modèle",
+            "raw": raw_output.strip(),
+        }
+
+    payload["folder"] = folder_name
+    return payload
 
 
 def _fix_mojibake(text: str) -> str:
@@ -134,20 +300,31 @@ def _guess_author_with_ollama(title_hint: str) -> Optional[str]:
         "Donne uniquement le nom de l'auteur du livre suivant, sans explication: "
         f"{title_hint}"
     )
+    model = _load_config().get("ollama_model", "qwen2.5:7b")
+
     try:
-        result = subprocess.run(
-            ["ollama", "run", "llama2", prompt],
-            capture_output=True,
-            text=True,
+        data = _ollama_api_request(
+            "/api/generate",
+            {"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0}},
             timeout=15,
         )
+        output = data.get("response", "")
     except Exception:
-        return None
+        try:
+            result = subprocess.run(
+                ["ollama", "run", model, prompt],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except Exception:
+            return None
 
-    if result.returncode != 0:
-        return None
+        if result.returncode != 0:
+            return None
+        output = result.stdout or ""
 
-    answer = (result.stdout or "").strip().splitlines()[0:1]
+    answer = output.strip().splitlines()[0:1]
     if not answer:
         return None
     author = answer[0].strip(" .:-")
@@ -587,6 +764,66 @@ def api_config():
                 continue
 
     return jsonify(config)
+
+
+@app.route("/api/ollama/status")
+def api_ollama_status():
+    config = _load_config()
+    models = _list_ollama_models()
+    return jsonify(
+        {
+            "enabled": bool(config.get("ollama_enabled", False)),
+            "selected_model": config.get("ollama_model"),
+            "extract_model": config.get("ollama_extract_model"),
+            "base_url": OLLAMA_BASE_URL,
+            "models": models,
+        }
+    )
+
+
+@app.route("/api/ollama/pull", methods=["POST"])
+def api_ollama_pull_model():
+    payload = request.get_json(silent=True) or {}
+    model = (payload.get("model") or "").strip()
+    if not model:
+        return jsonify({"error": "model requis"}), 400
+
+    try:
+        output = _ollama_pull_model(model)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"status": "ok", "model": model, "output": output})
+
+
+@app.route("/api/ollama/delete", methods=["POST"])
+def api_ollama_delete_model():
+    payload = request.get_json(silent=True) or {}
+    model = (payload.get("model") or "").strip()
+    if not model:
+        return jsonify({"error": "model requis"}), 400
+
+    try:
+        output = _ollama_delete_model(model)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"status": "ok", "model": model, "output": output})
+
+
+@app.route("/api/ollama/search", methods=["POST"])
+def api_ollama_search_metadata():
+    payload = request.get_json(silent=True) or {}
+    folders = payload.get("folders", [])
+    if not isinstance(folders, list) or not folders:
+        return jsonify({"error": "folders requis"}), 400
+
+    config = _load_config()
+    if not config.get("ollama_enabled", False):
+        return jsonify({"error": "Ollama désactivé dans la configuration"}), 400
+
+    results = [_run_ollama_metadata_search(folder, config) for folder in folders if isinstance(folder, str)]
+    return jsonify({"results": results})
 
 
 @app.route("/api/outputs")

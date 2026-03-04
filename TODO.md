@@ -5,6 +5,20 @@ Système de traitement d'audiobooks ultra-rapide avec multithreading CPU optimis
 
 ---
 
+## ✅ **ACCOMPLI - Version 2.1.1**
+
+### 🚀 **PRIORITÉ 1: Corrections et Améliorations Docker**
+- [x] **GHCR Integration** : Images GitHub Container Registry automatiques
+- [x] **Docker Compose .env** : Paramétrage avec fichier `.env.example`
+- [x] **GitHub Actions** : Workflow de build Docker automatisé
+- [x] **Smart Renaming** : Renommage intelligent avec apostrophes normalisées
+- [x] **Server 500 errors** : Correction des erreurs JSON et serveur
+- [x] **Rename button** : Correction de la fonctionnalité de renommage
+- [x] **CLI synopsis** : Correction compatibilité flag disable
+- [x] **Nginx permissions** : Fix permissions logs dans container
+
+---
+
 ## ✅ **ACCOMPLI - Version 2.1.0**
 
 ### 🚀 **PRIORITÉ 1: Dockerisation & Interface Graphique**

@@ -1,9 +1,7 @@
 services:
   # 🌐 Application Web Audiobook Manager
   audiobook-manager:
-    build:
-      context: ${BUILD_CONTEXT:-.}
-      dockerfile: ${DOCKERFILE_PATH:-Dockerfile}
+    image: ${APP_IMAGE:-ghcr.io/nehwon/audiobook-master:latest}
     container_name: ${APP_CONTAINER_NAME:-audiobook-manager-pro}
     user: "${APP_USER:-0:0}"
     restart: ${APP_RESTART_POLICY:-unless-stopped}

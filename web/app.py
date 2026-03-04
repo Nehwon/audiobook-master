@@ -82,8 +82,8 @@ def _save_config(config: Dict) -> None:
 
 
 def _clean_name(name: str) -> str:
-    cleaned = name.replace("+", " ").replace("'", "’")
-    cleaned = re.sub(r"(?i)\b([cdjlmnst])_", r"\1’", cleaned)
+    cleaned = name.replace("+", " ")
+    cleaned = re.sub(r"(?i)\b([cdjlmnst])_", r"\1'", cleaned)
     cleaned = cleaned.replace("_", " ")
     cleaned = re.sub(r'[<>:"/\\|?*]', "_", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")

@@ -2,34 +2,35 @@
 
 Système professionnel de traitement d'audiobooks avec multithreading CPU optimisé, interface graphique desktop et synchronisation Audiobookshelf.
 
-## 🚀 **Version 2.1 - Dockerisation & Interface Graphique & Synchronisation**
+## 🚀 **Version 2.1.0 - Dockerisation & Interface Graphique & Synchronisation**
 
 ### ✅ **Nouvelles Fonctionnalités Majeures**
 
 #### 🐳 **Dockerisation Complète**
-- **Dockerfile** : Configuration complète avec FFmpeg et dépendances
+- **Dockerfile** : Configuration complète avec FFmpeg 7.1.3 et dépendances
 - **Docker Compose** : Services (app, monitoring, BDD, Redis)
 - **Multi-plateforme** : Support Linux/Windows/macOS
 - **Health checks** : Endpoints `/health` et `/api/status`
 - **Installation one-click** : Script automatisé multi-OS
+- **Interface web simple** : `simple_web.py` pour monitoring basique
 
 #### 🖥️ **Interface Graphique Desktop**
-- **Application Tkinter** : Interface moderne et intuitive
+- **Application Tkinter** : Interface moderne et intuitive (`gui/desktop_app.py`)
 - **Progression temps réel** : Barres, logs, status détaillés
 - **Configuration avancée** : Bitrate, sample rate, GPU, loudnorm
 - **Gestion erreurs** : Messages clairs et actions automatiques
 - **Packaging multi-OS** : Exécutables autonomes
 
 #### 🔗 **Intégration Audiobookshelf**
-- **Client API complet** : Authentification, upload, recherche
-- **Synchronisation automatique** : Métadonnées + fichiers
-- **Configuration flexible** : Fichier JSON + variables d'environnement
+- **Client API complet** : Authentification, upload, recherche (`integrations/audiobookshelf_client.py`)
+- **Synchronisation automatique** : Métadonnées + fichiers (`integrations/sync_manager.py`)
+- **Configuration flexible** : Fichier JSON + variables d'environnement (`integrations/config.py`)
 - **Gestion des conflits** : Skip/overwrite/merge
 - **Support multi-bibliothèques** : CRUD complet
 
 #### 🔄 **CI/CD Intégral**
-- **Workflows Gitea** : Build Docker automatique
-- **Tests complets** : Unitaires, intégration, performance
+- **Workflows Gitea** : Build Docker automatique (`.gitea/workflows/`)
+- **Tests complets** : Unitaires, intégration, performance (`tests/`)
 - **Sécurité intégrée** : Trivy, Bandit, Safety, SBOM
 - **Déploiement automatisé** : Staging/production
 - **Releases GitHub** : Assets multi-plateformes
@@ -57,14 +58,21 @@ Système professionnel de traitement d'audiobooks avec multithreading CPU optimi
 ### 🚀 **Installation One-Click**
 ```bash
 # Installation automatique multi-plateforme
-curl -fsSL https://raw.githubusercontent.com/fabrice-audiobook/audiobooks-manager/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Nehwon/audiobook-master/main/scripts/install.sh | bash
 ```
 
 ### 🐳 **Installation Docker**
 ```bash
 # Clone et démarrage
-git clone https://github.com/fabrice-audiobook/audiobooks-manager.git
-cd audiobooks-manager
+git clone https://github.com/Nehwon/audiobook-master.git
+cd audiobook-master
+docker build -t audiobook-manager-pro:v2.1.0 .
+docker run -d --name audiobook-manager -p 5000:5000 \
+  -v $(pwd)/data/source:/app/data/source \
+  -v $(pwd)/data/output:/app/data/output \
+  audiobook-manager-pro:v2.1.0
+
+# Avec Docker Compose
 docker-compose up -d
 
 # Avec monitoring inclus
@@ -79,7 +87,10 @@ pip install -r requirements.txt
 # Interface desktop
 python3 -m gui.desktop_app
 
-# Interface web
+# Interface web simple
+python3 simple_web.py
+
+# Interface web complète
 python3 -m web.app
 ```
 
@@ -169,22 +180,25 @@ services:
 
 ---
 
-## 📚 **Documentation**
+## Documentation
 
-### 📖 **Documentation Complète**
-- **Guide d'installation** : One-click, Docker, manuel
-- **Configuration CI/CD** : Workflows Gitea complets
-- **API documentation** : Endpoints et exemples
-- **Guide développeur** : Architecture et contribution
+### Documentation Complète
+- Guide installation : [Installation One-Click, Docker, manuel](docs/INSTALLATION.md)
+- Configuration CI/CD : Workflows Gitea complets
+- API documentation : Endpoints et exemples
+- Guide développeur : [Architecture et contribution](docs/DEVELOPER.md)
+- Dépannage avancé : Problèmes communs et solutions
+- GitHub Repository : https://github.com/Nehwon/audiobook-master
+- Issues : https://github.com/Nehwon/audiobook-master/issues
 
-### 🔗 **Liens Utiles**
-- **Documentation** : https://audiobook-manager.pro/docs
-- **GitHub Repository** : https://github.com/fabrice-audiobook/audiobooks-manager
-- **Issues** : https://github.com/fabrice-audiobook/audiobooks-manager/issues
-- **Discord Communauté** : https://discord.gg/audiobook-manager
+### Liens Utiles
+- Documentation : https://docs.audiobook-manager.pro
+- GitHub Repository : https://github.com/Nehwon/audiobook-master
+- Issues : https://github.com/Nehwon/audiobook-master/issues
 
 ---
 
+## Cas d'Usage
 ## 🎯 **Cas d'Usage**
 
 ### 🎧 **Pour les Utilisateurs**
@@ -256,20 +270,14 @@ services:
 
 ---
 
-*🎧 Audiobook Manager Pro v2.1* - *Le traitement d'audiobooks le plus puissant et flexible* 🚀✨
-
----
-
 **Pour commencer rapidement :**
 
 ```bash
 # Installation one-click
-curl -fsSL https://raw.githubusercontent.com/fabrice-audiobook/audiobooks-manager/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Nehwon/audiobook-master/main/scripts/install.sh | bash
 
 # Ou avec Docker
-git clone https://github.com/fabrice-audiobook/audiobooks-manager.git
-cd audiobooks-manager
+git clone https://github.com/Nehwon/audiobook-master.git
+cd audiobook-master
 docker-compose up -d
 ```
-
-**Profitez dès maintenant du traitement d'audiobooks le plus avancé !** 🎧🚀

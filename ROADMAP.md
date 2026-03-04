@@ -20,7 +20,7 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 ### 🚀 **Phase 1: Distribution & CI/CD (Q1 2026)** ✅
 **Objectif**: Distribution multi-plateformes et pipeline CI/CD complet
 
-#### Version 2.1.0 ✅ (Terminée - 2026-03-03)
+#### Version 2.1.0 ✅ (Terminée - 2026-03-04)
 - [x] **Dockerisation complète** avec Dockerfile + Docker Compose
 - [x] **Interface graphique desktop** Tkinter moderne et intuitive
 - [x] **Packaging multi-plateforme** (Windows, Linux, macOS)
@@ -30,6 +30,9 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 - [x] **Tests d'intégration** Docker + Audiobookshelf
 - [x] **Monitoring avancé** avec health checks et métriques
 - [x] **Sécurité intégrée** (Trivy, Bandit, Safety, SBOM)
+- [x] **Interface web simple** avec `simple_web.py` pour monitoring
+- [x] **Tests grandeur nature** sur fichiers audio réels
+- [x] **Performance validée** : 304x vitesse sur gros fichiers
 
 #### Version 2.1.1 (Avril 2026)
 - [x] **Validation CI/CD** : Tests complets et déploiement automatisé
@@ -280,6 +283,6 @@ Avec une exécution disciplinée et une écoute attentive des utilisateurs, nous
 
 ---
 
-*Roadmap maintenue activement • Mise à jour trimestrielle • Version 2.1.0 - 2026-03-03* 🗺️✨
+*Roadmap maintenue activement • Mise à jour trimestrielle • Version 2.1.0 - 2026-03-04* 🗺️✨
 
-*Pour suivre la progression en temps réel, consultez le [Projet GitHub](https://github.com/fabrice-audiobook/audiobooks-manager/projects) et rejoignez notre [Discord Communauté](https://discord.gg/audiobook-manager).*
+*Pour suivre la progression en temps réel, consultez le [Projet GitHub](https://github.com/Nehwon/audiobook-master/projects).*

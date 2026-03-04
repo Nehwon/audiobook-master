@@ -51,7 +51,6 @@ Système de traitement d'audiobooks ultra-rapide avec multithreading CPU optimis
 - [ ] **Silent updates** optionnels pour production
 
 ### 📢 **Notifications Avancées**
-- [ ] **Slack integration** pour CI/CD et erreurs
 - [ ] **Discord webhooks** pour notifications communautaires
 - [ ] **Email alerts** pour erreurs critiques
 - [ ] **Push notifications** (future mobile apps)
@@ -124,6 +123,23 @@ Système de traitement d'audiobooks ultra-rapide avec multithreading CPU optimis
 ---
 
 ## 📊 **Métriques Actuelles**
+
+### 🖥️ **Interface Desktop**
+- **Application Tkinter** : Interface moderne et intuitive (`gui/desktop_app.py`)
+- **Configuration répertoires** : Source et sortie
+- **Paramètres audio** : Bitrate, sample rate, VBR, loudnorm
+- **Modes de traitement** : Phase 1/2/3
+- **Progression détaillée** : Fichier actuel, pourcentage, logs
+- **Actions rapides** : Lancer, pause, arrêter, ouvrir sortie
+
+### 🌐 **Interface Web**
+- **Interface simple** : `simple_web.py` pour monitoring basique
+- **Interface complète** : `web/app.py` avec Flask et SocketIO
+- **Onglets avancés** : Options de base + paramètres avancés
+- **Sliders interactifs** : VBR qualité 1-9, loudnorm complet
+- **Monitoring temps réel** : CPU, GPU, RAM, progression
+- **Historique** : Conversions précédentes avec détails
+- **Téléchargement** : Direct des résultats
 
 ### 🎯 **Performance**
 - **Conversion speed**: 3.5x plus rapide que séquentiel
@@ -224,7 +240,7 @@ Système de traitement d'audiobooks ultra-rapide avec multithreading CPU optimis
 
 *Dernière mise à jour: Mars 2026 - Version 2.1.0* 📋✨
 
-*Pour suivre la progression en temps réel, consultez le [Projet GitHub](https://github.com/fabrice-audiobook/audiobooks-manager/projects) et rejoignez notre [Discord Communauté](https://discord.gg/audiobook-manager).*
+*Pour suivre la progression en temps réel, consultez le [Projet GitHub](https://github.com/Nehwon/audiobook-master/projects)*
 ---
 
 ## ✅ **VALIDATION COMPLÈTE - Version 2.1.0**

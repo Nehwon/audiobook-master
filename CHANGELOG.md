@@ -4,7 +4,7 @@ Historique des versions et évolutions du système de traitement d'audiobooks.
 
 ---
 
-## [2.1.0] - 2026-03-03
+## [2.1.0] - 2026-03-04
 
 ### 🚀 **Version Majeure - Dockerisation & Interface Graphique & Synchronisation Audiobookshelf**
 
@@ -17,15 +17,16 @@ Historique des versions et évolutions du système de traitement d'audiobooks.
 - **🔄 CI/CD Complet** : Workflows Gitea avec build Docker automatique
 
 #### 🐳 **Dockerisation & Déploiement**
-- **Dockerfile optimisé** : FFmpeg + dépendances + multithreading
+- **Dockerfile optimisé** : FFmpeg 7.1.3 + dépendances + multithreading
 - **Docker Compose** : Services (app, monitoring, BDD, Redis)
 - **Health checks** : Endpoints `/health` et `/api/status`
 - **Multi-plateforme** : Support Linux/Windows/macOS
 - **Registry double** : Gitea privé + Docker Hub public
 - **Configuration flexible** : Variables d'environnement + volumes
+- **Interface web simple** : `simple_web.py` pour monitoring basique
 
 #### 🖥️ **Interface Graphique Desktop**
-- **Application Tkinter** : Interface moderne avec onglets
+- **Application Tkinter** : Interface moderne avec onglets (`gui/desktop_app.py`)
 - **Progression temps réel** : Barres, logs, status détaillés
 - **Configuration avancée** : Bitrate, sample rate, GPU, loudnorm
 - **Gestion erreurs** : Messages clairs et actions automatiques
@@ -33,10 +34,10 @@ Historique des versions et évolutions du système de traitement d'audiobooks.
 - **Intégration système** : Raccourcis et menus automatiques
 
 #### 🔗 **Intégration Audiobookshelf**
-- **Client API complet** : Authentification Bearer token sécurisée
+- **Client API complet** : Authentification Bearer token sécurisée (`integrations/audiobookshelf_client.py`)
 - **Upload automatique** : Métadonnées + fichiers après conversion
-- **Synchronisation bidirectionnelle** : Local ↔ distant
-- **Configuration flexible** : Fichier JSON + variables d'environnement
+- **Synchronisation bidirectionnelle** : Local ↔ distant (`integrations/sync_manager.py`)
+- **Configuration flexible** : Fichier JSON + variables d'environnement (`integrations/config.py`)
 - **Gestion des conflits** : Stratégies skip/overwrite/merge
 - **Support multi-bibliothèques** : CRUD complet des bibliothèques
 - **Retry automatique** : Gestion intelligente des erreurs réseau
@@ -64,6 +65,8 @@ Historique des versions et évolutions du système de traitement d'audiobooks.
 - **Tests multi-Python** : Support 3.8-3.11
 - **Coverage avancé** : Rapports détaillés et seuils minimums
 - **Qualité code** : Analyse statique complète
+- **Tests grandeur nature** : Validation sur fichiers audio réels
+- **Performance Docker** : 304x vitesse sur fichiers M4B de 16h
 
 #### 📊 **Monitoring et Métriques**
 - **Health endpoints** : `/health` et `/api/status` complets
@@ -71,6 +74,7 @@ Historique des versions et évolutions du système de traitement d'audiobooks.
 - **Security scanning** : Vulnérabilités et dépendances
 - **Performance metrics** : Utilisation CPU, mémoire, disque
 - **Artifact management** : Conservation des résultats de tests
+- **Interface web monitoring** : `simple_web.py` avec métriques temps réel
 
 #### 🛡️ **Sécurité Renforcée**
 - **Scans automatisés** : Trivy (images), Bandit (code), Safety (dépendances)
@@ -230,4 +234,5 @@ Historique des versions et évolutions du système de traitement d'audiobooks.
 ---
 
 *Pour voir les détails techniques de chaque version, consultez les tags sur GitHub*  
+*GitHub Repository : https://github.com/Nehwon/audiobook-master*  
 *Dernière mise à jour : Mars 2026* 📅✨

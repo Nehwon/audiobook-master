@@ -285,10 +285,20 @@ def api_extract():
 def api_rename():
     payload = request.get_json(silent=True) or {}
     folders = payload.get("folders", [])
+    if not isinstance(folders, list):
+        return jsonify({"error": "Le champ 'folders' doit être une liste"}), 400
+
     renamed = []
     skipped = []
 
     for folder in folders:
+        if not isinstance(folder, str) or not folder.strip():
+            skipped.append({"folder": str(folder), "reason": "nom invalide"})
+            continue
+        if Path(folder).name != folder:
+            skipped.append({"folder": folder, "reason": "nom de dossier invalide"})
+            continue
+
         src = MEDIA_DIR / folder
         if not src.exists() or not src.is_dir():
             skipped.append({"folder": folder, "reason": "introuvable"})
@@ -303,8 +313,11 @@ def api_rename():
             skipped.append({"folder": folder, "reason": "destination existante"})
             continue
 
-        src.rename(dst)
-        renamed.append({"old": folder, "new": new_name})
+        try:
+            src.rename(dst)
+            renamed.append({"old": folder, "new": new_name})
+        except OSError as exc:
+            skipped.append({"folder": folder, "reason": f"erreur système: {exc}"})
 
     return jsonify({"renamed": renamed, "skipped": skipped})
 

@@ -121,8 +121,17 @@ function selectedValues(name){ return [...document.querySelectorAll(`input[name=
 
 async function api(url, options={}) {
     const r = await fetch(url, { headers: {'Content-Type':'application/json'}, ...options });
-    if (!r.ok) throw new Error((await r.json()).error || 'Erreur API');
-    return r.json();
+    const raw = await r.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; }
+    catch (_) { data = null; }
+
+    if (!r.ok) {
+        const msg = data?.error || `Erreur API (${r.status})`;
+        throw new Error(msg);
+    }
+    if (!data) throw new Error('Réponse API invalide (JSON attendu)');
+    return data;
 }
 
 async function loadLibrary() {

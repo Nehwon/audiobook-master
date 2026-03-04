@@ -116,6 +116,7 @@ def _save_config(config: Dict) -> None:
 
 def _clean_name(name: str) -> str:
     cleaned = _fix_mojibake(name).replace("+", " ")
+    cleaned = re.sub(r"\[[^\]]*\]", "", cleaned)
     cleaned = re.sub(r"\.(mp3|m4a|m4b|zip|rar|flac|wav|aac|ogg)$", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"(?i)\b([cdjlmnst])_", r"\1'", cleaned)
     cleaned = cleaned.replace("_", " ")
@@ -165,6 +166,13 @@ def _smart_rename(folder: str) -> str:
         return f"{parts[1]} - {parts[0]}"
 
     if len(parts) == 2:
+        author_with_volume = re.match(r"^(?P<author>.+?)\s+(?P<volume>\d+)$", parts[0])
+        if author_with_volume:
+            return (
+                f"{author_with_volume.group('author')} - Vol {int(author_with_volume.group('volume'))}"
+                f" - {parts[1]}"
+            )
+
         vol_match = re.match(r"^(?P<title>.+?)\s+Vol\s*(?P<vol>\d+)$", parts[1], re.IGNORECASE)
         if vol_match:
             return f"{parts[0]} - {vol_match.group('title')} - Vol {int(vol_match.group('vol'))}"
@@ -173,6 +181,15 @@ def _smart_rename(folder: str) -> str:
     if len(parts) >= 3:
         author = parts[0]
         book = parts[-1]
+
+        trailing_volume = re.fullmatch(r"(?i)(?:vol(?:ume)?|tome)\s*(\d+)", parts[-1])
+        if trailing_volume and len(parts) == 3:
+            return f"{author} - {parts[1]} - Vol {int(trailing_volume.group(1))}"
+
+        middle_volume = re.fullmatch(r"(?i)(?:vol(?:ume)?|tome)\s*(\d+)", parts[1])
+        if middle_volume and len(parts) == 3:
+            return f"{author} - {parts[2]} - Vol {int(middle_volume.group(1))}"
+
         series_block = " - ".join(parts[1:-1])
         series_block = re.sub(r"(?i)\b(vol(?:ume)?|tome)\s*", "", series_block)
         series_block = re.sub(r"\s*[-–]+\s*", " ", series_block).strip()
@@ -205,6 +222,12 @@ def _folder_size(path: Path) -> int:
     return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
 
 
+def _should_show_ignore_for_folder(file_count: int, folder_size: int, suggest_delete: bool) -> bool:
+    """Affiche Ignorer pour les dossiers atypiques (non normaux)."""
+    is_normal = file_count > 1 and folder_size >= 100 * 1024 * 1024 and not suggest_delete
+    return not is_normal
+
+
 def _list_media() -> Dict:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     ignored = set(_load_config().get("ignored_folders", []))
@@ -227,6 +250,7 @@ def _list_media() -> Dict:
                 issues.append("Un seul fichier dans le dossier (anormal)")
             if folder_size < 30 * 1024 * 1024:
                 issues.append("Taille très faible pour un audiobook")
+            suggest_delete = bool(part_files) or (file_count == 1 and folder_size < 30 * 1024 * 1024)
             folders.append(
                 {
                     "name": item.name,
@@ -234,7 +258,8 @@ def _list_media() -> Dict:
                     "size": folder_size,
                     "file_count": file_count,
                     "issues": issues,
-                    "suggest_delete": bool(part_files) or (file_count == 1 and folder_size < 30 * 1024 * 1024),
+                    "suggest_delete": suggest_delete,
+                    "can_ignore": _should_show_ignore_for_folder(file_count, folder_size, suggest_delete),
                     "modified": item.stat().st_mtime,
                 }
             )
@@ -437,6 +462,30 @@ def api_ignore_folder():
     config["ignored_folders"] = sorted(ignored)
     _save_config(config)
     return jsonify({"ignored_folders": config["ignored_folders"]})
+
+
+@app.route("/api/folder/delete", methods=["POST"])
+def api_delete_folder():
+    payload = request.get_json(silent=True) or {}
+    folder = payload.get("folder")
+    if not isinstance(folder, str) or not folder.strip():
+        return jsonify({"error": "folder invalide"}), 400
+    if Path(folder).name != folder:
+        return jsonify({"error": "nom de dossier invalide"}), 400
+
+    target = MEDIA_DIR / folder
+    if not target.exists() or not target.is_dir():
+        return jsonify({"error": "dossier introuvable"}), 404
+
+    file_count = sum(1 for f in target.rglob("*") if f.is_file())
+    folder_size = _folder_size(target)
+    has_part = any(f.is_file() for f in target.rglob("*.part*"))
+    suggest_delete = has_part or (file_count == 1 and folder_size < 30 * 1024 * 1024)
+    if not suggest_delete:
+        return jsonify({"error": "suppression autorisée uniquement pour dossier suspect"}), 400
+
+    shutil.rmtree(target)
+    return jsonify({"deleted": folder})
 
 
 @app.route("/api/jobs/enqueue", methods=["POST"])

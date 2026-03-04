@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 🌐 Application Web Audiobook Manager
   audiobook-manager:
@@ -14,7 +12,7 @@ services:
       # 📁 Volumes de données
       - ./data/source:/app/data/source
       - ./data/output:/app/data/output
-      - ./data/temp:/app/temp
+      - /tmp:/tmp
       - ./logs:/app/logs
       # 🔧 Configuration locale (optionnel)
       - ./core/config.py:/app/core/config.py:ro
@@ -33,7 +31,7 @@ services:
       # 📁 Répertoires
       - SOURCE_DIR=/app/data/source
       - OUTPUT_DIR=/app/data/output
-      - TEMP_DIR=/app/temp
+      - TEMP_DIR=/tmp/audiobooks_web
       
       # 📊 Logging
       - LOG_LEVEL=INFO

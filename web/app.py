@@ -24,9 +24,9 @@ from core.processor import AudiobookProcessor
 app = Flask(__name__, template_folder="../templates")
 app.config["SECRET_KEY"] = "audiobook_manager_2024"
 
-MEDIA_DIR = Path(os.getenv("AUDIOBOOK_MEDIA_DIR", "/media"))
-OUTPUT_DIR = Path(os.getenv("AUDIOBOOK_OUTPUT_DIR", "/app/data/output"))
-TEMP_DIR = Path(os.getenv("AUDIOBOOK_TEMP_DIR", "/tmp/audiobooks_web"))
+MEDIA_DIR = Path(os.getenv("AUDIOBOOK_MEDIA_DIR", os.getenv("SOURCE_DIR", "/app/data/source")))
+OUTPUT_DIR = Path(os.getenv("AUDIOBOOK_OUTPUT_DIR", os.getenv("OUTPUT_DIR", "/app/data/output")))
+TEMP_DIR = Path(os.getenv("AUDIOBOOK_TEMP_DIR", os.getenv("TEMP_DIR", "/tmp/audiobooks_web")))
 CONFIG_PATH = TEMP_DIR / "web_config.json"
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}

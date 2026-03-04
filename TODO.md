@@ -19,7 +19,7 @@ Système de traitement d'audiobooks ultra-rapide avec multithreading CPU optimis
 
 ---
 
-## ✅ **ACCOMPLI - Version 2.1.0**
+## 🟡 **RÉVISÉ - Version 2.1.0**
 
 ### 🚀 **PRIORITÉ 1: Dockerisation & Interface Graphique**
 - [x] **Dockerfile complet** pour déploiement simplifié
@@ -38,7 +38,7 @@ Système de traitement d'audiobooks ultra-rapide avec multithreading CPU optimis
 - [x] **Interface web** pour configuration Audiobookshelf
 
 ### 🧪 **Tests et Qualité**
-- [x] **Tests d'intégration** Docker + Audiobookshelf
+- [ ] **Tests d'intégration** Docker + Audiobookshelf
 - [x] **Tests performance** concurrents et mémoire
 - [x] **Scans sécurité** (Trivy, Bandit, Safety)
 - [x] **Code quality** (Flake8, Black, MyPy)
@@ -54,7 +54,7 @@ Système de traitement d'audiobooks ultra-rapide avec multithreading CPU optimis
 
 ---
 
-## 🚀 **EN COURS - Version 2.2.0**
+## ⏳ **À DÉMARRER - Version 2.2.0**
 
 ### 🔄 **Auto-Update Intégré**
 - [ ] **Mise à jour automatique** dans l'application
@@ -252,37 +252,31 @@ Système de traitement d'audiobooks ultra-rapide avec multithreading CPU optimis
 
 ---
 
-*Dernière mise à jour: Mars 2026 - Version 2.1.0* 📋✨
+*Dernière mise à jour: Mars 2026 - Validation révisée v2.1.0 / v2.2.0* 📋✨
 
 *Pour suivre la progression en temps réel, consultez le [Projet GitHub](https://github.com/Nehwon/audiobook-master/projects)*
 ---
 
-## ✅ **VALIDATION COMPLÈTE - Version 2.1.0**
+## 🧾 **VALIDATION RÉVISÉE - Version 2.1.0**
 
-### 🎯 **Objectif Atteint**
-Implémentation complète des priorités 1 et 2 avec Dockerisation, Interface Graphique Desktop, Intégration Audiobookshelf et CI/CD complet.
+### 🎯 **Constat actuel**
+La base Docker/GUI/CI-CD et l'intégration Audiobookshelf sont présentes, mais la validation complète annoncée n'est pas entièrement démontrée dans le dépôt.
 
-### 📊 **Statistiques de Validation**
-- **Fichiers créés/modifiés** : 23 fichiers
-- **Lignes de code** : +4,000+ lignes
-- **Tests et qualité** : 100% couverts
-- **Documentation** : 100% à jour
+### 📊 **Validation factuelle**
+- ✅ Dockerfile, docker-compose, interface desktop et CI/CD présents
+- ✅ Intégration Audiobookshelf (client + synchronisation) présente
+- ⚠️ Absence de tests d'intégration Docker + Audiobookshelf dans `tests/`
+- ⚠️ Absence d'artefacts versionnés prouvant les « tests grandeur nature » et le « 304x »
 
-### 🏆 **Réalisations Exceptionnelles**
-- **100% des objectifs** atteints
-- **Qualité professionnelle** validée
-- **Infrastructure production-ready**
-- **Expérience utilisateur** optimisée
+### 🏆 **Réalisations confirmées**
+- Dockerisation multi-services
+- Interface desktop Tkinter
+- Workflows CI/CD et contrôles de sécurité
 
-### 🚀 **Prêt pour la Production**
-Le système est maintenant **PRODUCTION READY** avec :
-- **Déploiement automatisé** et sécurisé
-- **Monitoring complet** et proactif
-- **Support multi-plateforme** et multi-utilisateurs
-- **Écosystème extensible** et maintenable
-- **Documentation complète** et accessible
+### 🚀 **À compléter avant validation finale**
+- Ajouter des tests d'intégration Docker + Audiobookshelf exécutables et versionnés.
+- Ajouter des benchmarks reproductibles avec rapports pour justifier les performances annoncées.
 
-**Validation finale : ✅ APPROUVÉ POUR PRODUCTION**
-*Date de validation : 3 Mars 2026*  
-*Version validée : 2.1.0*  
-*Statut : PRODUCTION READY* 🚀✨
+**Validation finale : 🟡 EN RÉVISION**  
+*Version concernée : 2.1.0*  
+*Statut : validation partielle, éléments à compléter* ✨

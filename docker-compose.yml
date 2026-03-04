@@ -21,6 +21,7 @@ services:
       - HOST=${HOST:-0.0.0.0}
       - PORT=${PORT:-8080}
       - APP_PORT=${APP_PORT:-5001}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
 
       # 🚀 Performance
       - GUNICORN_WORKERS=${GUNICORN_WORKERS:-4}
@@ -39,6 +40,9 @@ services:
       - MAX_WORKERS=${MAX_WORKERS:-32}
       - CPU_THREADS=${CPU_THREADS:-16}
       - BATCH_THREADS=${BATCH_THREADS:-8}
+
+    depends_on:
+      - ollama
 
     networks:
       - audiobook-network
@@ -60,6 +64,27 @@ services:
         reservations:
           cpus: '${APP_RESERVATION_CPUS:-4}'
           memory: ${APP_RESERVATION_MEMORY:-2G}
+
+
+  # 🤖 Ollama local pour stack all-in-one
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    container_name: ${OLLAMA_CONTAINER_NAME:-audiobook-ollama}
+    restart: ${OLLAMA_RESTART_POLICY:-unless-stopped}
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ${OLLAMA_DATA_VOLUME:-ollama-data}:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
+    networks:
+      - audiobook-network
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: ${OLLAMA_HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${OLLAMA_HEALTHCHECK_TIMEOUT:-10s}
+      retries: ${OLLAMA_HEALTHCHECK_RETRIES:-10}
+      start_period: ${OLLAMA_HEALTHCHECK_START_PERIOD:-30s}
 
   # 📊 Monitoring optionnel avec Prometheus
   prometheus:
@@ -155,3 +180,5 @@ volumes:
     driver: ${PROMETHEUS_VOLUME_DRIVER:-local}
   grafana-data:
     driver: ${GRAFANA_VOLUME_DRIVER:-local}
+  ollama-data:
+    driver: ${OLLAMA_VOLUME_DRIVER:-local}

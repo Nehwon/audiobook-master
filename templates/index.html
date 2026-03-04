@@ -3,583 +3,193 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audiobook Manager - Interface Web</title>
+    <title>Audiobook Manager - Encodage M4B</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-    <style>
-        .progress-bar {
-            transition: width 0.3s ease;
-        }
-        .file-item:hover {
-            transform: translateX(4px);
-            transition: transform 0.2s ease;
-        }
-        .status-indicator {
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .glass-effect {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-    </style>
 </head>
-<body class="bg-gray-50">
-    <!-- Header -->
-    <header class="gradient-bg text-white shadow-lg">
-        <div class="container mx-auto px-4 py-6">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-3">
-                    <i class="fas fa-headphones text-3xl"></i>
-                    <div>
-                        <h1 class="text-2xl font-bold">Audiobook Manager</h1>
-                        <p class="text-sm opacity-90">Conversion et gestion d'audiobooks</p>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <div class="text-right">
-                        <div class="text-sm opacity-90">Statut actuel</div>
-                        <div id="status-text" class="font-semibold">Prêt</div>
-                    </div>
-                    <div id="status-indicator" class="w-3 h-3 bg-green-400 rounded-full"></div>
-                </div>
+<body class="bg-gray-100 text-gray-900">
+    <header class="bg-indigo-600 text-white shadow">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold">Audiobook Manager</h1>
+                <p class="text-sm opacity-90">Tableau des dossiers à encoder en M4B</p>
+            </div>
+            <div class="text-right">
+                <p class="text-sm">Statut</p>
+                <p id="status-text" class="font-semibold">Prêt</p>
             </div>
         </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="container mx-auto px-4 py-8">
-        <!-- Progress Section -->
-        <div id="progress-section" class="hidden mb-8">
-            <div class="bg-white rounded-lg shadow-lg p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold">Conversion en cours</h3>
-                    <button id="stop-btn" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition">
-                        <i class="fas fa-stop mr-2"></i>Arrêter
-                    </button>
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        <section class="bg-white rounded shadow p-4">
+            <h2 class="text-lg font-semibold mb-3">Options d'encodage</h2>
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+                <div>
+                    <label class="block text-sm mb-1">Bitrate</label>
+                    <select id="bitrate" class="w-full border rounded px-2 py-1">
+                        <option value="64k">64k</option>
+                        <option value="96k">96k</option>
+                        <option value="128k" selected>128k</option>
+                        <option value="192k">192k</option>
+                    </select>
                 </div>
-                
-                <div class="mb-4">
-                    <div class="flex justify-between text-sm text-gray-600 mb-1">
-                        <span id="current-file">Fichier: </span>
-                        <span id="progress-percent">0%</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-3">
-                        <div id="progress-bar" class="progress-bar bg-blue-500 h-3 rounded-full" style="width: 0%"></div>
-                    </div>
+                <div>
+                    <label class="block text-sm mb-1">Sample rate</label>
+                    <select id="samplerate" class="w-full border rounded px-2 py-1">
+                        <option value="22050">22050</option>
+                        <option value="44100" selected>44100</option>
+                        <option value="48000">48000</option>
+                    </select>
                 </div>
-                
-                <div class="grid grid-cols-3 gap-4 text-center">
-                    <div class="bg-gray-50 rounded p-3">
-                        <div class="text-2xl font-bold text-blue-600" id="processed-count">0</div>
-                        <div class="text-sm text-gray-600">Fichiers traités</div>
-                    </div>
-                    <div class="bg-gray-50 rounded p-3">
-                        <div class="text-2xl font-bold text-green-600" id="elapsed-time">00:00</div>
-                        <div class="text-sm text-gray-600">Temps écoulé</div>
-                    </div>
-                    <div class="bg-gray-50 rounded p-3">
-                        <div class="text-2xl font-bold text-purple-600" id="estimated-time">--:--</div>
-                        <div class="text-sm text-gray-600">Temps estimé</div>
-                    </div>
+                <div>
+                    <label class="block text-sm mb-1">Mode</label>
+                    <select id="processing-mode" class="w-full border rounded px-2 py-1">
+                        <option value="concat_fast">Phase 1 - concat</option>
+                        <option value="encode_aac" selected>Phase 2 - AAC</option>
+                        <option value="final_m4b">Phase 3 - final</option>
+                    </select>
                 </div>
+                <label class="flex items-center space-x-2 mt-6 md:mt-0"><input id="no-gpu" type="checkbox"><span>Sans GPU</span></label>
+                <label class="flex items-center space-x-2 mt-6 md:mt-0"><input id="no-normalization" type="checkbox"><span>Sans normalisation</span></label>
             </div>
-        </div>
+        </section>
 
-        <!-- Control Panel -->
-        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-            <!-- Tabs -->
-            <div class="border-b border-gray-200 mb-4">
-                <nav class="-mb-px flex space-x-8">
-                    <button onclick="showTab('basic')" id="basic-tab" class="tab-button py-2 px-1 border-b-2 border-blue-500 font-medium text-sm text-blue-600">
-                        <i class="fas fa-sliders-h mr-2"></i>Options de base
-                    </button>
-                    <button onclick="showTab('advanced')" id="advanced-tab" class="tab-button py-2 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                        <i class="fas fa-cogs mr-2"></i>Avancé
-                    </button>
-                </nav>
+        <section class="bg-white rounded shadow p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-lg font-semibold">Dossiers source à encoder</h2>
+                <button onclick="loadSourceFolders()" class="bg-gray-700 text-white px-3 py-1 rounded">Rafraîchir</button>
             </div>
-
-            <!-- Basic Tab -->
-            <div id="basic-content" class="tab-content">
-                <h3 class="text-lg font-semibold mb-4">Options de conversion</h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Bitrate audio</label>
-                        <select id="bitrate" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="64k">64k (Economique)</option>
-                            <option value="96k">96k (Standard)</option>
-                            <option value="128k" selected>128k (Haute qualité)</option>
-                            <option value="192k">192k (Premium)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Échantillonnage</label>
-                        <select id="samplerate" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="22050">22050 Hz</option>
-                            <option value="44100" selected>44100 Hz</option>
-                            <option value="48000">48000 Hz</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Options rapides</label>
-                        <div class="space-y-2">
-                            <label class="flex items-center">
-                                <input type="checkbox" id="no-gpu" class="mr-2">
-                                <span class="text-sm">Désactiver GPU</span>
-                            </label>
-                            <label class="flex items-center">
-                                <input type="checkbox" id="no-normalization" class="mr-2">
-                                <span class="text-sm">Pas de normalisation</span>
-                            </label>
-                            <label class="flex items-center">
-                                <input type="checkbox" id="no-compression" class="mr-2">
-                                <span class="text-sm">Pas de compression</span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm" id="folders-table">
+                    <thead>
+                        <tr class="text-left border-b">
+                            <th class="py-2 pr-4">Dossier</th>
+                            <th class="py-2 pr-4">Fichiers audio</th>
+                            <th class="py-2 pr-4">Taille</th>
+                            <th class="py-2 pr-4">Modifié le</th>
+                            <th class="py-2">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="folders-table-body"></tbody>
+                </table>
             </div>
+        </section>
 
-            <!-- Advanced Tab -->
-            <div id="advanced-content" class="tab-content hidden">
-                <h3 class="text-lg font-semibold mb-4">Paramètres avancés</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- VBR Settings -->
-                    <div class="bg-gray-50 p-4 rounded-lg">
-                        <h4 class="font-medium mb-3 text-gray-800">
-                            <i class="fas fa-wave-square mr-2 text-purple-500"></i>VBR (Variable Bit Rate)
-                        </h4>
-                        <div class="space-y-3">
-                            <label class="flex items-center">
-                                <input type="checkbox" id="enable-vbr" class="mr-2">
-                                <span class="text-sm">Activer VBR</span>
-                                <span class="ml-2 text-xs text-gray-500">(pour meilleure compression)</span>
-                            </label>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Qualité VBR</label>
-                                <select id="vbr-quality" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                                    <option value="1">1 (Plus rapide)</option>
-                                    <option value="3">3 (Équilibré)</option>
-                                    <option value="5" selected>5 (Haute qualité)</option>
-                                    <option value="7">7 (Très haute qualité)</option>
-                                    <option value="9">9 (Maximum)</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Loudnorm Settings -->
-                    <div class="bg-blue-50 p-4 rounded-lg">
-                        <h4 class="font-medium mb-3 text-gray-800">
-                            <i class="fas fa-volume-up mr-2 text-blue-500"></i>Normalisation EBU R128
-                        </h4>
-                        <div class="space-y-3">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">
-                                    Integrated Loudness (I)
-                                    <span class="text-xs text-gray-500">-23 à -14 LUFS</span>
-                                </label>
-                                <input type="range" id="loudnorm-target" min="-23" max="-14" value="-18" step="0.5" 
-                                       class="w-full" oninput="updateLoudnormDisplay()">
-                                <span id="loudnorm-target-display" class="text-sm text-gray-600">-18.0 LUFS</span>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">
-                                    Loudness Range (LRA)
-                                    <span class="text-xs text-gray-500">4 à 20 LU</span>
-                                </label>
-                                <input type="range" id="loudnorm-range" min="4" max="20" value="11" step="1" 
-                                       class="w-full" oninput="updateLoudnormDisplay()">
-                                <span id="loudnorm-range-display" class="text-sm text-gray-600">11 LU</span>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">
-                                    True Peak (TP)
-                                    <span class="text-xs text-gray-500">-3 à -1 dBTP</span>
-                                </label>
-                                <input type="range" id="loudnorm-true-peak" min="-3" max="-1" value="-1.5" step="0.1" 
-                                       class="w-full" oninput="updateLoudnormDisplay()">
-                                <span id="loudnorm-true-peak-display" class="text-sm text-gray-600">-1.5 dBTP</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Processing Mode -->
-                <div class="mt-6 bg-yellow-50 p-4 rounded-lg">
-                    <h4 class="font-medium mb-3 text-gray-800">
-                        <i class="fas fa-cogs mr-2 text-yellow-500"></i>Mode de traitement
-                    </h4>
-                    <div class="grid grid-cols-3 gap-4">
-                        <label class="flex items-center">
-                            <input type="radio" name="processing-mode" value="concat_fast" class="mr-2">
-                            <div>
-                                <span class="text-sm font-medium">Phase 1</span>
-                                <div class="text-xs text-gray-500">Concaténation rapide</div>
-                            </div>
-                        </label>
-                        <label class="flex items-center">
-                            <input type="radio" name="processing-mode" value="encode_aac" class="mr-2" checked>
-                            <div>
-                                <span class="text-sm font-medium">Phase 2</span>
-                                <div class="text-xs text-gray-500">Encodage AAC</div>
-                            </div>
-                        </label>
-                        <label class="flex items-center">
-                            <input type="radio" name="processing-mode" value="final_m4b" class="mr-2">
-                            <div>
-                                <span class="text-sm font-medium">Phase 3</span>
-                                <div class="text-xs text-gray-500">M4B final</div>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Files Section -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <!-- Source Files -->
-            <div class="bg-white rounded-lg shadow-lg p-6">
-                <h3 class="text-lg font-semibold mb-4 flex items-center">
-                    <i class="fas fa-folder-open mr-2 text-blue-500"></i>
-                    Fichiers source
-                </h3>
-                <div id="source-files" class="space-y-2 max-h-96 overflow-y-auto">
-                    <!-- Files will be loaded here -->
-                </div>
-            </div>
-
-            <!-- Output Files -->
-            <div class="bg-white rounded-lg shadow-lg p-6">
-                <h3 class="text-lg font-semibold mb-4 flex items-center">
-                    <i class="fas fa-check-circle mr-2 text-green-500"></i>
-                    Fichiers convertis
-                </h3>
-                <div id="output-files" class="space-y-2 max-h-96 overflow-y-auto">
-                    <!-- Files will be loaded here -->
-                </div>
-            </div>
-        </div>
+        <section class="bg-white rounded shadow p-4">
+            <h2 class="text-lg font-semibold mb-3">Sorties M4B</h2>
+            <ul id="output-files" class="space-y-2"></ul>
+        </section>
     </main>
 
-    <!-- Footer -->
-    <footer class="bg-gray-800 text-white py-6 mt-12">
-        <div class="container mx-auto px-4 text-center">
-            <p class="text-sm opacity-75">Audiobook Manager © 2024 - Conversion haute qualité d'audiobooks</p>
-        </div>
-    </footer>
-
     <script>
-        // WebSocket connection
         const socket = io();
         let currentStatus = 'idle';
-        let startTime = null;
 
-        // DOM elements
-        const statusText = document.getElementById('status-text');
-        const statusIndicator = document.getElementById('status-indicator');
-        const progressSection = document.getElementById('progress-section');
-        const progressBar = document.getElementById('progress-bar');
-        const progressPercent = document.getElementById('progress-percent');
-        const currentFile = document.getElementById('current-file');
-        const processedCount = document.getElementById('processed-count');
-        const elapsedTime = document.getElementById('elapsed-time');
-        const estimatedTime = document.getElementById('estimated-time');
-
-        // Update status
-        function updateStatus(status) {
-            currentStatus = status.status;
-            
-            switch(status.status) {
-                case 'idle':
-                    statusText.textContent = 'Prêt';
-                    statusIndicator.className = 'w-3 h-3 bg-green-400 rounded-full';
-                    progressSection.classList.add('hidden');
-                    break;
-                case 'processing':
-                    statusText.textContent = 'Conversion en cours';
-                    statusIndicator.className = 'w-3 h-3 bg-blue-400 rounded-full status-indicator';
-                    progressSection.classList.remove('hidden');
-                    startTime = status.start_time;
-                    break;
-                case 'completed':
-                    statusText.textContent = 'Terminé';
-                    statusIndicator.className = 'w-3 h-3 bg-green-400 rounded-full';
-                    setTimeout(() => {
-                        progressSection.classList.add('hidden');
-                        loadOutputFiles();
-                    }, 3000);
-                    break;
-                case 'error':
-                    statusText.textContent = 'Erreur';
-                    statusIndicator.className = 'w-3 h-3 bg-red-400 rounded-full';
-                    alert('Erreur de conversion: ' + status.error);
-                    progressSection.classList.add('hidden');
-                    break;
-                case 'stopped':
-                    statusText.textContent = 'Arrêté';
-                    statusIndicator.className = 'w-3 h-3 bg-yellow-400 rounded-full';
-                    progressSection.classList.add('hidden');
-                    break;
-            }
-            
-            // Update progress
-            if (status.progress !== undefined) {
-                progressBar.style.width = status.progress + '%';
-                progressPercent.textContent = Math.round(status.progress) + '%';
-            }
-            
-            if (status.current_file) {
-                currentFile.textContent = 'Fichier: ' + status.current_file;
-            }
-            
-            if (status.processed_files !== undefined) {
-                processedCount.textContent = status.processed_files;
-            }
-            
-            // Update time
-            if (startTime) {
-                const elapsed = Math.floor((Date.now() / 1000) - startTime);
-                const minutes = Math.floor(elapsed / 60);
-                const seconds = elapsed % 60;
-                elapsedTime.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            }
+        function getOptions() {
+            return {
+                bitrate: document.getElementById('bitrate').value,
+                samplerate: parseInt(document.getElementById('samplerate').value, 10),
+                processing_mode: document.getElementById('processing-mode').value,
+                no_gpu: document.getElementById('no-gpu').checked,
+                no_normalization: document.getElementById('no-normalization').checked,
+                no_compression: false
+            };
         }
 
-        // Load files
-        async function loadSourceFiles() {
-            try {
-                const response = await fetch('/api/files');
-                const files = await response.json();
-                
-                const container = document.getElementById('source-files');
-                container.innerHTML = '';
-                
-                files.forEach(file => {
-                    const fileDiv = document.createElement('div');
-                    fileDiv.className = 'file-item bg-gray-50 rounded p-3 hover:bg-gray-100 cursor-pointer transition';
-                    
-                    const icon = file.type === 'folder' ? 'fa-folder' : 'fa-file-audio';
-                    const size = (file.size / 1024 / 1024).toFixed(1);
-                    const audioInfo = file.audio_count ? ` (${file.audio_count} fichiers)` : '';
-                    
-                    fileDiv.innerHTML = `
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center">
-                                <i class="fas ${icon} mr-3 text-blue-500"></i>
-                                <div>
-                                    <div class="font-medium">${file.name}</div>
-                                    <div class="text-sm text-gray-500">${size} MB${audioInfo}</div>
-                                </div>
-                            </div>
-                            <button onclick="convertFile('${file.name}')" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition">
-                                <i class="fas fa-play mr-1"></i>Convertir
-                            </button>
-                        </div>
-                    `;
-                    
-                    container.appendChild(fileDiv);
-                });
-            } catch (error) {
-                console.error('Error loading source files:', error);
+        function updateStatus(status) {
+            currentStatus = status.status;
+            const labels = {
+                idle: 'Prêt',
+                processing: `Encodage en cours (${status.current_file || ''})`,
+                completed: 'Terminé',
+                error: `Erreur: ${status.error || ''}`,
+                stopped: 'Arrêté'
+            };
+            document.getElementById('status-text').textContent = labels[status.status] || status.status;
+        }
+
+        async function loadSourceFolders() {
+            const res = await fetch('/api/folders');
+            const folders = await res.json();
+            const body = document.getElementById('folders-table-body');
+            body.innerHTML = '';
+
+            if (!folders.length) {
+                body.innerHTML = '<tr><td colspan="5" class="py-4 text-gray-500">Aucun dossier audio détecté</td></tr>';
+                return;
             }
+
+            folders.forEach(folder => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b';
+                const modified = new Date(folder.modified * 1000).toLocaleString();
+                const sizeMb = (folder.size / 1024 / 1024).toFixed(1);
+                tr.innerHTML = `
+                    <td class="py-2 pr-4 font-medium">${folder.name}</td>
+                    <td class="py-2 pr-4">${folder.audio_count}</td>
+                    <td class="py-2 pr-4">${sizeMb} MB</td>
+                    <td class="py-2 pr-4">${modified}</td>
+                    <td class="py-2">
+                        <button class="bg-indigo-600 text-white px-3 py-1 rounded disabled:opacity-50" ${currentStatus === 'processing' ? 'disabled' : ''} onclick="startEncoding('${folder.name.replace(/'/g, "\\'")}')">
+                            Encoder en M4B
+                        </button>
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        async function startEncoding(folderName) {
+            if (currentStatus === 'processing') {
+                alert('Un encodage est déjà en cours.');
+                return;
+            }
+            const res = await fetch('/api/convert', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ folder: folderName, options: getOptions() })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                alert(err.error || 'Erreur lors du lancement de l\'encodage');
+                return;
+            }
+
+            await loadSourceFolders();
         }
 
         async function loadOutputFiles() {
-            try {
-                const response = await fetch('/api/outputs');
-                const files = await response.json();
-                
-                const container = document.getElementById('output-files');
-                container.innerHTML = '';
-                
-                files.forEach(file => {
-                    const fileDiv = document.createElement('div');
-                    fileDiv.className = 'file-item bg-gray-50 rounded p-3 hover:bg-gray-100 transition';
-                    
-                    const size = (file.size / 1024 / 1024).toFixed(1);
-                    const date = new Date(file.created * 1000).toLocaleString();
-                    
-                    fileDiv.innerHTML = `
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center">
-                                <i class="fas fa-check-circle mr-3 text-green-500"></i>
-                                <div>
-                                    <div class="font-medium">${file.name}</div>
-                                    <div class="text-sm text-gray-500">${size} MB - ${date}</div>
-                                </div>
-                            </div>
-                            <button onclick="downloadFile('${file.name}')" class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition">
-                                <i class="fas fa-download mr-1"></i>Télécharger
-                            </button>
-                        </div>
-                    `;
-                    
-                    container.appendChild(fileDiv);
-                });
-            } catch (error) {
-                console.error('Error loading output files:', error);
-            }
-        }
+            const res = await fetch('/api/outputs');
+            const files = await res.json();
+            const container = document.getElementById('output-files');
+            container.innerHTML = '';
 
-        // Convert file
-        async function convertFile(filename) {
-            if (currentStatus === 'processing') {
-                alert('Une conversion est déjà en cours');
+            if (!files.length) {
+                container.innerHTML = '<li class="text-gray-500">Aucun M4B produit pour le moment.</li>';
                 return;
             }
-            
-            const options = {
-                bitrate: document.getElementById('bitrate').value,
-                samplerate: parseInt(document.getElementById('samplerate').value),
-                no_gpu: document.getElementById('no-gpu').checked,
-                no_normalization: document.getElementById('no-normalization').checked,
-                no_compression: document.getElementById('no-compression').checked
-            };
-            
-            try {
-                const response = await fetch('/api/convert', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        filename: filename,
-                        options: options
-                    })
-                });
-                
-                if (response.ok) {
-                    console.log('Conversion started');
-                } else {
-                    const error = await response.json();
-                    alert('Erreur: ' + error.error);
-                }
-            } catch (error) {
-                console.error('Error starting conversion:', error);
-                alert('Erreur lors du démarrage de la conversion');
-            }
-        }
 
-        // Download file
-        function downloadFile(filename) {
-            window.open(`/api/download/${filename}`, '_blank');
-        }
-
-        // Stop conversion
-        document.getElementById('stop-btn').addEventListener('click', async () => {
-            try {
-                const response = await fetch('/api/stop', { method: 'POST' });
-                if (response.ok) {
-                    console.log('Conversion stopped');
-                }
-            } catch (error) {
-                console.error('Error stopping conversion:', error);
-            }
-        });
-
-        // WebSocket events
-        socket.on('connect', () => {
-            console.log('Connected to server');
-            loadSourceFiles();
-            loadOutputFiles();
-        });
-
-        socket.on('status_update', updateStatus);
-
-        socket.on('conversion_complete', (data) => {
-            console.log('Conversion complete:', data);
-            updateStatus({ status: 'completed' });
-        });
-
-        socket.on('conversion_error', (data) => {
-            console.log('Conversion error:', data);
-            updateStatus({ status: 'error', error: data.error });
-        });
-
-        socket.on('conversion_stopped', () => {
-            console.log('Conversion stopped');
-            updateStatus({ status: 'stopped' });
-        });
-
-        // Tab functionality
-        function showTab(tabName) {
-            // Hide all tabs
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.add('hidden');
+            files.forEach(file => {
+                const sizeMb = (file.size / 1024 / 1024).toFixed(1);
+                container.innerHTML += `<li class="border rounded p-2 flex justify-between"><span>${file.name} (${sizeMb} MB)</span><a class="text-indigo-700" href="/api/download/${file.name}">Télécharger</a></li>`;
             });
-            
-            // Remove active state from all tabs
-            document.querySelectorAll('.tab-button').forEach(button => {
-                button.classList.remove('border-blue-500', 'text-blue-600');
-                button.classList.add('border-transparent', 'text-gray-500');
-            });
-            
-            // Show selected tab
-            document.getElementById(tabName + '-content').classList.remove('hidden');
-            
-            // Activate selected tab button
-            const activeButton = document.getElementById(tabName + '-tab');
-            activeButton.classList.remove('border-transparent', 'text-gray-500');
-            activeButton.classList.add('border-blue-500', 'text-blue-600');
         }
 
-        // Update loudnorm displays
-        function updateLoudnormDisplay() {
-            const target = document.getElementById('loudnorm-target').value;
-            const range = document.getElementById('loudnorm-range').value;
-            const truePeak = document.getElementById('loudnorm-true-peak').value;
-            
-            document.getElementById('loudnorm-target-display').textContent = `${target} LUFS`;
-            document.getElementById('loudnorm-range-display').textContent = `${range} LU`;
-            document.getElementById('loudnorm-true-peak-display').textContent = `${truePeak} dBTP`;
-        }
-
-        // Get conversion parameters
-        function getConversionParams() {
-            const params = {
-                bitrate: document.getElementById('bitrate').value,
-                samplerate: document.getElementById('samplerate').value,
-                no_gpu: document.getElementById('no-gpu').checked,
-                no_normalization: document.getElementById('no-normalization').checked,
-                no_compression: document.getElementById('no-compression').checked,
-                
-                // Advanced parameters
-                enable_vbr: document.getElementById('enable-vbr').checked,
-                vbr_quality: document.getElementById('vbr-quality').value,
-                loudnorm_target: parseFloat(document.getElementById('loudnorm-target').value),
-                loudnorm_range: parseInt(document.getElementById('loudnorm-range').value),
-                loudnorm_true_peak: parseFloat(document.getElementById('loudnorm-true-peak').value),
-                
-                // Processing mode
-                processing_mode: document.querySelector('input[name="processing-mode"]:checked').value
-            };
-            
-            console.log('Conversion params:', params);
-            return params;
-        }
-
-        // Auto-refresh
-        setInterval(() => {
-            if (currentStatus === 'idle') {
-                loadSourceFiles();
+        socket.on('status_update', (status) => {
+            updateStatus(status);
+            loadSourceFolders();
+            if (status.status === 'completed') {
                 loadOutputFiles();
             }
-        }, 5000);
+        });
+        socket.on('conversion_complete', () => loadOutputFiles());
+        socket.on('conversion_error', (data) => alert(data.error));
 
-        // Initial load
-        loadSourceFiles();
+        loadSourceFolders();
         loadOutputFiles();
+        fetch('/api/status').then(r => r.json()).then(updateStatus);
     </script>
 </body>
 </html>

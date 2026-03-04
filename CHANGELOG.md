@@ -4,6 +4,36 @@ Historique des versions et évolutions du système de traitement d'audiobooks.
 
 ---
 
+## [2.1.1] - 2026-03-04
+
+### 🚀 **Version Mineure - Corrections et Améliorations Docker**
+
+#### ⚡ **Nouvelles Fonctionnalités**
+- **🐳 GHCR Integration** : Images GitHub Container Registry automatiques
+- **🔧 Docker Compose** : Paramétrage avec fichier `.env.example`
+- **🔄 GitHub Actions** : Workflow de build Docker automatisé
+- **🎯 Smart Renaming** : Renommage intelligent des dossiers avec apostrophes normalisées
+
+#### 🐳 **Dockerisation Améliorée**
+- **Registry GHCR** : Utilisation de GitHub Container Registry au lieu de build local
+- **Configuration .env** : Paramètres par défaut avec fichier `.env.example`
+- **Workflow Actions** : Build Docker automatisé sur GitHub
+- **Optimisation mémoire** : 50GB limit, 25GB réservés pour gros traitements
+
+#### 🖥️ **Interface Web**
+- **Fix server 500 errors** : Correction des erreurs JSON et serveur
+- **Smart folder renaming** : Renommage intelligent avec apostrophes FFmpeg-safe
+- **Rename button** : Correction de la fonctionnalité de renommage
+- **API improvements** : Stabilité et gestion des erreurs améliorées
+
+#### 🔧 **Améliorations Techniques**
+- **CLI synopsis** : Correction compatibilité flag disable
+- **Nginx permissions** : Fix permissions logs dans container
+- **GUI updates** : Alignement avec docker-compose.yml
+- **Version directive** : Suppression directive version obsolète
+
+---
+
 ## [2.1.0] - 2026-03-04
 
 ### 🚀 **Version Majeure - Dockerisation & Interface Graphique & Synchronisation Audiobookshelf**

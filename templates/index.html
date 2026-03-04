@@ -223,6 +223,11 @@ async function deleteSuspectFolder(folder){
     await loadLibrary();
 }
 
+async function ignoreOne(folder){
+    await api('/api/ignore',{method:'POST', body: JSON.stringify({folder})});
+    await loadLibrary();
+}
+
 async function enqueueFolders(folders){
     await api('/api/jobs/enqueue',{method:'POST', body: JSON.stringify({folders})});
     loadJobs();

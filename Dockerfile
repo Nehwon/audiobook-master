@@ -73,8 +73,8 @@ COPY docker-entrypoint.sh /usr/local/bin/
 COPY deploy/nginx.conf /etc/nginx/nginx.conf
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Switch vers utilisateur audiobook
-USER audiobook
+# Exécution en root pour faciliter les tests locaux avec volumes bind mount
+USER root
 
 # Point d'entrée
 ENTRYPOINT ["docker-entrypoint.sh"]

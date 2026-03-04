@@ -37,6 +37,7 @@
         button { background: var(--primary); color:white; border:none; border-radius:6px; padding: 6px 10px; cursor:pointer; }
         button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
         button.danger { background: var(--danger); }
+        button:disabled { opacity: 0.55; cursor: not-allowed; }
         .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
         input, select { background: var(--bg); color: var(--text); border:1px solid var(--border); border-radius:6px; padding:7px; }
         .muted { color: var(--muted); }
@@ -65,7 +66,7 @@
                 <button onclick="loadLibrary()">Rafraîchir</button>
                 <button class="secondary" onclick="extractSelected()">Décompresser sélection</button>
                 <label><input id="deleteArchiveAfter" type="checkbox"> Supprimer archive après extraction</label>
-                <button class="secondary" onclick="renameSelected()">Renommage batch</button>
+                <button id="renameSelectedBtn" class="secondary" onclick="renameSelected()">Renommage batch</button>
                 <button onclick="enqueueSelected()">Ajouter sélection à la queue M4B</button>
             </div>
         </div>
@@ -115,6 +116,20 @@
 
 <script>
 let libraryCache = { folders: [], archives: [] };
+let renameInProgress = false;
+
+function setRenameBusy(isBusy){
+    renameInProgress = isBusy;
+    const batchBtn = document.getElementById('renameSelectedBtn');
+    if (batchBtn) {
+        batchBtn.disabled = isBusy;
+        batchBtn.textContent = isBusy ? 'Renommage...' : 'Renommage batch';
+    }
+    document.querySelectorAll('[data-rename-btn="1"]').forEach(btn => {
+        btn.disabled = isBusy;
+        btn.textContent = isBusy ? 'Renommage...' : 'Renommer';
+    });
+}
 
 function fmtMb(v){ return (v/1024/1024).toFixed(1); }
 function selectedValues(name){ return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value); }
@@ -143,13 +158,18 @@ async function loadLibrary() {
     ab.innerHTML = '';
 
     data.folders.forEach(f => {
+        const issues = (f.issues || []).length
+            ? `<div class="muted" style="font-size:12px">⚠️ ${(f.issues || []).join(' | ')}${f.suggest_delete ? ' — suppression suggérée' : ''}</div>`
+            : '';
         fb.innerHTML += `<tr>
             <td><input type="checkbox" name="folderSel" value="${f.name}"></td>
-            <td>${f.name}</td>
-            <td>${f.audio_count}</td>
+            <td>${f.name}${issues}</td>
+            <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
             <td>${fmtMb(f.size)}</td>
             <td>
-                <button class="secondary" onclick="renameOne('${f.name.replaceAll("'", "\\'")}')">Renommer</button>
+                <button data-rename-btn="1" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="renameOne('${f.name.replaceAll("'", "\\'")}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
+                ${f.can_ignore ? `<button class="secondary" onclick="ignoreOne('${f.name.replaceAll("'", "\\'")}')">Ignorer</button>` : ''}
+                ${f.suggest_delete ? `<button class="danger" onclick="deleteSuspectFolder('${f.name.replaceAll("'", "\\'")}')">Supprimer</button>` : ''}
                 <button onclick="enqueueFolders(['${f.name.replaceAll("'", "\\'")}'])">Traiter M4B</button>
             </td>
         </tr>`;
@@ -170,13 +190,36 @@ async function extractSelected(){
 }
 
 async function renameOne(folder){
-    await api('/api/rename',{method:'POST', body: JSON.stringify({folders:[folder]})});
-    await loadLibrary();
+    if (renameInProgress) return;
+    setRenameBusy(true);
+    try {
+        await api('/api/rename',{method:'POST', body: JSON.stringify({folders:[folder]})});
+        await loadLibrary();
+    } finally {
+        setRenameBusy(false);
+    }
 }
 async function renameSelected(){
+    if (renameInProgress) return;
     const folders = selectedValues('folderSel');
     if (!folders.length) return alert('Sélectionner des dossiers');
-    await api('/api/rename',{method:'POST', body: JSON.stringify({folders})});
+    setRenameBusy(true);
+    try {
+        await api('/api/rename',{method:'POST', body: JSON.stringify({folders})});
+        await loadLibrary();
+    } finally {
+        setRenameBusy(false);
+    }
+}
+
+async function ignoreOne(folder){
+    await api('/api/ignore',{method:'POST', body: JSON.stringify({folder})});
+    await loadLibrary();
+}
+
+async function deleteSuspectFolder(folder){
+    if (!confirm(`Supprimer définitivement le dossier suspect "${folder}" ?`)) return;
+    await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder})});
     await loadLibrary();
 }
 

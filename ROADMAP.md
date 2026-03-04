@@ -20,19 +20,19 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 ### 🚀 **Phase 1: Distribution & CI/CD (Q1 2026)** ✅
 **Objectif**: Distribution multi-plateformes et pipeline CI/CD complet
 
-#### Version 2.1.0 ✅ (Terminée - 2026-03-04)
+#### Version 2.1.0 🟡 (Validation révisée)
 - [x] **Dockerisation complète** avec Dockerfile + Docker Compose
 - [x] **Interface graphique desktop** Tkinter moderne et intuitive
 - [x] **Packaging multi-plateforme** (Windows, Linux, macOS)
 - [x] **Installation one-click** automatisée multi-OS
 - [x] **CI/CD complet** avec build Docker automatique par Gitea
 - [x] **Intégration Audiobookshelf** complète avec synchronisation
-- [x] **Tests d'intégration** Docker + Audiobookshelf
+- [ ] **Tests d'intégration** Docker + Audiobookshelf
 - [x] **Monitoring avancé** avec health checks et métriques
 - [x] **Sécurité intégrée** (Trivy, Bandit, Safety, SBOM)
 - [x] **Interface web simple** avec `simple_web.py` pour monitoring
-- [x] **Tests grandeur nature** sur fichiers audio réels
-- [x] **Performance validée** : 304x vitesse sur gros fichiers
+- [ ] **Tests grandeur nature** sur fichiers audio réels
+- [ ] **Performance validée** : 304x vitesse sur gros fichiers
 
 #### Version 2.1.1 ✅ (Terminée - 2026-03-04)
 - [x] **GHCR Integration** : Images GitHub Container Registry automatiques
@@ -45,7 +45,7 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 - [x] **Nginx permissions** : Fix permissions logs dans container
 - [x] **GUI updates** : Alignement avec docker-compose.yml
 
-#### Version 2.2.0 (Avril 2026)
+#### Version 2.2.0 (Avril 2026 - non démarrée)
 - [ ] **Auto-update intégré** : Mises à jour automatiques dans l'application
 - [ ] **Notifications avancées** : Slack/Discord/Email multi-canaux
 - [ ] **Performance monitoring** : Métriques détaillées en production
@@ -287,6 +287,6 @@ Avec une exécution disciplinée et une écoute attentive des utilisateurs, nous
 
 ---
 
-*Roadmap maintenue activement • Mise à jour trimestrielle • Version 2.1.0 - 2026-03-04* 🗺️✨
+*Roadmap maintenue activement • Mise à jour trimestrielle • Validation révisée (v2.1.0/v2.2.0)* 🗺️✨
 
 *Pour suivre la progression en temps réel, consultez le [Projet GitHub](https://github.com/Nehwon/audiobook-master/projects).*

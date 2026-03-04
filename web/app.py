@@ -82,10 +82,35 @@ def _save_config(config: Dict) -> None:
 
 
 def _clean_name(name: str) -> str:
-    cleaned = name.replace("+", " ").replace("'", "_")
+    cleaned = name.replace("+", " ")
+    cleaned = re.sub(r"(?i)\b([cdjlmnst])_", r"\1'", cleaned)
+    cleaned = cleaned.replace("_", " ")
     cleaned = re.sub(r'[<>:"/\\|?*]', "_", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
     return cleaned or "Dossier"
+
+
+def _smart_rename(folder: str) -> str:
+    """Transforme un nom de dossier en format lisible pour les audiobooks."""
+    cleaned = _clean_name(folder)
+    parts = [p.strip() for p in re.split(r"\s+-\s+", cleaned) if p.strip()]
+
+    if len(parts) == 2:
+        return f"{parts[0]} - {parts[1]}"
+
+    if len(parts) >= 3:
+        author = parts[0]
+        book = parts[-1]
+        series_block = " - ".join(parts[1:-1])
+        match = re.match(r"^(?P<series>.+?)\s+(?P<volume>\d+)$", series_block)
+        if match:
+            series = match.group("series").strip()
+            volume = int(match.group("volume"))
+            return f"{author} - {series} - Vol {volume} - {book}"
+
+        return f"{author} - {series_block} - {book}"
+
+    return cleaned
 
 
 def _count_audio_files(path: Path) -> int:
@@ -269,7 +294,7 @@ def api_rename():
             skipped.append({"folder": folder, "reason": "introuvable"})
             continue
 
-        new_name = _clean_name(folder)
+        new_name = _smart_rename(folder)
         dst = MEDIA_DIR / new_name
         if new_name == folder:
             skipped.append({"folder": folder, "reason": "déjà conforme"})

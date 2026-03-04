@@ -79,7 +79,8 @@ Exemples d'utilisation:
     )
     
     parser.add_argument(
-        '--no-ai',
+        '--no-synopsis', '--no-ai',
+        dest='no_synopsis',
         action='store_true',
         help='Désactive la génération de synopsis par IA'
     )
@@ -126,7 +127,7 @@ def main():
         config.output_directory = args.output
     if args.no_scraping:
         config.enable_scraping = False
-    if args.no_ai:
+    if args.no_synopsis:
         config.enable_synopsis_generation = False
     if args.upload:
         config.enable_upload = True

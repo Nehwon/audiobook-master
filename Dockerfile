@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     git \
     build-essential \
+    nginx \
     && rm -rf /var/lib/apt/lists/*
 
 # Création de l'utilisateur audiobook
@@ -58,7 +59,7 @@ RUN mkdir -p /app/logs /app/temp /app/data && \
 VOLUME ["/app/data", "/app/logs", "/app/temp"]
 
 # Port d'écoute
-EXPOSE 5000
+EXPOSE 8080
 
 # Variables d'environnement par défaut
 ENV FLASK_APP=web/app.py \
@@ -69,6 +70,7 @@ ENV FLASK_APP=web/app.py \
 
 # Script de démarrage
 COPY docker-entrypoint.sh /usr/local/bin/
+COPY deploy/nginx.conf /etc/nginx/nginx.conf
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Switch vers utilisateur audiobook

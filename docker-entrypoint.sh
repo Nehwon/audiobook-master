@@ -18,7 +18,8 @@ check_env() {
     export TEMP_DIR=${TEMP_DIR:-"/app/temp"}
     export LOG_LEVEL=${LOG_LEVEL:-"INFO"}
     export HOST=${HOST:-"0.0.0.0"}
-    export PORT=${PORT:-"5000"}
+    export PORT=${PORT:-"8080"}
+    export APP_PORT=${APP_PORT:-"5001"}
     
     log "✅ Variables configurées:"
     log "   SOURCE_DIR: $SOURCE_DIR"
@@ -75,10 +76,10 @@ init_database() {
 # Fonction de démarrage web
 start_web() {
     log "🌐 Démarrage de l'interface web..."
-    log "🚀 Lancement de Gunicorn sur $HOST:$PORT"
-    
-    exec gunicorn \
-        --bind "$HOST:$PORT" \
+    log "🚀 Lancement de Gunicorn sur $HOST:$APP_PORT et Nginx sur $HOST:$PORT"
+
+    gunicorn \
+        --bind "$HOST:$APP_PORT" \
         --workers "$GUNICORN_WORKERS" \
         --threads "$GUNICORN_THREADS" \
         --timeout "$GUNICORN_TIMEOUT" \
@@ -86,7 +87,9 @@ start_web() {
         --error-logfile "/app/logs/error.log" \
         --log-level "$LOG_LEVEL" \
         --name audiobook-manager \
-        "web.app:app"
+        "web.app:app" &
+
+    exec nginx -g "daemon off;"
 }
 
 # Fonction de démarrage CLI
@@ -112,7 +115,8 @@ show_help() {
     log "  TEMP_DIR        Répertoire temporaire"
     log "  LOG_LEVEL       Niveau de log (DEBUG, INFO, WARNING, ERROR)"
     log "  HOST            Hôte d'écoute (défaut: 0.0.0.0)"
-    log "  PORT            Port d'écoute (défaut: 5000)"
+    log "  PORT            Port Nginx (défaut: 8080)"
+    log "  APP_PORT        Port interne Flask/Gunicorn (défaut: 5001)"
     log "  GUNICORN_WORKERS Nombre de workers Gunicorn (défaut: 4)"
     log "  GUNICORN_THREADS  Nombre de threads par worker (défaut: 8)"
     log "  GUNICORN_TIMEOUT Timeout en secondes (défaut: 300)"

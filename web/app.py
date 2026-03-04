@@ -1,203 +1,421 @@
 #!/usr/bin/env python3
-"""Interface web pour Audiobook Manager Pro."""
+"""Interface web moderne pour Audiobook Manager Pro (API + UI)."""
 
+from __future__ import annotations
+
+import json
 import os
+import queue
+import re
+import shutil
 import threading
 import time
+import zipfile
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Dict, List, Optional
 
+import rarfile
 from flask import Flask, jsonify, render_template, request, send_file
-from flask_socketio import SocketIO, emit
 
 from core.config import ProcessingConfig
 from core.processor import AudiobookProcessor
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'audiobook_manager_2024'
-socketio = SocketIO(app, cors_allowed_origins="*")
+app = Flask(__name__, template_folder="../templates")
+app.config["SECRET_KEY"] = "audiobook_manager_2024"
 
-# Configuration (surchageable par variables d'environnement)
-SOURCE_DIR = os.getenv("AUDIOBOOK_SOURCE_DIR", "/home/fabrice/Documents/Audiobooks")
-OUTPUT_DIR = os.getenv("AUDIOBOOK_OUTPUT_DIR", "/home/fabrice/Documents/Audiobooks_Processed")
-TEMP_DIR = os.getenv("AUDIOBOOK_TEMP_DIR", "/tmp/audiobooks_web")
+MEDIA_DIR = Path(os.getenv("AUDIOBOOK_MEDIA_DIR", "/media"))
+OUTPUT_DIR = Path(os.getenv("AUDIOBOOK_OUTPUT_DIR", "/app/data/output"))
+TEMP_DIR = Path(os.getenv("AUDIOBOOK_TEMP_DIR", "/tmp/audiobooks_web"))
+CONFIG_PATH = TEMP_DIR / "web_config.json"
 
-# Variables globales
-current_processor = None
-conversion_status = {
-    'status': 'idle',
-    'progress': 0,
-    'current_file': '',
-    'total_files': 0,
-    'processed_files': 0,
-    'start_time': None,
-    'estimated_time': None,
-    'error': None,
-}
+AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}
+ARCHIVE_EXTENSIONS = {".zip", ".rar"}
 
 
-def _count_audio_files(folder: Path) -> int:
-    audio_extensions = ("*.mp3", "*.m4a", "*.m4b", "*.wav", "*.flac", "*.aac")
-    return sum(len(list(folder.rglob(pattern))) for pattern in audio_extensions)
+@dataclass
+class Job:
+    id: str
+    folder: str
+    status: str = "pending"
+    progress: int = 0
+    stage: str = "En attente"
+    error: Optional[str] = None
+    output_file: Optional[str] = None
+    created_at: float = field(default_factory=time.time)
+    started_at: Optional[float] = None
+    ended_at: Optional[float] = None
 
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+jobs_lock = threading.Lock()
+job_queue: "queue.Queue[str]" = queue.Queue()
+jobs: Dict[str, Job] = {}
+review_bin: List[Dict] = []
+worker_started = False
 
 
-@app.route('/api/status')
-def get_status():
-    return jsonify(conversion_status)
+def _default_config() -> Dict:
+    return {
+        "bitrate": "128k",
+        "sample_rate": 44100,
+        "processing_mode": "final_m4b",
+        "enable_gpu": True,
+        "enable_loudnorm": True,
+        "enable_compressor": True,
+        "auto_extract_archives": False,
+    }
 
 
-@app.route('/api/folders')
-def get_folders():
-    """Liste les dossiers source qui contiennent des fichiers audio."""
-    source_path = Path(SOURCE_DIR)
+def _load_config() -> Dict:
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    if CONFIG_PATH.exists():
+        try:
+            return {**_default_config(), **json.loads(CONFIG_PATH.read_text(encoding="utf-8"))}
+        except Exception:
+            return _default_config()
+    return _default_config()
+
+
+def _save_config(config: Dict) -> None:
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _clean_name(name: str) -> str:
+    cleaned = name.replace("+", " ").replace("'", "_")
+    cleaned = re.sub(r'[<>:"/\\|?*]', "_", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+    return cleaned or "Dossier"
+
+
+def _count_audio_files(path: Path) -> int:
+    return sum(1 for f in path.rglob("*") if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS)
+
+
+def _folder_size(path: Path) -> int:
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
+def _list_media() -> Dict:
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     folders = []
+    archives = []
 
-    if source_path.exists():
-        for item in sorted(source_path.iterdir(), key=lambda p: p.name.lower()):
-            if not item.is_dir():
-                continue
-            audio_count = _count_audio_files(item)
-            if audio_count <= 0:
-                continue
-
-            folder_size = sum(f.stat().st_size for f in item.rglob('*') if f.is_file())
+    for item in sorted(MEDIA_DIR.iterdir(), key=lambda x: x.name.lower()):
+        if item.is_dir():
             folders.append(
                 {
-                    'name': item.name,
-                    'audio_count': audio_count,
-                    'size': folder_size,
-                    'modified': item.stat().st_mtime,
+                    "name": item.name,
+                    "audio_count": _count_audio_files(item),
+                    "size": _folder_size(item),
+                    "modified": item.stat().st_mtime,
                 }
             )
-
-    return jsonify(folders)
-
-
-@app.route('/api/outputs')
-def get_outputs():
-    output_path = Path(OUTPUT_DIR)
-    files = []
-
-    if output_path.exists():
-        for item in output_path.glob('*.m4b'):
-            files.append(
+        elif item.is_file() and item.suffix.lower() in ARCHIVE_EXTENSIONS:
+            archives.append(
                 {
-                    'name': item.name,
-                    'size': item.stat().st_size,
-                    'created': item.stat().st_ctime,
+                    "name": item.name,
+                    "size": item.stat().st_size,
+                    "modified": item.stat().st_mtime,
                 }
             )
 
-    return jsonify(sorted(files, key=lambda x: x['created'], reverse=True))
+    return {"base_path": str(MEDIA_DIR), "folders": folders, "archives": archives}
 
 
-@app.route('/api/convert', methods=['POST'])
-def start_conversion():
-    """Lance l'encodage d'un dossier (ou d'un fichier) en M4B."""
-    global current_processor, conversion_status
+def _extract_archive(path: Path, delete_archive: bool = False) -> Dict:
+    target_dir = MEDIA_DIR / path.stem
+    if target_dir.exists():
+        stamp = int(time.time())
+        target_dir = MEDIA_DIR / f"{path.stem}_{stamp}"
+    target_dir.mkdir(parents=True, exist_ok=True)
 
-    data = request.get_json(silent=True) or {}
-    folder_name = data.get('folder') or data.get('filename')
-    options = data.get('options', {})
+    if path.suffix.lower() == ".zip":
+        with zipfile.ZipFile(path, "r") as zf:
+            zf.extractall(target_dir)
+    elif path.suffix.lower() == ".rar":
+        with rarfile.RarFile(path, "r") as rf:
+            rf.extractall(target_dir)
+    else:
+        raise ValueError("Archive non supportée")
 
-    if not folder_name:
-        return jsonify({'error': 'Nom de dossier requis'}), 400
-    if conversion_status['status'] == 'processing':
-        return jsonify({'error': 'Conversion déjà en cours'}), 400
+    if delete_archive:
+        path.unlink(missing_ok=True)
 
-    source_item = Path(SOURCE_DIR) / folder_name
-    if not source_item.exists():
-        return jsonify({'error': f'Dossier introuvable: {folder_name}'}), 404
+    return {"archive": path.name, "folder": target_dir.name}
 
-    config = ProcessingConfig()
-    if 'bitrate' in options:
-        config.audio_bitrate = options['bitrate']
-    if 'samplerate' in options:
-        config.sample_rate = options['samplerate']
-    if options.get('no_gpu'):
-        config.enable_gpu_acceleration = False
-    if options.get('no_normalization'):
-        config.enable_loudnorm = False
-    if options.get('no_compression'):
-        config.enable_compressor = False
-    if 'processing_mode' in options:
-        config.processing_mode = options['processing_mode']
 
-    conversion_status.update(
-        {
-            'status': 'processing',
-            'progress': 0,
-            'current_file': folder_name,
-            'total_files': 1,
-            'processed_files': 0,
-            'start_time': time.time(),
-            'estimated_time': None,
-            'error': None,
-        }
-    )
-    socketio.emit('status_update', conversion_status)
+def _build_processing_config() -> ProcessingConfig:
+    web_config = _load_config()
+    cfg = ProcessingConfig()
+    cfg.audio_bitrate = web_config["bitrate"]
+    cfg.sample_rate = int(web_config["sample_rate"])
+    cfg.processing_mode = web_config["processing_mode"]
+    cfg.enable_gpu_acceleration = bool(web_config["enable_gpu"])
+    cfg.enable_loudnorm = bool(web_config["enable_loudnorm"])
+    cfg.enable_compressor = bool(web_config["enable_compressor"])
+    return cfg
 
-    def conversion_thread():
-        global current_processor, conversion_status
+
+def _guess_output_file(folder_name: str, start_time: float) -> Optional[str]:
+    if not OUTPUT_DIR.exists():
+        return None
+    candidates = sorted(OUTPUT_DIR.glob("*.m4b"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for file in candidates:
+        if file.stat().st_mtime >= start_time - 2:
+            return file.name
+    return candidates[0].name if candidates else None
+
+
+def _worker_loop() -> None:
+    while True:
+        job_id = job_queue.get()
+        with jobs_lock:
+            job = jobs.get(job_id)
+            if not job:
+                continue
+            job.status = "running"
+            job.stage = "Préparation"
+            job.progress = 5
+            job.started_at = time.time()
+
         try:
-            current_processor = AudiobookProcessor(SOURCE_DIR, OUTPUT_DIR, TEMP_DIR)
-            current_processor.config = config
+            folder_path = MEDIA_DIR / job.folder
+            if not folder_path.exists() or not folder_path.is_dir():
+                raise FileNotFoundError(f"Dossier introuvable: {job.folder}")
 
-            success = current_processor.process_audiobook(source_item)
+            processor = AudiobookProcessor(str(MEDIA_DIR), str(OUTPUT_DIR), str(TEMP_DIR))
+            processor.config = _build_processing_config()
 
-            if success:
-                conversion_status['status'] = 'completed'
-                conversion_status['progress'] = 100
-                conversion_status['processed_files'] = 1
-                socketio.emit('conversion_complete', {'folder': folder_name})
-            else:
-                conversion_status['status'] = 'error'
-                conversion_status['error'] = 'Échec de la conversion'
-                socketio.emit('conversion_error', {'error': 'Échec de la conversion'})
-        except Exception as exc:
-            conversion_status['status'] = 'error'
-            conversion_status['error'] = str(exc)
-            socketio.emit('conversion_error', {'error': str(exc)})
+            with jobs_lock:
+                job.stage = "Conversion"
+                job.progress = 30
+
+            success = processor.process_audiobook(folder_path)
+
+            with jobs_lock:
+                if success:
+                    job.status = "completed"
+                    job.stage = "Terminé"
+                    job.progress = 100
+                    job.output_file = _guess_output_file(job.folder, job.started_at or time.time())
+                else:
+                    job.status = "failed"
+                    job.stage = "Erreur"
+                    job.error = "Échec conversion"
+                    job.progress = 100
+                job.ended_at = time.time()
+        except Exception as exc:  # noqa: BLE001
+            with jobs_lock:
+                job.status = "failed"
+                job.stage = "Erreur"
+                job.error = str(exc)
+                job.progress = 100
+                job.ended_at = time.time()
         finally:
-            current_processor = None
-            socketio.emit('status_update', conversion_status)
+            job_queue.task_done()
 
-    thread = threading.Thread(target=conversion_thread, daemon=True)
+
+def _ensure_worker() -> None:
+    global worker_started
+    if worker_started:
+        return
+    thread = threading.Thread(target=_worker_loop, daemon=True)
     thread.start()
-    return jsonify({'status': 'started'})
+    worker_started = True
 
 
-@app.route('/api/stop', methods=['POST'])
-def stop_conversion():
-    global conversion_status
-
-    if conversion_status['status'] != 'processing':
-        return jsonify({'error': 'Aucune conversion en cours'}), 400
-
-    conversion_status['status'] = 'stopped'
-    socketio.emit('conversion_stopped')
-    socketio.emit('status_update', conversion_status)
-    return jsonify({'status': 'stopped'})
+@app.route("/")
+def index():
+    return render_template("index.html")
 
 
-@app.route('/api/download/<filename>')
-def download_file(filename):
-    file_path = Path(OUTPUT_DIR) / filename
+@app.route("/api/library")
+def api_library():
+    return jsonify(_list_media())
+
+
+@app.route("/api/extract", methods=["POST"])
+def api_extract():
+    payload = request.get_json(silent=True) or {}
+    names = payload.get("archives", [])
+    delete_archive = bool(payload.get("delete_archive", False))
+
+    results = []
+    errors = []
+    for name in names:
+        archive_path = MEDIA_DIR / name
+        try:
+            if archive_path.exists() and archive_path.suffix.lower() in ARCHIVE_EXTENSIONS:
+                results.append(_extract_archive(archive_path, delete_archive=delete_archive))
+            else:
+                errors.append(f"Archive introuvable: {name}")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{name}: {exc}")
+
+    return jsonify({"results": results, "errors": errors})
+
+
+@app.route("/api/rename", methods=["POST"])
+def api_rename():
+    payload = request.get_json(silent=True) or {}
+    folders = payload.get("folders", [])
+    renamed = []
+    skipped = []
+
+    for folder in folders:
+        src = MEDIA_DIR / folder
+        if not src.exists() or not src.is_dir():
+            skipped.append({"folder": folder, "reason": "introuvable"})
+            continue
+
+        new_name = _clean_name(folder)
+        dst = MEDIA_DIR / new_name
+        if new_name == folder:
+            skipped.append({"folder": folder, "reason": "déjà conforme"})
+            continue
+        if dst.exists():
+            skipped.append({"folder": folder, "reason": "destination existante"})
+            continue
+
+        src.rename(dst)
+        renamed.append({"old": folder, "new": new_name})
+
+    return jsonify({"renamed": renamed, "skipped": skipped})
+
+
+@app.route("/api/jobs/enqueue", methods=["POST"])
+def api_enqueue_jobs():
+    _ensure_worker()
+    payload = request.get_json(silent=True) or {}
+    folders = payload.get("folders", [])
+    queued = []
+
+    with jobs_lock:
+        for folder in folders:
+            jid = f"job-{int(time.time() * 1000)}-{len(jobs)}"
+            job = Job(id=jid, folder=folder)
+            jobs[jid] = job
+            job_queue.put(jid)
+            queued.append(asdict(job))
+
+    return jsonify({"queued": queued})
+
+
+@app.route("/api/jobs")
+def api_jobs():
+    with jobs_lock:
+        values = [asdict(j) for j in jobs.values()]
+
+    def sort_key(entry):
+        return entry["created_at"]
+
+    pending = sorted([j for j in values if j["status"] == "pending"], key=sort_key)
+    running = sorted([j for j in values if j["status"] == "running"], key=sort_key)
+    done = sorted([j for j in values if j["status"] in {"completed", "failed"}], key=sort_key, reverse=True)
+
+    return jsonify({"pending": pending, "running": running, "done": done, "review": review_bin})
+
+
+@app.route("/api/jobs/review", methods=["POST"])
+def api_review():
+    payload = request.get_json(silent=True) or {}
+    job_id = payload.get("job_id")
+    action = payload.get("action", "queue_delete")
+
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if not job:
+            return jsonify({"error": "Job introuvable"}), 404
+
+        review_bin.append({
+            "job_id": job.id,
+            "folder": job.folder,
+            "output_file": job.output_file,
+            "action": action,
+            "timestamp": time.time(),
+        })
+
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/jobs/reprocess", methods=["POST"])
+def api_reprocess():
+    payload = request.get_json(silent=True) or {}
+    folder = payload.get("folder")
+    if not folder:
+        return jsonify({"error": "folder requis"}), 400
+
+    _ensure_worker()
+    with jobs_lock:
+        jid = f"job-{int(time.time() * 1000)}-{len(jobs)}"
+        job = Job(id=jid, folder=folder)
+        jobs[jid] = job
+        job_queue.put(jid)
+
+    return jsonify({"queued": asdict(job)})
+
+
+@app.route("/api/review/clear", methods=["POST"])
+def api_review_clear():
+    payload = request.get_json(silent=True) or {}
+    folder = payload.get("folder")
+    global review_bin
+    review_bin = [i for i in review_bin if i.get("folder") != folder]
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/config", methods=["GET", "POST"])
+def api_config():
+    if request.method == "GET":
+        return jsonify(_load_config())
+
+    payload = request.get_json(silent=True) or {}
+    config = {**_load_config(), **payload}
+    _save_config(config)
+
+    if config.get("auto_extract_archives"):
+        archives = [a["name"] for a in _list_media()["archives"]]
+        for arch in archives:
+            try:
+                _extract_archive(MEDIA_DIR / arch)
+            except Exception:
+                continue
+
+    return jsonify(config)
+
+
+@app.route("/api/outputs")
+def api_outputs():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    files = []
+    for item in sorted(OUTPUT_DIR.glob("*.m4b"), key=lambda p: p.stat().st_mtime, reverse=True):
+        files.append({"name": item.name, "size": item.stat().st_size, "created": item.stat().st_mtime})
+    return jsonify(files)
+
+
+@app.route("/api/download/<path:filename>")
+def download_file(filename: str):
+    file_path = OUTPUT_DIR / filename
     if file_path.exists():
         return send_file(str(file_path), as_attachment=True)
-    return jsonify({'error': 'Fichier non trouvé'}), 404
+    return jsonify({"error": "Fichier non trouvé"}), 404
 
 
-@socketio.on('connect')
-def handle_connect():
-    emit('status_update', conversion_status)
+@app.route("/api/stream/<path:filename>")
+def stream_file(filename: str):
+    file_path = OUTPUT_DIR / filename
+    if file_path.exists():
+        return send_file(str(file_path), mimetype="audio/mp4")
+    return jsonify({"error": "Fichier non trouvé"}), 404
 
 
-if __name__ == '__main__':
-    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-    Path(TEMP_DIR).mkdir(parents=True, exist_ok=True)
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+@app.route("/health")
+def health_check():
+    return jsonify({"status": "healthy", "service": "audiobook-manager-web"})
+
+
+if __name__ == "__main__":
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    app.run(host="0.0.0.0", port=5000)

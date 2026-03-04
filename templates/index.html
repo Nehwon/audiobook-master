@@ -3,193 +3,271 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audiobook Manager - Encodage M4B</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <title>Audiobook Manager - Nginx UI</title>
+    <style>
+        :root {
+            --bg: #f5f7fb;
+            --card: #ffffff;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --border: #d1d5db;
+            --primary: #4f46e5;
+            --danger: #b91c1c;
+        }
+        body.dark {
+            --bg: #0b1020;
+            --card: #172036;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --border: #334155;
+            --primary: #818cf8;
+            --danger: #ef4444;
+        }
+        body { font-family: Arial, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+        header { background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 20px; display:flex; justify-content:space-between; align-items:center; }
+        .tabs { display:flex; gap:8px; padding: 10px 20px; flex-wrap:wrap; }
+        .tab { border:1px solid var(--border); background:var(--card); color:var(--text); padding:8px 12px; border-radius:8px; cursor:pointer; }
+        .tab.active { background:var(--primary); color:white; border-color:var(--primary); }
+        main { padding: 0 20px 20px; }
+        .page { display:none; }
+        .page.active { display:block; }
+        .card { background: var(--card); border:1px solid var(--border); border-radius:10px; padding: 14px; margin-bottom: 14px; }
+        table { width:100%; border-collapse: collapse; }
+        th, td { border-bottom:1px solid var(--border); text-align:left; padding:8px; }
+        button { background: var(--primary); color:white; border:none; border-radius:6px; padding: 6px 10px; cursor:pointer; }
+        button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+        button.danger { background: var(--danger); }
+        .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+        input, select { background: var(--bg); color: var(--text); border:1px solid var(--border); border-radius:6px; padding:7px; }
+        .muted { color: var(--muted); }
+        .pill { border:1px solid var(--border); border-radius:999px; padding:2px 8px; font-size:12px; }
+        audio { width:100%; max-width: 300px; }
+    </style>
 </head>
-<body class="bg-gray-100 text-gray-900">
-    <header class="bg-indigo-600 text-white shadow">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-            <div>
-                <h1 class="text-2xl font-bold">Audiobook Manager</h1>
-                <p class="text-sm opacity-90">Tableau des dossiers à encoder en M4B</p>
-            </div>
-            <div class="text-right">
-                <p class="text-sm">Statut</p>
-                <p id="status-text" class="font-semibold">Prêt</p>
+<body>
+<header>
+    <div>
+        <strong>Audiobook Manager</strong><br>
+        <span class="muted">Interface HTML/CSS servie via Nginx</span>
+    </div>
+    <label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label>
+</header>
+<div class="tabs">
+    <button class="tab active" data-page="library">Bibliothèque</button>
+    <button class="tab" data-page="processing">Traitements</button>
+    <button class="tab" data-page="review">Attente suppression/retraitement</button>
+    <button class="tab" data-page="config">Configuration</button>
+</div>
+<main>
+    <section id="page-library" class="page active">
+        <div class="card">
+            <div class="row">
+                <button onclick="loadLibrary()">Rafraîchir</button>
+                <button class="secondary" onclick="extractSelected()">Décompresser sélection</button>
+                <label><input id="deleteArchiveAfter" type="checkbox"> Supprimer archive après extraction</label>
+                <button class="secondary" onclick="renameSelected()">Renommage batch</button>
+                <button onclick="enqueueSelected()">Ajouter sélection à la queue M4B</button>
             </div>
         </div>
-    </header>
+        <div class="card">
+            <h3>Dossiers dans /media</h3>
+            <table>
+                <thead><tr><th></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                <tbody id="foldersBody"></tbody>
+            </table>
+        </div>
+        <div class="card">
+            <h3>Archives à la racine /media</h3>
+            <table>
+                <thead><tr><th></th><th>Archive</th><th>Taille MB</th></tr></thead>
+                <tbody id="archivesBody"></tbody>
+            </table>
+        </div>
+    </section>
 
-    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
-        <section class="bg-white rounded shadow p-4">
-            <h2 class="text-lg font-semibold mb-3">Options d'encodage</h2>
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
-                <div>
-                    <label class="block text-sm mb-1">Bitrate</label>
-                    <select id="bitrate" class="w-full border rounded px-2 py-1">
-                        <option value="64k">64k</option>
-                        <option value="96k">96k</option>
-                        <option value="128k" selected>128k</option>
-                        <option value="192k">192k</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm mb-1">Sample rate</label>
-                    <select id="samplerate" class="w-full border rounded px-2 py-1">
-                        <option value="22050">22050</option>
-                        <option value="44100" selected>44100</option>
-                        <option value="48000">48000</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm mb-1">Mode</label>
-                    <select id="processing-mode" class="w-full border rounded px-2 py-1">
-                        <option value="concat_fast">Phase 1 - concat</option>
-                        <option value="encode_aac" selected>Phase 2 - AAC</option>
-                        <option value="final_m4b">Phase 3 - final</option>
-                    </select>
-                </div>
-                <label class="flex items-center space-x-2 mt-6 md:mt-0"><input id="no-gpu" type="checkbox"><span>Sans GPU</span></label>
-                <label class="flex items-center space-x-2 mt-6 md:mt-0"><input id="no-normalization" type="checkbox"><span>Sans normalisation</span></label>
+    <section id="page-processing" class="page">
+        <div class="card"><button onclick="loadJobs()">Rafraîchir statuts</button></div>
+        <div class="card"><h3>En attente</h3><div id="pendingList"></div></div>
+        <div class="card"><h3>En cours</h3><div id="runningList"></div></div>
+        <div class="card"><h3>Terminés</h3><div id="doneList"></div></div>
+    </section>
+
+    <section id="page-review" class="page">
+        <div class="card"><h3>Dossiers traités en attente d'action</h3><div id="reviewList"></div></div>
+    </section>
+
+    <section id="page-config" class="page">
+        <div class="card">
+            <h3>Paramètres d'encodage</h3>
+            <div class="row">
+                <label>Bitrate <select id="cfgBitrate"><option>64k</option><option>96k</option><option selected>128k</option><option>192k</option></select></label>
+                <label>Sample rate <select id="cfgRate"><option value="22050">22050</option><option value="44100" selected>44100</option><option value="48000">48000</option></select></label>
+                <label>Mode <select id="cfgMode"><option value="concat_fast">concat_fast</option><option value="encode_aac">encode_aac</option><option value="final_m4b" selected>final_m4b</option></select></label>
+                <label><input id="cfgGpu" type="checkbox" checked> GPU</label>
+                <label><input id="cfgLoud" type="checkbox" checked> Loudnorm</label>
+                <label><input id="cfgComp" type="checkbox" checked> Compresseur</label>
+                <label><input id="cfgAutoExtract" type="checkbox"> Auto-décompresser les archives</label>
+                <button onclick="saveConfig()">Sauvegarder</button>
             </div>
-        </section>
+        </div>
+    </section>
+</main>
 
-        <section class="bg-white rounded shadow p-4">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="text-lg font-semibold">Dossiers source à encoder</h2>
-                <button onclick="loadSourceFolders()" class="bg-gray-700 text-white px-3 py-1 rounded">Rafraîchir</button>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full text-sm" id="folders-table">
-                    <thead>
-                        <tr class="text-left border-b">
-                            <th class="py-2 pr-4">Dossier</th>
-                            <th class="py-2 pr-4">Fichiers audio</th>
-                            <th class="py-2 pr-4">Taille</th>
-                            <th class="py-2 pr-4">Modifié le</th>
-                            <th class="py-2">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="folders-table-body"></tbody>
-                </table>
-            </div>
-        </section>
+<script>
+let libraryCache = { folders: [], archives: [] };
 
-        <section class="bg-white rounded shadow p-4">
-            <h2 class="text-lg font-semibold mb-3">Sorties M4B</h2>
-            <ul id="output-files" class="space-y-2"></ul>
-        </section>
-    </main>
+function fmtMb(v){ return (v/1024/1024).toFixed(1); }
+function selectedValues(name){ return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value); }
 
-    <script>
-        const socket = io();
-        let currentStatus = 'idle';
+async function api(url, options={}) {
+    const r = await fetch(url, { headers: {'Content-Type':'application/json'}, ...options });
+    if (!r.ok) throw new Error((await r.json()).error || 'Erreur API');
+    return r.json();
+}
 
-        function getOptions() {
-            return {
-                bitrate: document.getElementById('bitrate').value,
-                samplerate: parseInt(document.getElementById('samplerate').value, 10),
-                processing_mode: document.getElementById('processing-mode').value,
-                no_gpu: document.getElementById('no-gpu').checked,
-                no_normalization: document.getElementById('no-normalization').checked,
-                no_compression: false
-            };
-        }
+async function loadLibrary() {
+    const data = await api('/api/library');
+    libraryCache = data;
+    const fb = document.getElementById('foldersBody');
+    const ab = document.getElementById('archivesBody');
+    fb.innerHTML = '';
+    ab.innerHTML = '';
 
-        function updateStatus(status) {
-            currentStatus = status.status;
-            const labels = {
-                idle: 'Prêt',
-                processing: `Encodage en cours (${status.current_file || ''})`,
-                completed: 'Terminé',
-                error: `Erreur: ${status.error || ''}`,
-                stopped: 'Arrêté'
-            };
-            document.getElementById('status-text').textContent = labels[status.status] || status.status;
-        }
+    data.folders.forEach(f => {
+        fb.innerHTML += `<tr>
+            <td><input type="checkbox" name="folderSel" value="${f.name}"></td>
+            <td>${f.name}</td>
+            <td>${f.audio_count}</td>
+            <td>${fmtMb(f.size)}</td>
+            <td>
+                <button class="secondary" onclick="renameOne('${f.name.replaceAll("'", "\\'")}')">Renommer</button>
+                <button onclick="enqueueFolders(['${f.name.replaceAll("'", "\\'")}'])">Traiter M4B</button>
+            </td>
+        </tr>`;
+    });
+    if (!data.folders.length) fb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier</td></tr>';
 
-        async function loadSourceFolders() {
-            const res = await fetch('/api/folders');
-            const folders = await res.json();
-            const body = document.getElementById('folders-table-body');
-            body.innerHTML = '';
+    data.archives.forEach(a => {
+        ab.innerHTML += `<tr><td><input type="checkbox" name="archiveSel" value="${a.name}"></td><td>${a.name}</td><td>${fmtMb(a.size)}</td></tr>`;
+    });
+    if (!data.archives.length) ab.innerHTML = '<tr><td colspan="3" class="muted">Aucune archive</td></tr>';
+}
 
-            if (!folders.length) {
-                body.innerHTML = '<tr><td colspan="5" class="py-4 text-gray-500">Aucun dossier audio détecté</td></tr>';
-                return;
-            }
+async function extractSelected(){
+    const archives = selectedValues('archiveSel');
+    if (!archives.length) return alert('Sélectionner des archives');
+    await api('/api/extract',{method:'POST', body: JSON.stringify({archives, delete_archive: document.getElementById('deleteArchiveAfter').checked})});
+    await loadLibrary();
+}
 
-            folders.forEach(folder => {
-                const tr = document.createElement('tr');
-                tr.className = 'border-b';
-                const modified = new Date(folder.modified * 1000).toLocaleString();
-                const sizeMb = (folder.size / 1024 / 1024).toFixed(1);
-                tr.innerHTML = `
-                    <td class="py-2 pr-4 font-medium">${folder.name}</td>
-                    <td class="py-2 pr-4">${folder.audio_count}</td>
-                    <td class="py-2 pr-4">${sizeMb} MB</td>
-                    <td class="py-2 pr-4">${modified}</td>
-                    <td class="py-2">
-                        <button class="bg-indigo-600 text-white px-3 py-1 rounded disabled:opacity-50" ${currentStatus === 'processing' ? 'disabled' : ''} onclick="startEncoding('${folder.name.replace(/'/g, "\\'")}')">
-                            Encoder en M4B
-                        </button>
-                    </td>
-                `;
-                body.appendChild(tr);
-            });
-        }
+async function renameOne(folder){
+    await api('/api/rename',{method:'POST', body: JSON.stringify({folders:[folder]})});
+    await loadLibrary();
+}
+async function renameSelected(){
+    const folders = selectedValues('folderSel');
+    if (!folders.length) return alert('Sélectionner des dossiers');
+    await api('/api/rename',{method:'POST', body: JSON.stringify({folders})});
+    await loadLibrary();
+}
 
-        async function startEncoding(folderName) {
-            if (currentStatus === 'processing') {
-                alert('Un encodage est déjà en cours.');
-                return;
-            }
-            const res = await fetch('/api/convert', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ folder: folderName, options: getOptions() })
-            });
+async function enqueueFolders(folders){
+    await api('/api/jobs/enqueue',{method:'POST', body: JSON.stringify({folders})});
+    loadJobs();
+}
+async function enqueueSelected(){
+    const folders = selectedValues('folderSel');
+    if (!folders.length) return alert('Sélectionner des dossiers');
+    await enqueueFolders(folders);
+}
 
-            if (!res.ok) {
-                const err = await res.json();
-                alert(err.error || 'Erreur lors du lancement de l\'encodage');
-                return;
-            }
+function renderJobs(containerId, jobs, withActions=false){
+    const c = document.getElementById(containerId);
+    if (!jobs.length) { c.innerHTML = '<p class="muted">Vide</p>'; return; }
+    c.innerHTML = jobs.map(j => `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0;">
+        <div>
+          <strong>${j.folder}</strong> <span class="pill">${j.stage}</span> ${j.error ? `<span class="muted">(${j.error})</span>`:''}
+          <div class="muted">Progression: ${j.progress}%</div>
+          ${j.output_file ? `<audio controls src="/api/stream/${j.output_file}"></audio>` : ''}
+        </div>
+        <div class="row">
+          ${withActions ? `<button class="secondary" onclick="markReview('${j.id}','delete')">Mettre en attente suppression</button>
+          <button class="secondary" onclick="markReview('${j.id}','reprocess')">Mettre en attente retraitement</button>` : ''}
+        </div>
+      </div>`).join('');
+}
 
-            await loadSourceFolders();
-        }
+async function loadJobs(){
+    const data = await api('/api/jobs');
+    renderJobs('pendingList', data.pending);
+    renderJobs('runningList', data.running);
+    renderJobs('doneList', data.done, true);
 
-        async function loadOutputFiles() {
-            const res = await fetch('/api/outputs');
-            const files = await res.json();
-            const container = document.getElementById('output-files');
-            container.innerHTML = '';
+    const review = document.getElementById('reviewList');
+    if (!data.review.length) review.innerHTML = '<p class="muted">Aucune entrée.</p>';
+    else review.innerHTML = data.review.map(r => `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0;">
+        <div><strong>${r.folder}</strong> - action: ${r.action}</div>
+        <div class="row">
+            ${r.action === 'reprocess' ? `<button onclick="enqueueFolders(['${r.folder.replaceAll("'", "\\'")}'])">Retraiter</button>`:''}
+            <button class="danger" onclick="clearReview('${r.folder.replaceAll("'", "\\'")}')">Retirer de la liste</button>
+        </div>
+    </div>`).join('');
+}
 
-            if (!files.length) {
-                container.innerHTML = '<li class="text-gray-500">Aucun M4B produit pour le moment.</li>';
-                return;
-            }
+async function markReview(jobId, action){
+    await api('/api/jobs/review',{method:'POST', body: JSON.stringify({job_id: jobId, action})});
+    loadJobs();
+}
 
-            files.forEach(file => {
-                const sizeMb = (file.size / 1024 / 1024).toFixed(1);
-                container.innerHTML += `<li class="border rounded p-2 flex justify-between"><span>${file.name} (${sizeMb} MB)</span><a class="text-indigo-700" href="/api/download/${file.name}">Télécharger</a></li>`;
-            });
-        }
+async function clearReview(folder){
+    await api('/api/review/clear',{method:'POST', body: JSON.stringify({folder})});
+    loadJobs();
+}
 
-        socket.on('status_update', (status) => {
-            updateStatus(status);
-            loadSourceFolders();
-            if (status.status === 'completed') {
-                loadOutputFiles();
-            }
-        });
-        socket.on('conversion_complete', () => loadOutputFiles());
-        socket.on('conversion_error', (data) => alert(data.error));
+async function loadConfig(){
+    const c = await api('/api/config');
+    cfgBitrate.value = c.bitrate; cfgRate.value = c.sample_rate; cfgMode.value = c.processing_mode;
+    cfgGpu.checked = c.enable_gpu; cfgLoud.checked = c.enable_loudnorm; cfgComp.checked = c.enable_compressor;
+    cfgAutoExtract.checked = c.auto_extract_archives;
+}
 
-        loadSourceFolders();
-        loadOutputFiles();
-        fetch('/api/status').then(r => r.json()).then(updateStatus);
-    </script>
+async function saveConfig(){
+    await api('/api/config',{method:'POST', body: JSON.stringify({
+        bitrate: cfgBitrate.value,
+        sample_rate: parseInt(cfgRate.value,10),
+        processing_mode: cfgMode.value,
+        enable_gpu: cfgGpu.checked,
+        enable_loudnorm: cfgLoud.checked,
+        enable_compressor: cfgComp.checked,
+        auto_extract_archives: cfgAutoExtract.checked
+    })});
+    alert('Configuration sauvegardée');
+}
+
+function setupTabs(){
+    document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`page-${btn.dataset.page}`).classList.add('active');
+    }));
+}
+
+function setupTheme(){
+    const val = localStorage.getItem('theme') || 'light';
+    if (val === 'dark') { document.body.classList.add('dark'); themeSwitch.checked = true; }
+    themeSwitch.addEventListener('change', () => {
+        document.body.classList.toggle('dark', themeSwitch.checked);
+        localStorage.setItem('theme', themeSwitch.checked ? 'dark' : 'light');
+    });
+}
+
+setupTabs();
+setupTheme();
+loadLibrary();
+loadJobs();
+loadConfig();
+setInterval(loadJobs, 5000);
+</script>
 </body>
 </html>

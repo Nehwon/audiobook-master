@@ -8,6 +8,7 @@ import os
 import queue
 import re
 import shutil
+import subprocess
 import threading
 import time
 import zipfile
@@ -24,9 +25,9 @@ from core.processor import AudiobookProcessor
 app = Flask(__name__, template_folder="../templates")
 app.config["SECRET_KEY"] = "audiobook_manager_2024"
 
-MEDIA_DIR = Path(os.getenv("AUDIOBOOK_MEDIA_DIR", "/media"))
-OUTPUT_DIR = Path(os.getenv("AUDIOBOOK_OUTPUT_DIR", "/app/data/output"))
-TEMP_DIR = Path(os.getenv("AUDIOBOOK_TEMP_DIR", "/tmp/audiobooks_web"))
+MEDIA_DIR = Path(os.getenv("AUDIOBOOK_MEDIA_DIR", os.getenv("SOURCE_DIR", "/app/data/source")))
+OUTPUT_DIR = Path(os.getenv("AUDIOBOOK_OUTPUT_DIR", os.getenv("OUTPUT_DIR", "/app/data/output")))
+TEMP_DIR = Path(os.getenv("AUDIOBOOK_TEMP_DIR", os.getenv("TEMP_DIR", "/tmp/audiobooks_web")))
 CONFIG_PATH = TEMP_DIR / "web_config.json"
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}
@@ -63,7 +64,39 @@ def _default_config() -> Dict:
         "enable_loudnorm": True,
         "enable_compressor": True,
         "auto_extract_archives": False,
+        "ignored_folders": [],
     }
+
+
+def _fix_mojibake(text: str) -> str:
+    """Corrige les problèmes d'encodage les plus fréquents dans les noms."""
+    fixed = text
+    if "�" in fixed:
+        fixed = fixed.replace("�", "e")
+
+    if any(marker in fixed for marker in ("Ã", "Â")):
+        try:
+            repaired = fixed.encode("latin-1", errors="ignore").decode("utf-8", errors="ignore")
+            if repaired:
+                fixed = repaired
+        except Exception:
+            pass
+
+    replacements = {
+        "Ã©": "é",
+        "Ã¨": "è",
+        "Ãª": "ê",
+        "Ã«": "ë",
+        "Ã ": "à",
+        "Ã¢": "â",
+        "Ã®": "î",
+        "Ã´": "ô",
+        "Ã¹": "ù",
+        "Å“": "œ",
+    }
+    for bad, good in replacements.items():
+        fixed = fixed.replace(bad, good)
+    return fixed
 
 
 def _load_config() -> Dict:
@@ -82,10 +115,86 @@ def _save_config(config: Dict) -> None:
 
 
 def _clean_name(name: str) -> str:
-    cleaned = name.replace("+", " ").replace("'", "_")
+    cleaned = _fix_mojibake(name).replace("+", " ")
+    cleaned = re.sub(r"\.(mp3|m4a|m4b|zip|rar|flac|wav|aac|ogg)$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"(?i)\b([cdjlmnst])_", r"\1'", cleaned)
+    cleaned = cleaned.replace("_", " ")
+    cleaned = cleaned.replace("dOs", "d'Os")
     cleaned = re.sub(r'[<>:"/\\|?*]', "_", cleaned)
+    cleaned = re.sub(r"(?i)\b(mp3|flac|audio|audiobook|128\s?kbps|320\s?kbps|x\d+|multi\s?part|download)\b", "", cleaned)
+    cleaned = re.sub(r"\s*\(\d+\)$", "", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
     return cleaned or "Dossier"
+
+
+def _guess_author_with_ollama(title_hint: str) -> Optional[str]:
+    """Essaie de deviner l'auteur via Ollama pour les cas ambigus."""
+    prompt = (
+        "Donne uniquement le nom de l'auteur du livre suivant, sans explication: "
+        f"{title_hint}"
+    )
+    try:
+        result = subprocess.run(
+            ["ollama", "run", "llama2", prompt],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except Exception:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    answer = (result.stdout or "").strip().splitlines()[0:1]
+    if not answer:
+        return None
+    author = answer[0].strip(" .:-")
+    if not author or len(author.split()) < 2:
+        return None
+    return author
+
+
+def _smart_rename(folder: str) -> str:
+    """Transforme un nom de dossier en format lisible pour les audiobooks."""
+    cleaned = _clean_name(folder)
+    parts = [p.strip() for p in re.split(r"\s+-\s+", cleaned) if p.strip()]
+
+    if len(parts) == 2 and re.search(r",", parts[0]):
+        # Cas: "Titre - Auteur"
+        return f"{parts[1]} - {parts[0]}"
+
+    if len(parts) == 2:
+        vol_match = re.match(r"^(?P<title>.+?)\s+Vol\s*(?P<vol>\d+)$", parts[1], re.IGNORECASE)
+        if vol_match:
+            return f"{parts[0]} - {vol_match.group('title')} - Vol {int(vol_match.group('vol'))}"
+        return f"{parts[0]} - {parts[1]}"
+
+    if len(parts) >= 3:
+        author = parts[0]
+        book = parts[-1]
+        series_block = " - ".join(parts[1:-1])
+        series_block = re.sub(r"(?i)\b(vol(?:ume)?|tome)\s*", "", series_block)
+        series_block = re.sub(r"\s*[-–]+\s*", " ", series_block).strip()
+        match = re.match(r"^(?P<series>.+?)\s+(?P<volume>\d+)$", series_block)
+        if match:
+            series = match.group("series").strip()
+            volume = int(match.group("volume"))
+            return f"{author} - {series} - Vol {volume} - {book}"
+
+        solo_volume = re.fullmatch(r"\d+", series_block)
+        if solo_volume:
+            return f"{author} - Vol {int(series_block)} - {book}"
+
+        return f"{author} - {series_block} - {book}"
+
+    compact_vol = re.match(r"^(?P<title>.+?)\s+(?P<volume>\d+)$", cleaned)
+    if compact_vol:
+        author = _guess_author_with_ollama(compact_vol.group("title"))
+        if author:
+            return f"{author} - {compact_vol.group('title')} - Vol {int(compact_vol.group('volume'))}"
+
+    return cleaned
 
 
 def _count_audio_files(path: Path) -> int:
@@ -98,16 +207,34 @@ def _folder_size(path: Path) -> int:
 
 def _list_media() -> Dict:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    ignored = set(_load_config().get("ignored_folders", []))
     folders = []
     archives = []
 
     for item in sorted(MEDIA_DIR.iterdir(), key=lambda x: x.name.lower()):
         if item.is_dir():
+            if item.name in ignored:
+                continue
+            file_count = sum(1 for f in item.rglob("*") if f.is_file())
+            if file_count == 0:
+                continue
+            issues = []
+            part_files = [f.name for f in item.rglob("*.part*") if f.is_file()]
+            if part_files:
+                issues.append("Fichier .part détecté (décompression incomplète)")
+            folder_size = _folder_size(item)
+            if file_count == 1:
+                issues.append("Un seul fichier dans le dossier (anormal)")
+            if folder_size < 30 * 1024 * 1024:
+                issues.append("Taille très faible pour un audiobook")
             folders.append(
                 {
                     "name": item.name,
                     "audio_count": _count_audio_files(item),
-                    "size": _folder_size(item),
+                    "size": folder_size,
+                    "file_count": file_count,
+                    "issues": issues,
+                    "suggest_delete": bool(part_files) or (file_count == 1 and folder_size < 30 * 1024 * 1024),
                     "modified": item.stat().st_mtime,
                 }
             )
@@ -260,16 +387,26 @@ def api_extract():
 def api_rename():
     payload = request.get_json(silent=True) or {}
     folders = payload.get("folders", [])
+    if not isinstance(folders, list):
+        return jsonify({"error": "Le champ 'folders' doit être une liste"}), 400
+
     renamed = []
     skipped = []
 
     for folder in folders:
+        if not isinstance(folder, str) or not folder.strip():
+            skipped.append({"folder": str(folder), "reason": "nom invalide"})
+            continue
+        if Path(folder).name != folder:
+            skipped.append({"folder": folder, "reason": "nom de dossier invalide"})
+            continue
+
         src = MEDIA_DIR / folder
         if not src.exists() or not src.is_dir():
             skipped.append({"folder": folder, "reason": "introuvable"})
             continue
 
-        new_name = _clean_name(folder)
+        new_name = _smart_rename(folder)
         dst = MEDIA_DIR / new_name
         if new_name == folder:
             skipped.append({"folder": folder, "reason": "déjà conforme"})
@@ -278,10 +415,28 @@ def api_rename():
             skipped.append({"folder": folder, "reason": "destination existante"})
             continue
 
-        src.rename(dst)
-        renamed.append({"old": folder, "new": new_name})
+        try:
+            src.rename(dst)
+            renamed.append({"old": folder, "new": new_name})
+        except OSError as exc:
+            skipped.append({"folder": folder, "reason": f"erreur système: {exc}"})
 
     return jsonify({"renamed": renamed, "skipped": skipped})
+
+
+@app.route("/api/ignore", methods=["POST"])
+def api_ignore_folder():
+    payload = request.get_json(silent=True) or {}
+    folder = payload.get("folder")
+    if not isinstance(folder, str) or not folder.strip():
+        return jsonify({"error": "folder invalide"}), 400
+
+    config = _load_config()
+    ignored = set(config.get("ignored_folders", []))
+    ignored.add(Path(folder).name)
+    config["ignored_folders"] = sorted(ignored)
+    _save_config(config)
+    return jsonify({"ignored_folders": config["ignored_folders"]})
 
 
 @app.route("/api/jobs/enqueue", methods=["POST"])

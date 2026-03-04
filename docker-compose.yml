@@ -1,160 +1,157 @@
-version: '3.8'
-
 services:
   # 🌐 Application Web Audiobook Manager
   audiobook-manager:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: audiobook-manager-pro
-    restart: unless-stopped
+    image: ${APP_IMAGE:-ghcr.io/nehwon/audiobook-master:latest}
+    container_name: ${APP_CONTAINER_NAME:-audiobook-manager-pro}
+    user: "${APP_USER:-0:0}"
+    restart: ${APP_RESTART_POLICY:-unless-stopped}
     ports:
-      - "8080:8080"
+      - "${APP_HTTP_PORT:-8080}:8080"
     volumes:
       # 📁 Volumes de données
-      - ./data/source:/app/data/source
-      - ./data/output:/app/data/output
-      - ./data/temp:/app/temp
-      - ./logs:/app/logs
+      - ${SOURCE_VOLUME:-./data/source}:/app/data/source
+      - ${OUTPUT_VOLUME:-./data/output}:/app/data/output
+      - ${TMP_VOLUME:-/tmp}:/tmp
+      - ${LOGS_VOLUME:-./logs}:/app/logs
       # 🔧 Configuration locale (optionnel)
-      - ./core/config.py:/app/core/config.py:ro
+      - ${CONFIG_VOLUME:-./core/config.py}:/app/core/config.py:ro
     environment:
       # 🌐 Configuration Web
-      - FLASK_ENV=production
-      - HOST=0.0.0.0
-      - PORT=8080
-      - APP_PORT=5001
-      
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8080}
+      - APP_PORT=${APP_PORT:-5001}
+
       # 🚀 Performance
-      - GUNICORN_WORKERS=4
-      - GUNICORN_THREADS=8
-      - GUNICORN_TIMEOUT=300
-      
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-4}
+      - GUNICORN_THREADS=${GUNICORN_THREADS:-8}
+      - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-300}
+
       # 📁 Répertoires
-      - SOURCE_DIR=/app/data/source
-      - OUTPUT_DIR=/app/data/output
-      - TEMP_DIR=/app/temp
-      
+      - SOURCE_DIR=${SOURCE_DIR:-/app/data/source}
+      - OUTPUT_DIR=${OUTPUT_DIR:-/app/data/output}
+      - TEMP_DIR=${TEMP_DIR:-/tmp/audiobooks_web}
+
       # 📊 Logging
-      - LOG_LEVEL=INFO
-      
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
       # 🖥️ Configuration CPU (adapter selon votre système)
-      - MAX_WORKERS=32
-      - CPU_THREADS=16
-      - BATCH_THREADS=8
-      
+      - MAX_WORKERS=${MAX_WORKERS:-32}
+      - CPU_THREADS=${CPU_THREADS:-16}
+      - BATCH_THREADS=${BATCH_THREADS:-8}
+
     networks:
       - audiobook-network
-      
+
     # 🏥 Health check
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-      
+      interval: ${APP_HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${APP_HEALTHCHECK_TIMEOUT:-10s}
+      retries: ${APP_HEALTHCHECK_RETRIES:-3}
+      start_period: ${APP_HEALTHCHECK_START_PERIOD:-40s}
+
     # 📊 Limites de ressources (adapter selon votre système)
     deploy:
       resources:
         limits:
-          cpus: '16'        # Adapter selon votre CPU
-          memory: 8G         # Adapter selon votre RAM
+          cpus: '${APP_LIMIT_CPUS:-16}'
+          memory: ${APP_LIMIT_MEMORY:-8G}
         reservations:
-          cpus: '4'
-          memory: 2G
+          cpus: '${APP_RESERVATION_CPUS:-4}'
+          memory: ${APP_RESERVATION_MEMORY:-2G}
 
   # 📊 Monitoring optionnel avec Prometheus
   prometheus:
-    image: prom/prometheus:latest
-    container_name: audiobook-prometheus
-    restart: unless-stopped
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:latest}
+    container_name: ${PROMETHEUS_CONTAINER_NAME:-audiobook-prometheus}
+    restart: ${PROMETHEUS_RESTART_POLICY:-unless-stopped}
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
+      - ${PROMETHEUS_CONFIG_VOLUME:-./monitoring/prometheus.yml}:/etc/prometheus/prometheus.yml:ro
+      - ${PROMETHEUS_DATA_VOLUME:-prometheus-data}:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
+      - '--config.file=${PROMETHEUS_CONFIG_FILE:-/etc/prometheus/prometheus.yml}'
+      - '--storage.tsdb.path=${PROMETHEUS_STORAGE_PATH:-/prometheus}'
+      - '--web.console.libraries=${PROMETHEUS_CONSOLE_LIBRARIES:-/etc/prometheus/console_libraries}'
+      - '--web.console.templates=${PROMETHEUS_CONSOLE_TEMPLATES:-/etc/prometheus/consoles}'
+      - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-200h}'
       - '--web.enable-lifecycle'
     networks:
       - audiobook-network
     profiles:
-      - monitoring
+      - ${PROMETHEUS_PROFILE:-monitoring}
 
   # 📈 Dashboard Grafana optionnel
   grafana:
-    image: grafana/grafana:latest
-    container_name: audiobook-grafana
-    restart: unless-stopped
+    image: ${GRAFANA_IMAGE:-grafana/grafana:latest}
+    container_name: ${GRAFANA_CONTAINER_NAME:-audiobook-grafana}
+    restart: ${GRAFANA_RESTART_POLICY:-unless-stopped}
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     volumes:
-      - grafana-data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ${GRAFANA_DATA_VOLUME:-grafana-data}:/var/lib/grafana
+      - ${GRAFANA_DASHBOARDS_VOLUME:-./monitoring/grafana/dashboards}:/etc/grafana/provisioning/dashboards:ro
+      - ${GRAFANA_DATASOURCES_VOLUME:-./monitoring/grafana/datasources}:/etc/grafana/provisioning/datasources:ro
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
-      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=${GF_USERS_ALLOW_SIGN_UP:-false}
     networks:
       - audiobook-network
     profiles:
-      - monitoring
+      - ${GRAFANA_PROFILE:-monitoring}
 
   # 🗄️ Base de données optionnelle (pour futures fonctionnalités)
   postgres:
-    image: postgres:15-alpine
-    container_name: audiobook-postgres
-    restart: unless-stopped
+    image: ${POSTGRES_IMAGE:-postgres:15-alpine}
+    container_name: ${POSTGRES_CONTAINER_NAME:-audiobook-postgres}
+    restart: ${POSTGRES_RESTART_POLICY:-unless-stopped}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ${POSTGRES_DATA_VOLUME:-postgres-data}:/var/lib/postgresql/data
+      - ${POSTGRES_INIT_VOLUME:-./database/init.sql}:/docker-entrypoint-initdb.d/init.sql:ro
     environment:
-      - POSTGRES_DB=audiobook_manager
-      - POSTGRES_USER=audiobook
-      - POSTGRES_PASSWORD=audiobook123
-      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      - POSTGRES_DB=${POSTGRES_DB:-audiobook_manager}
+      - POSTGRES_USER=${POSTGRES_USER:-audiobook}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-audiobook123}
+      - POSTGRES_INITDB_ARGS=${POSTGRES_INITDB_ARGS:---encoding=UTF-8 --lc-collate=C --lc-ctype=C}
     networks:
       - audiobook-network
     profiles:
-      - database
+      - ${POSTGRES_PROFILE:-database}
 
   # 🔄 Redis pour le cache et les queues
   redis:
-    image: redis:7-alpine
-    container_name: audiobook-redis
-    restart: unless-stopped
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    container_name: ${REDIS_CONTAINER_NAME:-audiobook-redis}
+    restart: ${REDIS_RESTART_POLICY:-unless-stopped}
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
-      - redis-data:/data
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+      - ${REDIS_DATA_VOLUME:-redis-data}:/data
+    command: ${REDIS_COMMAND:-redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru}
     networks:
       - audiobook-network
     profiles:
-      - cache
+      - ${REDIS_PROFILE:-cache}
 
 # 🌐 Réseau partagé
 networks:
   audiobook-network:
-    driver: bridge
+    driver: ${NETWORK_DRIVER:-bridge}
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: ${NETWORK_SUBNET:-172.20.0.0/16}
 
 # 📁 Volumes persistants
 volumes:
   postgres-data:
-    driver: local
+    driver: ${POSTGRES_VOLUME_DRIVER:-local}
   redis-data:
-    driver: local
+    driver: ${REDIS_VOLUME_DRIVER:-local}
   prometheus-data:
-    driver: local
+    driver: ${PROMETHEUS_VOLUME_DRIVER:-local}
   grafana-data:
-    driver: local
+    driver: ${GRAFANA_VOLUME_DRIVER:-local}

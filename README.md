@@ -8,11 +8,13 @@ Système professionnel de traitement d'audiobooks avec multithreading CPU optimi
 
 #### 🐳 **Dockerisation Complète**
 - **Dockerfile** : Configuration complète avec FFmpeg 7.1.3 et dépendances
-- **Docker Compose** : Services (app, monitoring, BDD, Redis)
+- **Docker Compose** : Services (app, monitoring, BDD, Redis) avec paramètres `.env`
 - **Multi-plateforme** : Support Linux/Windows/macOS
 - **Health checks** : Endpoints `/health` et `/api/status`
 - **Installation one-click** : Script automatisé multi-OS
 - **Interface web simple** : `simple_web.py` pour monitoring basique
+- **Registry GHCR** : Images GitHub Container Registry intégrées
+- **Workflow GitHub Actions** : Build Docker automatisé
 
 #### 🖥️ **Interface Graphique Desktop**
 - **Application Tkinter** : Interface moderne et intuitive (`gui/desktop_app.py`)
@@ -30,10 +32,12 @@ Système professionnel de traitement d'audiobooks avec multithreading CPU optimi
 
 #### 🔄 **CI/CD Intégral**
 - **Workflows Gitea** : Build Docker automatique (`.gitea/workflows/`)
+- **Workflows GitHub** : Build Docker automatisé avec GitHub Actions
 - **Tests complets** : Unitaires, intégration, performance (`tests/`)
 - **Sécurité intégrée** : Trivy, Bandit, Safety, SBOM
 - **Déploiement automatisé** : Staging/production
 - **Releases GitHub** : Assets multi-plateformes
+- **Smart folder renaming** : Renommage intelligent avec apostrophes normalisées
 
 ---
 
@@ -281,3 +285,46 @@ git clone https://github.com/Nehwon/audiobook-master.git
 cd audiobook-master
 docker-compose up -d
 ```
+
+**Profitez dès maintenant du traitement d'audiobooks le plus avancé !** 🎧🚀
+
+---
+
+## 📊 **Tableau de Suivi des Commits**
+
+### 🔄 **Règle de Mise à Jour Obligatoire**
+
+**⚠️ IMPORTANT** : Ce tableau doit être mis à jour **À CHAQUE FOIS** que le README.md est modifié ou demandé en mise à jour. C'est une règle non négociable pour assurer la traçabilité complète des modifications.
+
+### 📋 **Historique des Commits Récents**
+
+| Date | Description du Commit | Commit GitHub | Commit Gitea |
+|------|----------------------|---------------|--------------|
+| 2026-03-04 | Fix server 500 errors and JSON issues | `993d078` | `993d078` |
+| 2026-03-04 | Use GHCR image in compose instead of local build | `767a095` | `767a095` |
+| 2026-03-04 | Parametrize docker-compose with defaults and add .env.example | `798e680` | `798e680` |
+| 2026-03-04 | Fix rename button functionality | `3f0afcd` | `3f0afcd` |
+| 2026-03-04 | Normalize apostrophes for FFmpeg-safe folder renaming | `e006531` | `e006531` |
+| 2026-03-04 | Fix smart folder renaming in web UI API | `5adf2d1` | `5adf2d1` |
+| 2026-03-04 | Configure Docker image build in GitHub Actions | `55b21db` | `55b21db` |
+| 2026-03-04 | Update GUI to match docker-compose.yml | `b2e14fb` | `b2e14fb` |
+| 2026-03-04 | Fix nginx access log permission error | `2ae16c4` | `2ae16c4` |
+| 2026-03-04 | Fix CLI synopsis disable flag compatibility | `11f56a3` | `11f56a3` |
+| 2026-03-04 | Documentation complète v2.1.0 - Mise à jour et nouveaux guides | `c3c46eb` | `c3c46eb` |
+
+### 📈 **Statistiques de Synchronisation**
+
+- **Total commits synchronisés** : 11
+- **Dernière synchronisation** : 4 Mars 2026
+- **Statut** : ✅ GitHub et Gitea parfaitement synchronisés
+- **Prochaine mise à jour requise** : À chaque modification du README.md
+
+### 🔗 **Liens Directs**
+
+- **GitHub Repository** : https://github.com/Nehwon/audiobook-master
+- **Gitea Repository** : https://gitea.lamachere.fr/fabrice/audiobooks-master
+- **GitHub Actions** : https://github.com/Nehwon/audiobook-master/actions
+
+---
+
+*Dernière mise à jour du tableau : 4 Mars 2026* 📊✨

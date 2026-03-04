@@ -34,25 +34,29 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 - [x] **Tests grandeur nature** sur fichiers audio réels
 - [x] **Performance validée** : 304x vitesse sur gros fichiers
 
-#### Version 2.1.1 (Avril 2026)
-- [x] **Validation CI/CD** : Tests complets et déploiement automatisé
-- [x] **Documentation complète** : Guides d'installation et configuration
-- [x] **Performance monitoring** : Métriques temps réel
-- [x] **Notification system** : Slack/Email intégré
-- [x] **Rollback automatique** : Gestion des versions
+#### Version 2.1.1 ✅ (Terminée - 2026-03-04)
+- [x] **GHCR Integration** : Images GitHub Container Registry automatiques
+- [x] **Docker Compose .env** : Paramétrage avec fichier `.env.example`
+- [x] **GitHub Actions** : Workflow de build Docker automatisé
+- [x] **Smart Renaming** : Renommage intelligent avec apostrophes normalisées
+- [x] **Server 500 errors** : Correction des erreurs JSON et serveur
+- [x] **Rename button** : Correction de la fonctionnalité de renommage
+- [x] **CLI synopsis** : Correction compatibilité flag disable
+- [x] **Nginx permissions** : Fix permissions logs dans container
+- [x] **GUI updates** : Alignement avec docker-compose.yml
+
+#### Version 2.2.0 (Avril 2026)
+- [ ] **Auto-update intégré** : Mises à jour automatiques dans l'application
+- [ ] **Notifications avancées** : Telegram/WhatsApp/Discord/Email multi-canaux
+- [ ] **Performance monitoring** : Métriques détaillées en production
+- [ ] **Plugin system MVP** : Architecture extensible de base
+- [ ] **Interface Electron** : Version desktop moderne et responsive
+- [ ] **Advanced search** : Recherche plein texte et filtres avancés
 
 ---
 
 ### 🌐 **Phase 2: Features Avancées (Q2 2026)**
 **Objectif**: Fonctionnalités avancées et intelligence artificielle
-
-#### Version 2.2.0 (Mai 2026)
-- [ ] **Auto-update intégré** : Mises à jour automatiques dans l'application
-- [ ] **Notifications avancées** : Slack/Discord/Email multi-canaux
-- [ ] **Performance monitoring** : Métriques détaillées en production
-- [ ] **Plugin system MVP** : Architecture extensible de base
-- [ ] **Interface Electron** : Version desktop moderne et responsive
-- [ ] **Advanced search** : Recherche plein texte et filtres avancés
 
 #### Version 2.3.0 (Juin 2026)
 - [ ] **PyTorch Audio** amélioration qualité
@@ -158,11 +162,7 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 - [ ] **AI mastering** : Post-traitement automatique
 
 #### Version 6.0.0 (Août 2027)
-- [ ] **Quantum computing** : Optimisation future-ready
-- [ ] **Blockchain integration** : Droits numériques
-- [ ] **Neural networks** : Modèles propriétaires avancés
 - [ ] **Edge computing** : Traitement distribué
-- [ ] **Global CDN** : Distribution mondiale optimisée
 
 ---
 

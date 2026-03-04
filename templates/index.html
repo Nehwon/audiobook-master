@@ -70,14 +70,14 @@
             </div>
         </div>
         <div class="card">
-            <h3>Dossiers dans /media</h3>
+            <h3>Dossiers dans /app/data/source</h3>
             <table>
                 <thead><tr><th></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
                 <tbody id="foldersBody"></tbody>
             </table>
         </div>
         <div class="card">
-            <h3>Archives à la racine /media</h3>
+            <h3>Archives à la racine /app/data/source</h3>
             <table>
                 <thead><tr><th></th><th>Archive</th><th>Taille MB</th></tr></thead>
                 <tbody id="archivesBody"></tbody>
@@ -121,8 +121,17 @@ function selectedValues(name){ return [...document.querySelectorAll(`input[name=
 
 async function api(url, options={}) {
     const r = await fetch(url, { headers: {'Content-Type':'application/json'}, ...options });
-    if (!r.ok) throw new Error((await r.json()).error || 'Erreur API');
-    return r.json();
+    const raw = await r.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; }
+    catch (_) { data = null; }
+
+    if (!r.ok) {
+        const msg = data?.error || `Erreur API (${r.status})`;
+        throw new Error(msg);
+    }
+    if (!data) throw new Error('Réponse API invalide (JSON attendu)');
+    return data;
 }
 
 async function loadLibrary() {
@@ -134,13 +143,17 @@ async function loadLibrary() {
     ab.innerHTML = '';
 
     data.folders.forEach(f => {
+        const issues = (f.issues || []).length
+            ? `<div class="muted" style="font-size:12px">⚠️ ${(f.issues || []).join(' | ')}${f.suggest_delete ? ' — suppression suggérée' : ''}</div>`
+            : '';
         fb.innerHTML += `<tr>
             <td><input type="checkbox" name="folderSel" value="${f.name}"></td>
-            <td>${f.name}</td>
-            <td>${f.audio_count}</td>
+            <td>${f.name}${issues}</td>
+            <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
             <td>${fmtMb(f.size)}</td>
             <td>
                 <button class="secondary" onclick="renameOne('${f.name.replaceAll("'", "\\'")}')">Renommer</button>
+                <button class="secondary" onclick="ignoreOne('${f.name.replaceAll("'", "\\'")}')">Ignorer</button>
                 <button onclick="enqueueFolders(['${f.name.replaceAll("'", "\\'")}'])">Traiter M4B</button>
             </td>
         </tr>`;
@@ -168,6 +181,11 @@ async function renameSelected(){
     const folders = selectedValues('folderSel');
     if (!folders.length) return alert('Sélectionner des dossiers');
     await api('/api/rename',{method:'POST', body: JSON.stringify({folders})});
+    await loadLibrary();
+}
+
+async function ignoreOne(folder){
+    await api('/api/ignore',{method:'POST', body: JSON.stringify({folder})});
     await loadLibrary();
 }
 

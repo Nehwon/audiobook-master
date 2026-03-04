@@ -143,13 +143,17 @@ async function loadLibrary() {
     ab.innerHTML = '';
 
     data.folders.forEach(f => {
+        const issues = (f.issues || []).length
+            ? `<div class="muted" style="font-size:12px">⚠️ ${(f.issues || []).join(' | ')}${f.suggest_delete ? ' — suppression suggérée' : ''}</div>`
+            : '';
         fb.innerHTML += `<tr>
             <td><input type="checkbox" name="folderSel" value="${f.name}"></td>
-            <td>${f.name}</td>
-            <td>${f.audio_count}</td>
+            <td>${f.name}${issues}</td>
+            <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
             <td>${fmtMb(f.size)}</td>
             <td>
                 <button class="secondary" onclick="renameOne('${f.name.replaceAll("'", "\\'")}')">Renommer</button>
+                <button class="secondary" onclick="ignoreOne('${f.name.replaceAll("'", "\\'")}')">Ignorer</button>
                 <button onclick="enqueueFolders(['${f.name.replaceAll("'", "\\'")}'])">Traiter M4B</button>
             </td>
         </tr>`;
@@ -177,6 +181,11 @@ async function renameSelected(){
     const folders = selectedValues('folderSel');
     if (!folders.length) return alert('Sélectionner des dossiers');
     await api('/api/rename',{method:'POST', body: JSON.stringify({folders})});
+    await loadLibrary();
+}
+
+async function ignoreOne(folder){
+    await api('/api/ignore',{method:'POST', body: JSON.stringify({folder})});
     await loadLibrary();
 }
 

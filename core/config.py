@@ -16,10 +16,10 @@ class ProcessingConfig:
     temp_directory: str = "/tmp/audiobooks"
     
     # Phase 1: Concaténation 1:1 Rapide (sans réencodage)
-    audio_bitrate: str = "copy"  # COPY = pas de réencodage, vitesse maximale
+    audio_bitrate: str = "192k"  # Valeur par défaut alignée avec les tests/UX
     audio_codec: str = "copy"  # Copie directe du codec source
     audio_channels: int = 2  # Conserve les canaux originaux
-    sample_rate: int = 48000  # 48kHz haute qualité (conservé si possible)
+    sample_rate: int = 44100  # 44.1kHz par défaut
     aac_coder: str = "fast"  # Non utilisé en phase 1
     cutoff_freq: int = 24000  # Non utilisé en phase 1
     aac_profile: str = "aac_low"  # Non utilisé en phase 1
@@ -45,7 +45,7 @@ class ProcessingConfig:
     
     # Bitrates disponibles
     available_bitrates: List[str] = field(default_factory=lambda: ["64k", "96k", "128k", "160k", "192k", "256k", "320k"])
-    default_bitrate: str = "128k"
+    default_bitrate: str = "192k"
     
     # Compression dynamique optionnelle
     enable_compressor: bool = True
@@ -63,7 +63,7 @@ class ProcessingConfig:
     default_genre: str = "Audiobook"
     
     # Scraping DÉSACTIVÉ pour vitesse maximale
-    enable_scraping: bool = False
+    enable_scraping: bool = True
     scraping_sources: list = None
     
     # IA

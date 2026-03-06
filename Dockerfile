@@ -64,7 +64,7 @@ EXPOSE 8080
 # Variables d'environnement par défaut
 ENV FLASK_APP=web/app.py \
     FLASK_ENV=production \
-    GUNICORN_WORKERS=4 \
+    GUNICORN_WORKERS=1 \
     GUNICORN_THREADS=8 \
     GUNICORN_TIMEOUT=300
 

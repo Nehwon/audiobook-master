@@ -685,7 +685,7 @@ async function deleteSuspectFolder(folder){
 
 async function enqueueFolders(folders){
     await api('/api/jobs/enqueue',{method:'POST', body: JSON.stringify({folders})});
-    loadJobs();
+    await refreshDashboardData({forceDoneRefresh: true});
 }
 async function enqueueSelected(){
     const folders = selectedValues('folderSel');
@@ -834,12 +834,20 @@ async function loadJobs({forceDoneRefresh=false} = {}){
 async function markReview(jobId, action){
     await api('/api/jobs/review',{method:'POST', body: JSON.stringify({job_id: jobId, action})});
     notify(`Action ajoutée à la file d'attente (${action === 'delete' ? 'suppression' : 'retraitement'}).`, 'success');
-    loadJobs({forceDoneRefresh: true});
+    await refreshDashboardData({forceDoneRefresh: true});
 }
 
 async function clearReview(folder){
     await api('/api/review/clear',{method:'POST', body: JSON.stringify({folder})});
-    loadJobs();
+    await refreshDashboardData();
+}
+
+async function refreshDashboardData({forceDoneRefresh=false} = {}){
+    await Promise.all([
+        loadLibrary(),
+        loadJobs({forceDoneRefresh}),
+        loadSubmissionQueue(),
+    ]);
 }
 
 
@@ -1013,7 +1021,7 @@ loadJobs();
 loadConfig();
 loadSubmissionQueue();
 loadOllamaStatus();
-setInterval(() => loadJobs({forceDoneRefresh: false}), 5000);
+setInterval(() => refreshDashboardData({forceDoneRefresh: false}), 5000);
 setInterval(() => {
     const card = document.getElementById('debugLogsCard');
     if (card && card.style.display !== 'none') loadDebugLogs();

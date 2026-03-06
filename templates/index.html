@@ -695,7 +695,7 @@ async function deleteSuspectFolder(folder){
 
 async function enqueueFolders(folders){
     const uniqueFolders = [...new Set((folders || []).filter(Boolean))].filter((folder) => !enqueueInFlight.has(folder));
-    if (!uniqueFolders.length) return notify('Ces dossiers sont déjà en file d'attente.', 'warn');
+    if (!uniqueFolders.length) return notify("Ces dossiers sont déjà en file d'attente.", 'warn');
 
     uniqueFolders.forEach((folder) => enqueueInFlight.add(folder));
     try {
@@ -881,12 +881,13 @@ function shouldRefreshLibrary(){
 
 
 
-const monitorState = {
-    sourceSig: '',
-    outputSig: '',
-    jobsSig: '',
-    inFlight: false,
-};
+function hasLibrarySelection(){
+    return selectedValues('folderSel').length > 0 || selectedValues('archiveSel').length > 0;
+}
+
+function canPatchLibrarySafely(){
+    return shouldRefreshLibrary() && isLibraryTabActive() && !hasLibrarySelection();
+}
 
 async function monitorAndPatchDom(){
     if (monitorState.inFlight) return;
@@ -901,19 +902,26 @@ async function monitorAndPatchDom(){
         const signs = payload?.signatures || {};
         const changes = payload?.changes || {};
 
+        const firstSync = !monitorState.sourceSig && !monitorState.outputSig && !monitorState.jobsSig;
+        monitorState.sourceSig = signs.source_sig || monitorState.sourceSig;
+        monitorState.outputSig = signs.output_sig || monitorState.outputSig;
+        monitorState.jobsSig = signs.jobs_sig || monitorState.jobsSig;
+
+        if (firstSync) return;
+
         if (changes.jobs) {
             await loadJobs({forceDoneRefresh: false});
         }
         if (changes.outputs) {
             await loadSubmissionQueue();
         }
-        if (changes.library && shouldRefreshLibrary()) {
-            await loadLibrary();
+        if (changes.library) {
+            monitorState.pendingLibraryRefresh = true;
         }
-
-        monitorState.sourceSig = signs.source_sig || monitorState.sourceSig;
-        monitorState.outputSig = signs.output_sig || monitorState.outputSig;
-        monitorState.jobsSig = signs.jobs_sig || monitorState.jobsSig;
+        if (monitorState.pendingLibraryRefresh && canPatchLibrarySafely()) {
+            await loadLibrary();
+            monitorState.pendingLibraryRefresh = false;
+        }
     } catch (err) {
         // On garde l'UI interactive; les actions utilisateur déclenchent déjà les updates AJAX directes.
     } finally {

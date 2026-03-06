@@ -102,7 +102,10 @@ def _default_config() -> Dict:
 
 
 def _run_ollama_command(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:
-    return subprocess.run(["ollama", *args], capture_output=True, text=True, timeout=timeout)
+    try:
+        return subprocess.run(["ollama", *args], capture_output=True, text=True, timeout=timeout)
+    except FileNotFoundError as exc:
+        raise RuntimeError("Commande 'ollama' introuvable. Installez Ollama ou configurez OLLAMA_BASE_URL.") from exc
 
 
 def _ollama_api_request(path: str, payload: Optional[Dict] = None, timeout: int = 120) -> Dict:

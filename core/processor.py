@@ -458,6 +458,9 @@ class AudiobookProcessor:
             
             # Lance FFmpeg
             logger.info("🚀 LANCEMENT CONCATÉNATION...")
+            # Important: ne pas utiliser PIPE ici, sinon FFmpeg peut se bloquer
+            # en fin de traitement si les buffers stdout/stderr se remplissent
+            # (notamment avec `-progress pipe:1` et les logs de concaténation).
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
             
             # Suivi de progression rapide
@@ -1499,7 +1502,6 @@ class AudiobookProcessor:
                     '-movflags', '+faststart',
                     # Métadonnées
                     *metadata_args,
-                    '-progress', 'pipe:1',
                     '-f', 'mp4',  # Conteneur MP4 pour M4B
                     str(output_path)
                 ]
@@ -1531,7 +1533,6 @@ class AudiobookProcessor:
                     '-movflags', '+faststart',
                     # Métadonnées
                     *metadata_args,
-                    '-progress', 'pipe:1',
                     '-f', 'mp4',
                     str(output_path)
                 ]
@@ -1563,7 +1564,6 @@ class AudiobookProcessor:
                     '-movflags', '+faststart',
                     # Métadonnées
                     *metadata_args,
-                    '-progress', 'pipe:1',
                     '-f', 'mp4',
                     str(output_path)
                 ]
@@ -1588,6 +1588,8 @@ class AudiobookProcessor:
             )
             
             # Lance FFmpeg
+            # NOTE: on évite `-progress pipe:1` ici pour ne pas saturer stdout
+            # quand il n'est pas consommé en continu (risque de blocage en fin de conversion).
             logger.info("🚀 LANCEMENT FFmpeg...")
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
             

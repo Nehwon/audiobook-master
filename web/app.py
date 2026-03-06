@@ -157,6 +157,67 @@ def _get_archive_fingerprint_from_db(archive_name: str, file_size: int, modified
     return {"md5": row[0], "sha256": row[1], "content_sig": row[2]}
 
 
+
+
+def _safe_iterdir(path: Path) -> List[Path]:
+    if not path.exists() or not path.is_dir():
+        return []
+    try:
+        return list(path.iterdir())
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _path_entries_signature(path: Path, *, allowed_suffixes: Optional[set[str]] = None) -> str:
+    entries: List[str] = []
+    for entry in sorted(_safe_iterdir(path), key=lambda item: item.name.lower()):
+        try:
+            if allowed_suffixes is not None and not entry.is_dir() and entry.suffix.lower() not in allowed_suffixes:
+                continue
+            stat = entry.stat()
+            entry_type = "d" if entry.is_dir() else "f"
+            entries.append(f"{entry.name}|{entry_type}|{int(stat.st_size)}|{int(stat.st_mtime_ns)}")
+        except Exception:  # noqa: BLE001
+            continue
+    payload = "\n".join(entries).encode("utf-8")
+    return hashlib.sha1(payload).hexdigest()
+
+
+def _jobs_signature() -> str:
+    with jobs_lock:
+        compact_jobs = [
+            {
+                "id": j.id,
+                "status": j.status,
+                "progress": j.progress,
+                "stage": j.stage,
+                "error": j.error,
+                "output_file": j.output_file,
+            }
+            for j in jobs.values()
+        ]
+        compact_jobs.sort(key=lambda item: str(item.get("id")))
+        last_event_ts = job_events[-1]["timestamp"] if job_events else 0
+        review_count = len(review_bin)
+    payload = json.dumps(
+        {
+            "jobs": compact_jobs,
+            "last_event_ts": last_event_ts,
+            "review_count": review_count,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha1(payload).hexdigest()
+
+
+def _compute_monitor_signatures() -> Dict[str, str]:
+    return {
+        "source_sig": _path_entries_signature(MEDIA_DIR),
+        "output_sig": _path_entries_signature(OUTPUT_DIR, allowed_suffixes={".m4b"}),
+        "jobs_sig": _jobs_signature(),
+    }
+
 def _save_archive_fingerprint_to_db(
     archive_name: str,
     file_size: int,
@@ -1485,17 +1546,30 @@ def api_enqueue_jobs():
     _ensure_worker()
     payload = request.get_json(silent=True) or {}
     folders = payload.get("folders", [])
+    if not isinstance(folders, list):
+        return jsonify({"error": "Le champ 'folders' doit être une liste"}), 400
+
     queued = []
+    skipped = []
 
     with jobs_lock:
+        active_folders = {j.folder for j in jobs.values() if j.status in {"pending", "running"}}
         for folder in folders:
+            folder_name = str(folder or "").strip()
+            if not folder_name:
+                skipped.append({"folder": str(folder), "reason": "nom invalide"})
+                continue
+            if folder_name in active_folders:
+                skipped.append({"folder": folder_name, "reason": "déjà en attente/en cours"})
+                continue
             jid = f"job-{int(time.time() * 1000)}-{len(jobs)}"
-            job = Job(id=jid, folder=folder)
+            job = Job(id=jid, folder=folder_name)
             jobs[jid] = job
             job_queue.put(jid)
             queued.append(asdict(job))
+            active_folders.add(folder_name)
 
-    return jsonify({"queued": queued})
+    return jsonify({"queued": queued, "skipped": skipped})
 
 
 @app.route("/api/jobs")
@@ -1649,6 +1723,24 @@ def api_ollama_search_metadata():
     results = [_run_ollama_metadata_search(folder, config) for folder in folders if isinstance(folder, str)]
     return jsonify({"results": results})
 
+
+
+
+
+@app.route("/api/monitor")
+def api_monitor():
+    previous = {
+        "source_sig": request.args.get("source_sig") or "",
+        "output_sig": request.args.get("output_sig") or "",
+        "jobs_sig": request.args.get("jobs_sig") or "",
+    }
+    current = _compute_monitor_signatures()
+    changes = {
+        "library": previous["source_sig"] != current["source_sig"],
+        "outputs": previous["output_sig"] != current["output_sig"],
+        "jobs": previous["jobs_sig"] != current["jobs_sig"],
+    }
+    return jsonify({"changes": changes, "signatures": current})
 
 @app.route("/api/outputs")
 def api_outputs():

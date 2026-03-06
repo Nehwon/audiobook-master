@@ -233,6 +233,30 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertIn('details', last_event)
         self.assertEqual(last_event['details']['eta'], '00h12mn')
 
+
+    def test_enqueue_rejects_duplicate_active_folder(self):
+        folder = self.media_dir / 'Livre Unique'
+        folder.mkdir()
+        (folder / 'a.mp3').write_text('x')
+
+        first = self.client.post('/api/jobs/enqueue', json={'folders': ['Livre Unique']})
+        self.assertEqual(first.status_code, 200)
+        payload1 = first.get_json()
+        self.assertEqual(len(payload1['queued']), 1)
+
+        second = self.client.post('/api/jobs/enqueue', json={'folders': ['Livre Unique']})
+        self.assertEqual(second.status_code, 200)
+        payload2 = second.get_json()
+        self.assertEqual(len(payload2['queued']), 0)
+        self.assertEqual(len(payload2['skipped']), 1)
+        self.assertEqual(payload2['skipped'][0]['reason'], 'déjà en attente/en cours')
+
+    def test_enqueue_rejects_non_list_payload(self):
+        resp = self.client.post('/api/jobs/enqueue', json={'folders': 'not-a-list'})
+        self.assertEqual(resp.status_code, 400)
+        payload = resp.get_json()
+        self.assertIn('folders', payload['error'])
+
     def test_jobs_payload_contains_events(self):
         folder = self.media_dir / 'Livre'
         folder.mkdir()
@@ -260,6 +284,47 @@ class TestWebRenameApi(unittest.TestCase):
         worker.join(timeout=1)
 
         self.assertTrue(done.is_set(), 'Deadlock détecté lors de _push_job_event')
+
+
+
+    def test_monitor_endpoint_detects_no_change_with_same_signatures(self):
+        first = self.client.get('/api/monitor')
+        self.assertEqual(first.status_code, 200)
+        first_payload = first.get_json()
+
+        signatures = first_payload['signatures']
+        second = self.client.get('/api/monitor', query_string={
+            'source_sig': signatures['source_sig'],
+            'output_sig': signatures['output_sig'],
+            'jobs_sig': signatures['jobs_sig'],
+        })
+        self.assertEqual(second.status_code, 200)
+        payload = second.get_json()
+        self.assertFalse(payload['changes']['library'])
+        self.assertFalse(payload['changes']['outputs'])
+        self.assertFalse(payload['changes']['jobs'])
+
+    def test_monitor_endpoint_detects_source_output_and_job_changes(self):
+        baseline = self.client.get('/api/monitor').get_json()
+
+        folder = self.media_dir / 'Live Change'
+        folder.mkdir()
+        (folder / 'track.mp3').write_text('x')
+        (self.output_dir / 'Live Change.m4b').write_text('m4b')
+
+        with web_app.jobs_lock:
+            web_app.jobs['job-live'] = web_app.Job(id='job-live', folder='Live Change', status='running', progress=12)
+
+        changed = self.client.get('/api/monitor', query_string={
+            'source_sig': baseline['signatures']['source_sig'],
+            'output_sig': baseline['signatures']['output_sig'],
+            'jobs_sig': baseline['signatures']['jobs_sig'],
+        })
+        self.assertEqual(changed.status_code, 200)
+        payload = changed.get_json()
+        self.assertTrue(payload['changes']['library'])
+        self.assertTrue(payload['changes']['outputs'])
+        self.assertTrue(payload['changes']['jobs'])
 
     def test_logs_endpoint_returns_json(self):
         resp = self.client.get('/api/logs?lines=20')

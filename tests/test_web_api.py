@@ -157,5 +157,27 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertIn('Ollama indisponible', payload['error'])
 
 
+
+    def test_jobs_payload_contains_events(self):
+        folder = self.media_dir / 'Livre'
+        folder.mkdir()
+        (folder / 'a.mp3').write_text('x')
+
+        enqueue = self.client.post('/api/jobs/enqueue', json={'folders': ['Livre']})
+        self.assertEqual(enqueue.status_code, 200)
+
+        jobs = self.client.get('/api/jobs')
+        self.assertEqual(jobs.status_code, 200)
+        payload = jobs.get_json()
+        self.assertIn('events', payload)
+        self.assertIsInstance(payload['events'], list)
+
+    def test_logs_endpoint_returns_json(self):
+        resp = self.client.get('/api/logs?lines=20')
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertIn('lines', payload)
+        self.assertIn('path', payload)
+
 if __name__ == '__main__':
     unittest.main()

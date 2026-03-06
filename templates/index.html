@@ -72,6 +72,8 @@
         .phase-meta { display:flex; justify-content:space-between; color: var(--muted); margin-bottom:3px; gap:8px; }
         .phase-track { width:100%; height:6px; border-radius:999px; background: color-mix(in srgb, var(--border) 70%, transparent); overflow:hidden; }
         .phase-bar { height:100%; background: color-mix(in srgb, var(--primary) 82%, white); transition: width .2s ease; }
+        .archive-actions-bar { margin: 10px 0 14px; }
+        .dup-badge { display:inline-block; margin-left:6px; color:#b45309; font-size:12px; }
 
     </style>
 </head>
@@ -97,24 +99,27 @@
         <div class="card">
             <div class="row">
                 <button onclick="loadLibrary()">Rafraîchir</button>
-                <button class="secondary" onclick="validateSelectedArchives()">Valider sélection</button>
-                <button class="secondary" onclick="extractSelected()">Extraire sélection</button>
                 <button id="renameSelectedBtn" class="secondary" onclick="renameSelected()">Renommage batch</button>
                 <button onclick="enqueueSelected()">Ajouter sélection à la queue M4B</button>
-                <button class="secondary" onclick="searchSelectedWithLlm()">Recherche LLM sélection</button>
             </div>
         </div>
         <div class="card">
-            <h3>Dossiers dans /app/data/source</h3>
+            <h3>Dossiers</h3>
             <table>
-                <thead><tr><th></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                <thead><tr><th><input id="folderSelAll" type="checkbox" onchange="toggleAllSelection('folderSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
                 <tbody id="foldersBody"></tbody>
             </table>
         </div>
+        <div class="card archive-actions-bar">
+            <div class="row">
+                <button class="secondary" onclick="validateSelectedArchives()">Valider sélection</button>
+                <button class="secondary" onclick="extractSelected()">Extraire sélection</button>
+            </div>
+        </div>
         <div class="card">
-            <h3>Archives à la racine /app/data/source</h3>
+            <h3>Archives</h3>
             <table>
-                <thead><tr><th></th><th>Archive</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                <thead><tr><th><input id="archiveSelAll" type="checkbox" onchange="toggleAllSelection('archiveSel', this.checked)"></th><th>Archive</th><th>Taille MB</th><th>Actions</th></tr></thead>
                 <tbody id="archivesBody"></tbody>
             </table>
         </div>
@@ -198,6 +203,7 @@ let renameInProgress = false;
 let manualRenameRow = null;
 let pendingApiCalls = 0;
 let ollamaPullTicker = null;
+let hiddenDuplicateDeleteTargets = new Set();
 
 function setGlobalBusy(isBusy, label='Traitement en cours...'){
     const box = document.getElementById('globalBusy');
@@ -261,6 +267,42 @@ function escapeHtml(value){
 
 function toJsString(value){
     return String(value).replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+}
+
+function bindSelectionState(name, selectAllId){
+    const boxes = [...document.querySelectorAll(`input[name="${name}"]`)];
+    const selectAll = document.getElementById(selectAllId);
+    if (!selectAll) return;
+    if (!boxes.length) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        return;
+    }
+    const checked = boxes.filter(b => b.checked).length;
+    selectAll.checked = checked === boxes.length;
+    selectAll.indeterminate = checked > 0 && checked < boxes.length;
+}
+
+function toggleAllSelection(name, checked){
+    document.querySelectorAll(`input[name="${name}"]`).forEach(box => {
+        if (!box.disabled) box.checked = checked;
+    });
+    const selectAllId = name === 'folderSel' ? 'folderSelAll' : 'archiveSelAll';
+    bindSelectionState(name, selectAllId);
+}
+
+function archiveDuplicateHint(archive){
+    const reasons = archive?.duplicate_reasons || [];
+    if (!reasons.length) return '';
+    return `<div class="muted" style="font-size:12px">⚠️ Doublon possible (${escapeHtml(reasons.join(' | '))})</div>`;
+}
+
+function duplicateDeleteButton(archive){
+    const current = archive?.primary_name || archive?.name || '';
+    const peers = archive?.duplicate_peers || [];
+    if (!current || !peers.length || hiddenDuplicateDeleteTargets.has(current)) return '';
+    const jsName = toJsString(current);
+    return `<button class="danger" onclick="deleteDuplicateArchive('${jsName}')">Supprimer doublon</button>`;
 }
 
 function archiveValidationBadge(archive){
@@ -412,10 +454,9 @@ async function loadLibrary() {
                    <button data-rename-btn="1" data-default-label="Renommage manuel" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="enterManualRename('${jsFolder}')">Renommage manuel</button>
                    ${f.can_ignore ? `<button class="secondary" onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
                    ${f.suggest_delete ? `<button class="danger" onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
-                   <button onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>
-                   <button class="secondary" onclick="searchOneWithLlm('${jsFolder}')">Recherche LLM</button>`;
+                   <button onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>`;
         fb.innerHTML += `<tr>
-            <td><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''}></td>
+            <td><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''} onchange="bindSelectionState('folderSel', 'folderSelAll')"></td>
             <td>
                 ${folderIcon}${folderNameEscaped}${issues}
                 ${manualInput}
@@ -428,15 +469,19 @@ async function loadLibrary() {
     if (!data.folders.length) fb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier</td></tr>';
 
     data.archives.forEach(a => {
-        const archiveEscaped = escapeHtml(a.name);
-        const archiveJs = toJsString(a.name);
+        const archiveEscaped = escapeHtml(a.primary_name || a.name);
+        const archiveJs = toJsString(a.primary_name || a.name);
         const isInvalid = a.validation && a.validation.valid === false;
+        const archiveLabel = escapeHtml(a.display_name || a.name);
         const actionBtn = isInvalid
             ? `<button class="danger" onclick="deleteArchive('${archiveJs}')">Supprimer</button>`
             : `<button onclick="extractArchives(['${archiveJs}'])">Extraire</button>`;
-        ab.innerHTML += `<tr><td><input type="checkbox" name="archiveSel" value="${archiveEscaped}" ${isInvalid ? 'disabled' : ''}></td><td>${archiveValidationBadge(a)} ${archiveEscaped}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> ${actionBtn}</td></tr>`;
+        const dupDeleteBtn = duplicateDeleteButton(a);
+        ab.innerHTML += `<tr><td><input type="checkbox" name="archiveSel" value="${archiveEscaped}" ${isInvalid ? 'disabled' : ''} onchange="bindSelectionState('archiveSel', 'archiveSelAll')"></td><td>${archiveValidationBadge(a)} ${archiveLabel}${archiveDuplicateHint(a)}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> ${actionBtn} ${dupDeleteBtn}</td></tr>`;
     });
     if (!data.archives.length) ab.innerHTML = '<tr><td colspan="4" class="muted">Aucune archive</td></tr>';
+    bindSelectionState('folderSel', 'folderSelAll');
+    bindSelectionState('archiveSel', 'archiveSelAll');
 }
 
 async function validateArchives(archives){
@@ -482,12 +527,24 @@ async function extractSelected(){
     await extractArchives(archives);
 }
 
-async function deleteArchive(archive){
+async function deleteArchive(archive, {suppressDuplicateButtons=false} = {}){
     const confirmed = await askConfirmation(`Supprimer l'archive ${archive} ?`, {confirmText: 'Supprimer'});
     if (!confirmed) return;
+
+    if (suppressDuplicateButtons) {
+        const selected = (libraryCache.archives || []).find(a => (a.primary_name || a.name) === archive);
+        const peers = selected?.duplicate_peers || [];
+        hiddenDuplicateDeleteTargets.add(archive);
+        peers.forEach(name => hiddenDuplicateDeleteTargets.add(name));
+    }
+
     await api('/api/archive/delete',{method:'POST', body: JSON.stringify({archive})});
     notify(`Archive ${archive} supprimée.`, 'success');
     await loadLibrary();
+}
+
+async function deleteDuplicateArchive(archive){
+    await deleteArchive(archive, {suppressDuplicateButtons: true});
 }
 
 

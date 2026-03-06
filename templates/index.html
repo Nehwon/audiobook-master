@@ -56,6 +56,10 @@
         .toast.success { border-left-color: #059669; }
         .toast-actions { margin-top:8px; display:flex; gap:8px; }
         @keyframes indeterminate { from { transform: translateX(-120%);} to { transform: translateX(330%);} }
+        .job-inline { margin-top:6px; }
+        .job-inline .meta { font-size:12px; color: var(--muted); margin-bottom:4px; }
+        .job-inline .track { width:220px; max-width:100%; height:8px; border-radius:999px; background: color-mix(in srgb, var(--border) 70%, transparent); overflow:hidden; }
+        .job-inline .bar { height:100%; background: var(--primary); transition: width .25s ease; }
     </style>
 </head>
 <body>
@@ -250,6 +254,18 @@ function escapeHtml(value){
         .replaceAll("'", '&#39;');
 }
 
+function toJsString(value){
+    return String(value).replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+}
+
+function renderInlineJobProgress(job){
+    if (!job) return '';
+    const pct = Math.max(0, Math.min(100, parseInt(job.progress ?? 0, 10) || 0));
+    const statusLabel = job.status === 'pending' ? 'En file d\'attente' : 'En conversion';
+    const stage = escapeHtml(job.stage || 'Traitement');
+    return `<div class="job-inline"><div class="meta">${statusLabel} · ${stage} · ${pct}%</div><div class="track"><div class="bar" style="width:${pct}%"></div></div></div>`;
+}
+
 function notify(message, type='info', timeoutMs=3600){
     const wrap = document.getElementById('toastWrap');
     if (!wrap) return;
@@ -347,26 +363,30 @@ async function loadLibrary() {
     ab.innerHTML = '';
 
     data.folders.forEach(f => {
-        const jsFolder = f.name.replaceAll("'", "\\'");
+        const jsFolder = toJsString(f.name);
         const isManualMode = manualRenameRow === f.name;
+        const folderNameEscaped = escapeHtml(f.name);
+        const job = f.job || null;
+        const hideActionsForJob = !!job;
         const issues = (f.issues || []).length
             ? `<div class="muted" style="font-size:12px">⚠️ ${(f.issues || []).join(' | ')}${f.suggest_delete ? ' — suppression suggérée' : ''}</div>`
             : '';
-        const folderNameEscaped = escapeHtml(f.name);
-        const manualInput = isManualMode
+        const manualInput = isManualMode && !hideActionsForJob
             ? `<div style="margin-top:6px"><input data-manual-title="1" data-folder="${folderNameEscaped}" type="text" style="min-width:260px" placeholder="Titre manuel" autofocus></div>`
             : '';
-        const actionButtons = isManualMode
-            ? `<button data-rename-btn="1" data-default-label="Valider" ${renameInProgress ? 'disabled' : ''} onclick="validateManualRename('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Valider'}</button>
-               <button class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="cancelManualRename()">Annuler</button>`
-            : `<button data-rename-btn="1" data-default-label="Renommer" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="renameOne('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
-               <button data-rename-btn="1" data-default-label="Renommage manuel" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="enterManualRename('${jsFolder}')">Renommage manuel</button>
-               ${f.can_ignore ? `<button class="secondary" onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
-               ${f.suggest_delete ? `<button class="danger" onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
-               <button onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>
-               <button class="secondary" onclick="searchOneWithLlm('${jsFolder}')">Recherche LLM</button>`;
+        const actionButtons = hideActionsForJob
+            ? renderInlineJobProgress(job)
+            : isManualMode
+                ? `<button data-rename-btn="1" data-default-label="Valider" ${renameInProgress ? 'disabled' : ''} onclick="validateManualRename('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Valider'}</button>
+                   <button class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="cancelManualRename()">Annuler</button>`
+                : `<button data-rename-btn="1" data-default-label="Renommer" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="renameOne('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
+                   <button data-rename-btn="1" data-default-label="Renommage manuel" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="enterManualRename('${jsFolder}')">Renommage manuel</button>
+                   ${f.can_ignore ? `<button class="secondary" onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
+                   ${f.suggest_delete ? `<button class="danger" onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
+                   <button onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>
+                   <button class="secondary" onclick="searchOneWithLlm('${jsFolder}')">Recherche LLM</button>`;
         fb.innerHTML += `<tr>
-            <td><input type="checkbox" name="folderSel" value="${folderNameEscaped}"></td>
+            <td><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''}></td>
             <td>
                 ${folderNameEscaped}${issues}
                 ${manualInput}
@@ -444,17 +464,21 @@ async function enqueueSelected(){
 function renderJobs(containerId, jobs, withActions=false){
     const c = document.getElementById(containerId);
     if (!jobs.length) { c.innerHTML = '<p class="muted">Vide</p>'; return; }
-    c.innerHTML = jobs.map(j => `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0;">
-        <div>
-          <strong>${j.folder}</strong> <span class="pill">${j.stage}</span> ${j.error ? `<span class="muted">(${j.error})</span>`:''}
-          <div class="muted">Progression: ${j.progress}%</div>
-          ${j.output_file ? `<audio controls src="/api/stream/${j.output_file}"></audio>` : ''}
+    c.innerHTML = jobs.map(j => {
+        const pct = Math.max(0, Math.min(100, parseInt(j.progress ?? 0, 10) || 0));
+        return `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0;align-items:flex-start;">
+        <div style="min-width:320px;max-width:100%;">
+          <strong>${escapeHtml(j.folder || '-')}</strong> <span class="pill">${escapeHtml(j.stage || '-')}</span> ${j.error ? `<span class="muted">(${escapeHtml(j.error)})</span>`:''}
+          <div class="muted">Progression: ${pct}%</div>
+          <div class="progress-track" style="margin-top:6px;max-width:420px;"><div class="progress-determinate" style="width:${pct}%"></div></div>
+          ${j.output_file ? `<audio controls src="/api/stream/${encodeURIComponent(j.output_file)}" style="margin-top:8px"></audio>` : ''}
         </div>
         <div class="row">
-          ${withActions ? `<button class="secondary" onclick="markReview('${j.id}','delete')">Mettre en attente suppression</button>
-          <button class="secondary" onclick="markReview('${j.id}','reprocess')">Mettre en attente retraitement</button>` : ''}
+          ${withActions ? `<button class="secondary" onclick="markReview('${toJsString(j.id)}','delete')">Mettre en attente suppression</button>
+          <button class="secondary" onclick="markReview('${toJsString(j.id)}','reprocess')">Mettre en attente retraitement</button>` : ''}
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 }
 
 function renderEvents(items){
@@ -464,7 +488,12 @@ function renderEvents(items){
     c.innerHTML = items.slice().reverse().map(e => {
         const when = new Date((e.timestamp || 0) * 1000).toLocaleTimeString();
         const lvl = e.level === 'error' ? '❌' : (e.level === 'warning' ? '⚠️' : 'ℹ️');
-        return `<div style="border-bottom:1px solid var(--border);padding:6px 0;">${lvl} <strong>${when}</strong> [${e.stage || '-'}] <strong>${e.folder || '-'}</strong><br><span class="muted">${e.message || ''}</span></div>`;
+        const details = e.details && typeof e.details === 'object' ? e.details : {};
+        const detailsText = Object.keys(details).length
+            ? `<div class="muted" style="font-size:12px;margin-top:2px">${Object.entries(details).map(([k,v]) => `${escapeHtml(k)}: ${escapeHtml(v)}`).join(' · ')}</div>`
+            : '';
+        return `<div style="border-bottom:1px solid var(--border);padding:6px 0;">${lvl} <strong>${when}</strong> [${escapeHtml(e.stage || '-')}]
+            <strong>${escapeHtml(e.folder || '-')}</strong><br><span class="muted">${escapeHtml(e.message || '')}</span>${detailsText}</div>`;
     }).join('');
 }
 

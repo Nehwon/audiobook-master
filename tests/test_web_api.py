@@ -17,6 +17,9 @@ class TestWebRenameApi(unittest.TestCase):
         web_app.MEDIA_DIR = self.media_dir
         web_app.TEMP_DIR = self.media_dir / "tmp"
         web_app.CONFIG_PATH = web_app.TEMP_DIR / "web_config.json"
+        with web_app.jobs_lock:
+            web_app.jobs.clear()
+            web_app.job_events.clear()
         self.client = web_app.app.test_client()
 
     def tearDown(self):
@@ -158,6 +161,42 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertIn('Ollama indisponible', payload['error'])
 
 
+
+
+    def test_library_includes_active_job_status_for_folder(self):
+        folder = self.media_dir / 'Livre En Cours'
+        folder.mkdir()
+        (folder / 'track.mp3').write_text('x')
+
+        with web_app.jobs_lock:
+            web_app.jobs.clear()
+            web_app.jobs['job-42'] = web_app.Job(
+                id='job-42',
+                folder='Livre En Cours',
+                status='running',
+                progress=47,
+                stage='Conversion',
+            )
+
+        resp = self.client.get('/api/library')
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        entry = next(item for item in payload['folders'] if item['name'] == 'Livre En Cours')
+        self.assertIsNotNone(entry['job'])
+        self.assertEqual(entry['job']['status'], 'running')
+        self.assertEqual(entry['job']['progress'], 47)
+
+    def test_push_job_event_persists_details_payload(self):
+        with web_app.jobs_lock:
+            web_app.job_events.clear()
+
+        web_app._push_job_event('job-99', 'Livre', 'Conversion', 'FFmpeg en cours', details={'eta': '00h12mn'})
+
+        with web_app.jobs_lock:
+            last_event = web_app.job_events[-1]
+
+        self.assertIn('details', last_event)
+        self.assertEqual(last_event['details']['eta'], '00h12mn')
 
     def test_jobs_payload_contains_events(self):
         folder = self.media_dir / 'Livre'

@@ -24,7 +24,7 @@ import zipfile
 import rarfile
 import gc
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import Callable, List, Dict, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from urllib.parse import quote
@@ -138,6 +138,31 @@ class AudiobookProcessor:
         self.output_dir = Path(output_dir)
         self.temp_dir = Path(temp_dir)
         self.temp_dir.mkdir(exist_ok=True)
+        self.progress_callback: Optional[Callable[[Dict[str, object]], None]] = None
+
+    def _emit_progress(
+        self,
+        stage: str,
+        message: str,
+        progress: Optional[int] = None,
+        details: Optional[Dict[str, object]] = None,
+    ) -> None:
+        """Diffuse les informations de progression vers l'orchestrateur (API/UI)."""
+        callback = getattr(self, "progress_callback", None)
+        if not callback:
+            return
+        payload: Dict[str, object] = {
+            "stage": stage,
+            "message": message,
+        }
+        if progress is not None:
+            payload["progress"] = max(0, min(100, int(progress)))
+        if details:
+            payload["details"] = details
+        try:
+            callback(payload)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Callback de progression ignoré: %s", exc)
     
     def normalize_filename(self, filename: str) -> str:
         """Normalise un nom de fichier"""
@@ -1409,6 +1434,7 @@ class AudiobookProcessor:
     def convert_to_m4b(self, audio_files: List[Path], output_path: Path, metadata: AudiobookMetadata) -> bool:
         try:
             logger.info(f"🎵 CONVERSION M4B HAUTE QUALITÉ: {len(audio_files)} fichiers")
+            self._emit_progress("Conversion", "Préparation de la conversion FFmpeg", 35)
             
             # Surveillance système
             stop_monitoring = threading.Event()
@@ -1554,6 +1580,12 @@ class AudiobookProcessor:
             total_input_mb = total_input_size / (1024*1024)
             logger.info(f'📊 Taille source calculée: {total_input_mb:.1f}MB ({len(audio_files)} fichiers)')
             logger.info(f'📊 Taille attendue: ~{total_input_mb * 0.3:.1f}MB (compression ~70%)')
+            self._emit_progress(
+                "Conversion",
+                f"FFmpeg en cours ({len(audio_files)} piste(s))",
+                40,
+                {"input_mb": round(total_input_mb, 1)},
+            )
             
             # Lance FFmpeg
             logger.info("🚀 LANCEMENT FFmpeg...")
@@ -1620,6 +1652,20 @@ class AudiobookProcessor:
                         bar = '█' * filled + '░' * (bar_length - filled)
                         
                         logger.info(f"📊 [{bar}] {progress_percent:3.0f}% | {data:6.1f}MB/{total_input_mb:.1f}MB | {speed_str} | ETA {eta_str}")
+                        mapped_progress = 40 + min(55, int(progress_percent * 0.55))
+                        self._emit_progress(
+                            "Conversion",
+                            f"Encodage FFmpeg: {progress_percent:.0f}%",
+                            mapped_progress,
+                            {
+                                "speed": speed_str,
+                                "eta": eta_str,
+                                "output_mb": round(data, 1),
+                                "input_mb": round(total_input_mb, 1),
+                                "cpu_percent": round(cpu, 1),
+                                "ram_mb": round(ram, 1),
+                            },
+                        )
                         last_stats_time = current_time
                 
                 time.sleep(0.5)  # Pause plus courte pour réactivité
@@ -1658,6 +1704,12 @@ class AudiobookProcessor:
             logger.info(f"✅ Conversion terminée en {total_time//60:.0f}m{total_time%60:.0f}s")
             logger.info(f"📊 Qualité: {codec_info} | {config.audio_bitrate} | {config.audio_channels} canaux | {config.sample_rate}Hz")
             logger.info(f"📊 Compression M4B: {input_size:.1f}MB → {output_size:.1f}MB ({((1-output_size/input_size)*100):.1f}% - optimisé AAC)")
+            self._emit_progress(
+                "Finalisation",
+                "Conversion terminée, finalisation du job",
+                95,
+                {"duration_s": round(total_time, 1), "output_mb": round(output_size, 1)},
+            )
             
             return True
             
@@ -1669,11 +1721,13 @@ class AudiobookProcessor:
         """Traite un fichier audiobook complet"""
         try:
             logger.info(f"🚀 TRAITEMENT: {file_path.name}")
+            self._emit_progress("Préparation", "Initialisation du traitement", 10)
             
             # 1. Métadonnées
             metadata = self.parse_filename(file_path.name)
             logger.info(f"   ✅ Auteur: {metadata.author}")
             logger.info(f"   ✅ Titre: {metadata.title}")
+            self._emit_progress("Métadonnées", f"Titre détecté: {metadata.title}", 20)
             
             # 2. Dossier de travail
             work_dir = self.temp_dir / file_path.stem
@@ -1695,9 +1749,11 @@ class AudiobookProcessor:
             
             if not audio_files:
                 logger.error(f"❌ Aucun fichier audio trouvé")
+                self._emit_progress("Erreur", "Aucun fichier audio trouvé", 100)
                 return False
             
             logger.info(f"   ✅ {len(audio_files)} fichiers audio")
+            self._emit_progress("Analyse", f"{len(audio_files)} piste(s) audio détectée(s)", 30)
             
             # 4. Traitement selon le mode
             config = getattr(self, 'config', ProcessingConfig())
@@ -1728,13 +1784,16 @@ class AudiobookProcessor:
             
             if success:
                 logger.info(f"✅ SUCCÈS: {output_filename}")
+                self._emit_progress("Terminé", f"Fichier généré: {output_filename}", 100)
                 return True
             else:
                 logger.error(f"❌ ÉCHEC: {file_path.name}")
+                self._emit_progress("Erreur", f"Échec de conversion: {file_path.name}", 100)
                 return False
                 
         except Exception as e:
             logger.error(f"💥 ERREUR: {e}")
+            self._emit_progress("Erreur", f"Exception: {e}", 100)
             return False
         finally:
             # Nettoyage

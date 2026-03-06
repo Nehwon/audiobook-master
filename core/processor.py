@@ -176,6 +176,28 @@ class AudiobookProcessor:
         """Construit une ligne de filelist concat compatible avec les apostrophes."""
         escaped_path = str(file_path.absolute()).replace("'", r"'\''")
         return f"file '{escaped_path}'\n"
+
+    def _compute_cpu_parallel_tasks(self, total_cores: Optional[int] = None) -> int:
+        """Calcule le nombre de tâches CPU parallèles.
+
+        Règle:
+        - < 8 cœurs: exécution séquentielle (1 tâche)
+        - >= 8 cœurs: tâches = (cœurs // 2) - 2
+        """
+        cores = total_cores or os.cpu_count() or 1
+        if cores < 8:
+            return 1
+        return max(1, (cores // 2) - 2)
+
+    def _compute_threads_per_cpu_task(self, total_cores: Optional[int] = None) -> int:
+        """Définit le nombre de threads FFmpeg par tâche CPU.
+
+        Pour la stratégie multi-tâches CPU, on cible 2 cœurs par tâche.
+        """
+        cores = total_cores or os.cpu_count() or 1
+        if cores < 2:
+            return 1
+        return 2
     
     def parse_filename(self, filename: str) -> AudiobookMetadata:
         """Extrait les métadonnées de base du nom de fichier"""
@@ -871,8 +893,8 @@ class AudiobookProcessor:
             # Paramètres optimaux
             optimal_params = self.get_optimal_encoding_params(quality)
             
-            # Configuration CPU optimisée pour double Xeon
-            cpu_threads = max(2, (os.cpu_count() or 8) // 2)  # Thread_max / 2
+            # Configuration CPU: 2 cœurs par tâche
+            cpu_threads = self._compute_threads_per_cpu_task()
             logger.info(f"   🔧 {input_file.name}: {optimal_params['reason']} ({cpu_threads} threads)")
             
             # Commande d'encodage CPU optimisée
@@ -993,13 +1015,14 @@ class AudiobookProcessor:
         try:
             logger.info(f"⚡ PHASE 2 CPU OPTIMISÉE: {len(audio_files)} fichiers")
             
-            # Configuration optimisée pour double Xeon 32 cœurs
+            # Configuration parallélisme CPU
             total_cores = os.cpu_count() or 8
-            max_workers = max(4, total_cores // 2)  # Thread_max / 2
-            
+            max_workers = self._compute_cpu_parallel_tasks(total_cores)
+            cpu_threads = self._compute_threads_per_cpu_task(total_cores)
+
             logger.info(f"🖥️ Configuration CPU: {total_cores} cœurs disponibles")
             logger.info(f"⚡ Multithreading: {max_workers} workers parallèles")
-            logger.info(f"🔧 Optimisé pour: Double Xeon 32 cœurs")
+            logger.info(f"🔧 Allocation: {cpu_threads} cœurs/tâche, 2 cœurs réservés système")
             
             # Analyse qualité rapide
             logger.info("🔍 Analyse qualité (échantillon 5 fichiers)...")

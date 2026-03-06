@@ -59,10 +59,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '${APP_LIMIT_CPUS:-16}'
           memory: ${APP_LIMIT_MEMORY:-8G}
         reservations:
-          cpus: '${APP_RESERVATION_CPUS:-4}'
           memory: ${APP_RESERVATION_MEMORY:-2G}
 
 

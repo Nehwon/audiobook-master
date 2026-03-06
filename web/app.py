@@ -53,7 +53,7 @@ class Job:
     ended_at: Optional[float] = None
 
 
-jobs_lock = threading.Lock()
+jobs_lock = threading.RLock()
 job_queue: "queue.Queue[str]" = queue.Queue()
 jobs: Dict[str, Job] = {}
 review_bin: List[Dict] = []

@@ -1,4 +1,5 @@
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -171,6 +172,20 @@ class TestWebRenameApi(unittest.TestCase):
         payload = jobs.get_json()
         self.assertIn('events', payload)
         self.assertIsInstance(payload['events'], list)
+
+    def test_push_job_event_does_not_deadlock_when_lock_is_held(self):
+        done = threading.Event()
+
+        def _call_event_push():
+            with web_app.jobs_lock:
+                web_app._push_job_event('job-1', 'Livre', 'Préparation', 'Test event')
+            done.set()
+
+        worker = threading.Thread(target=_call_event_push)
+        worker.start()
+        worker.join(timeout=1)
+
+        self.assertTrue(done.is_set(), 'Deadlock détecté lors de _push_job_event')
 
     def test_logs_endpoint_returns_json(self):
         resp = self.client.get('/api/logs?lines=20')

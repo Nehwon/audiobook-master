@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import hashlib
 import logging
+import sqlite3
 import os
 import queue
 import re
@@ -65,7 +66,7 @@ worker_started = False
 MAX_JOB_EVENTS = 500
 job_events: List[Dict] = []
 archive_validation_cache: Dict[str, Dict[str, object]] = {}
-archive_fingerprint_cache: Dict[str, Dict[str, object]] = {}
+STATE_DB_PATH = TEMP_DIR / "web_state.db"
 
 
 def _setup_logging() -> logging.Logger:
@@ -97,6 +98,97 @@ def _setup_logging() -> logging.Logger:
 
 logger = _setup_logging()
 
+def _ensure_state_db() -> None:
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(STATE_DB_PATH) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS archive_fingerprints (
+                archive_name TEXT PRIMARY KEY,
+                file_size INTEGER NOT NULL,
+                modified REAL NOT NULL,
+                md5 TEXT,
+                sha256 TEXT,
+                content_sig TEXT,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS m4b_candidates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_folder TEXT NOT NULL,
+                output_name TEXT,
+                metadata_status TEXT NOT NULL DEFAULT 'pending',
+                metadata_payload TEXT,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
+
+
+def _get_archive_fingerprint_from_db(archive_name: str, file_size: int, modified: float) -> Optional[Dict[str, Optional[str]]]:
+    _ensure_state_db()
+    with sqlite3.connect(STATE_DB_PATH) as conn:
+        row = conn.execute(
+            """
+            SELECT md5, sha256, content_sig
+            FROM archive_fingerprints
+            WHERE archive_name = ? AND file_size = ? AND modified = ?
+            """,
+            (archive_name, file_size, modified),
+        ).fetchone()
+    if not row:
+        return None
+    return {"md5": row[0], "sha256": row[1], "content_sig": row[2]}
+
+
+def _save_archive_fingerprint_to_db(
+    archive_name: str,
+    file_size: int,
+    modified: float,
+    md5: Optional[str],
+    sha256: Optional[str],
+    content_sig: Optional[str],
+) -> None:
+    _ensure_state_db()
+    with sqlite3.connect(STATE_DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO archive_fingerprints
+                (archive_name, file_size, modified, md5, sha256, content_sig, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(archive_name) DO UPDATE SET
+                file_size = excluded.file_size,
+                modified = excluded.modified,
+                md5 = excluded.md5,
+                sha256 = excluded.sha256,
+                content_sig = excluded.content_sig,
+                updated_at = excluded.updated_at
+            """,
+            (archive_name, file_size, modified, md5, sha256, content_sig, time.time()),
+        )
+
+
+def _delete_archive_fingerprint_from_db(archive_name: str) -> None:
+    _ensure_state_db()
+    with sqlite3.connect(STATE_DB_PATH) as conn:
+        conn.execute("DELETE FROM archive_fingerprints WHERE archive_name = ?", (archive_name,))
+
+
+def _cleanup_archive_fingerprint_db(existing_archive_names: List[str]) -> None:
+    _ensure_state_db()
+    keep = set(existing_archive_names)
+    with sqlite3.connect(STATE_DB_PATH) as conn:
+        rows = conn.execute("SELECT archive_name FROM archive_fingerprints").fetchall()
+        for (name,) in rows:
+            if name not in keep:
+                conn.execute("DELETE FROM archive_fingerprints WHERE archive_name = ?", (name,))
+
+
+_ensure_state_db()
 
 def _default_config() -> Dict:
     return {
@@ -578,6 +670,7 @@ def _list_media() -> Dict:
             )
 
     grouped_archives = _group_archives_for_ui(archives)
+    _cleanup_archive_fingerprint_db([a.get("primary_name", "") for a in grouped_archives if a.get("primary_name")])
     _attach_archive_duplicate_hints(grouped_archives)
 
     if extracted_folders:
@@ -729,8 +822,8 @@ def _attach_archive_duplicate_hints(archives: List[Dict]) -> None:
             continue
 
         stat = primary_path.stat()
-        cached = archive_fingerprint_cache.get(primary_name)
-        if cached and cached.get("size") == stat.st_size and cached.get("modified") == stat.st_mtime:
+        cached = _get_archive_fingerprint_from_db(primary_name, int(stat.st_size), float(stat.st_mtime))
+        if cached:
             md5 = cached.get("md5")
             sha256 = cached.get("sha256")
             content_sig = cached.get("content_sig")
@@ -743,14 +836,14 @@ def _attach_archive_duplicate_hints(archives: List[Dict]) -> None:
             md5 = _file_hash(primary_path, "md5") if has_same_size_peer else None
             sha256 = _file_hash(primary_path, "sha256") if has_same_size_peer else None
             content_sig = _archive_content_signature(primary_path) if has_same_size_peer else None
-
-            archive_fingerprint_cache[primary_name] = {
-                "size": stat.st_size,
-                "modified": stat.st_mtime,
-                "md5": md5,
-                "sha256": sha256,
-                "content_sig": content_sig,
-            }
+            _save_archive_fingerprint_to_db(
+                primary_name,
+                int(stat.st_size),
+                float(stat.st_mtime),
+                md5,
+                sha256,
+                content_sig,
+            )
 
         title_key = _normalized_archive_title(primary_name)
         if title_key:
@@ -867,6 +960,8 @@ def _extract_archive(path: Path, delete_archive: bool = True) -> Dict:
 
     if delete_archive:
         path.unlink(missing_ok=True)
+        archive_validation_cache.pop(path.name, None)
+        _delete_archive_fingerprint_from_db(path.name)
 
     _mark_folder_as_recently_extracted(target_dir.name)
 
@@ -1098,6 +1193,7 @@ def api_extract():
             for member in archive_members[1:]:
                 member.unlink(missing_ok=True)
                 archive_validation_cache.pop(member.name, None)
+                _delete_archive_fingerprint_from_db(member.name)
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{name}: {exc}")
 
@@ -1228,6 +1324,7 @@ def api_delete_archive():
     for target in targets:
         target.unlink(missing_ok=True)
         archive_validation_cache.pop(target.name, None)
+        _delete_archive_fingerprint_from_db(target.name)
     return jsonify({"deleted": normalized})
 
 

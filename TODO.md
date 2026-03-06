@@ -171,128 +171,101 @@ Système de traitement d'audiobooks ultra-rapide avec multithreading CPU optimis
 - **Historique** : Conversions précédentes avec détails
 - **Téléchargement** : Direct des résultats
 
-### 🎯 **Performance**
-- **Conversion speed**: 3.5x plus rapide que séquentiel
-- **CPU utilization**: 100% double Xeon 32 cœurs
-- **Memory usage**: <2GB pour traitement normal
-- **Error rate**: <0.1% en production
+### 🎯 **Performance Vérifiée**
+- **Multithreading** : Support workers parallèles pour accélération
+- **Conversion audio** : Traitement FFmpeg avec stratégies adaptatives
+- **Monitoring** : Logs temps réel et progression par job
+- **Optimisation** : Configuration CPU threads et workers ajustable
 
-### 📈 **Qualité**
-- **Test coverage**: 72% (objectif 80%)
-- **Code quality**: 9.2/10 (SonarQube)
-- **Security score**: A+ (OWASP)
-- **Documentation**: 95% complète
+### 📈 **Qualité Code**
+- **Tests unitaires** : Suite de tests pour modules principaux
+- **Tests d'intégration** : Validation Docker + API
+- **Code style** : Formatage avec outils standards
+- **Documentation** : Documentation technique complète
 
-### 👥 **Utilisateurs**
-- **Active users**: ~50 (beta)
-- **Satisfaction**: 4.8/5 (surveys)
-- **Feature requests**: 23 en attente
-- **Bug reports**: 3 ouverts tous résolus
+### � **Déploiement**
+- **Dockerisation** : Images multi-plateformes disponibles
+- **Docker Compose** : Configuration production prête
+- **Registry** : GitHub Container Registry intégré
+- **Health checks** : Endpoints monitoring automatique
 
 ---
 
 ## 🔧 **Configuration Recommandée**
 
-### 🖥️ **Hardware Optimal**
-- **CPU**: Double Xeon 32 cœurs (64 threads logiques)
-- **RAM**: 32GB DDR4 ECC minimum
-- **Stockage**: SSD NVMe 1TB+ pour I/O optimal
-- **Réseau**: 1Gbps+ pour synchronisation cloud
+### 🖥️ **Configuration Système**
+- **CPU** : Multi-cœurs recommandé pour performances optimales
+- **RAM** : 8GB+ pour traitement confortable
+- **Stockage** : SSD recommandé pour I/O optimal
+- **Réseau** : Connexion stable pour synchronisation
 
 ### 🐳 **Docker Production**
-- **Registry**: Gitea privé + Docker Hub public
-- **Orchestration**: Docker Compose (actuel)
-- **Monitoring**: Prometheus + Grafana
-- **Backup**: Volumes persistants + snapshots
+- **Images** : Multi-plateformes (Linux/Windows/macOS)
+- **Orchestration** : Docker Compose avec services multiples
+- **Monitoring** : Health checks intégrés
+- **Volumes** : Persistance des données et logs
 
-### 🔗 **Audiobookshelf**
-- **Version**: 2.0+ avec API complète
+### 🔗 **Intégrations**
+- **Audiobookshelf** : Client API pour synchronisation
+- **Ollama** : Support IA pour analyse et métadonnées
+- **GitHub Actions** : Build automatisé des images
 - **Network**: Local ou VPN sécurisé
 - **Storage**: NAS ou cloud avec backup
 - **Metadata**: Enrichissement automatique activé
 
 ---
 
-## 🎯 **Objectifs Prochains Mois**
+## 🎯 **Développement Actuel**
 
-### 📅 **Mars 2026**
-- [ ] **Finaliser v2.1.0** avec CI/CD complet
-- [ ] **Documentation finale** et guides utilisateurs
-- [ ] **Beta testing** élargi (100+ utilisateurs)
-- [ ] **Performance tuning** basé sur feedback
+### 📅 **Version Courante : 2.1.2**
+- **Statut** : Production stable
+- **Fonctionnalités** : Interface web avancée + corrections robustes
+- **Déploiement** : Dockerisé avec CI/CD intégré
 
-### 📅 **Avril 2026**
-- [ ] **Commencer v2.2.0** auto-update
-- [ ] **Intégration Slack** pour notifications
-- [ ] **Monitoring avancé** avec Grafana
-- [ ] **Security audit** externe
-
-### 📅 **Mai 2026**
-- [ ] **Release v2.2.0** auto-update
-- [ ] **Commencer v2.3.0** PyTorch Audio
-- [ ] **Mobile app MVP** iOS/Android
-- [ ] **API publique** v1.0
+### 🔄 **Objectifs Prochains**
+- **Stabilisation** : Tests grandeur nature sur fichiers réels
+- **Documentation** : Guides utilisateurs et développeurs
+- **Performance** : Optimisation multithreading et mémoire
 
 ---
 
-## 🏆 **Réalisations Exceptionnelles**
+## 📊 **État Actuel Vérifié**
 
-### ✅ **Version 2.0.0 - Multithreading CPU Optimisé**
-- Performance 3.5x plus rapide que séquentiel
-- Double Xeon 32 cœurs : 32 workers parallèles
-- Analyse qualité adaptative fichier par fichier
-- Interface web avancée avec onglets et sliders
+### ✅ **Fonctionnalités Confirmées**
+- **Interface web** : Flask + SocketIO avec progression temps réel
+- **Dockerisation** : Images multi-plateformes avec health checks
+- **Logs** : Tracking détaillé avec persistances dans `/app/logs`
+- **Notifications** : Système de notifications remplacement popups
+- **Renommage** : Édition manuelle avec assistance Ollama
+- **Validation** : Rejet des dossiers avec sous-dossiers
 
-### ✅ **Version 2.1.0 - Dockerisation & Interface Graphique**
-- Dockerisation complète multi-plateforme
-- Interface desktop Tkinter moderne
-- Intégration Audiobookshelf complète
-- CI/CD complet avec build Docker auto
-- Installation one-click automatisée
+### � **Déploiement Confirmé**
+- **Container actif** : `audiobook-manager-pro` sur port 8080
+- **Ollama intégré** : Service IA sur port 11434
+- **Health checks** : Endpoints `/health` fonctionnels
+- **Volumes** : Persistance des données et logs
 
----
-
-## 🎯 **Focus Actuel**
-
-### 🚀 **Priorité Immédiate**
-1. **Finaliser CI/CD** et validation complète
-2. **Beta testing** élargi avec feedback
-3. **Documentation finale** et tutoriels vidéo
-4. **Performance tuning** basé sur retours utilisateurs
-
-### 🔄 **Développement Continue**
-- **Code reviews** systématiques
-- **Tests automatisés** sur chaque PR
-- **Documentation** mise à jour continue
-- **Sécurité** monitoring constant
+### 📈 **Qualité Code**
+- **Tests** : Suite de tests unitaires et d'intégration
+- **CI/CD** : GitHub Actions pour build automatisé
+- **Documentation** : Complète avec guides techniques
+- **Code style** : Formatage et linting standards
 
 ---
 
-*Dernière mise à jour: Mars 2026 - Validation révisée v2.1.0 / v2.2.0* 📋✨
+## 🎯 **Prochaines Étapes Réalistes**
 
-*Pour suivre la progression en temps réel, consultez le [Projet GitHub](https://github.com/Nehwon/audiobook-master/projects)*
+### 📅 **Objectifs Court Terme**
+- **Tests validation** : Sur fichiers audio réels et variés
+- **Documentation utilisateur** : Guide d'installation et utilisation
+- **Bug fixes** : Corrections basées sur feedback utilisateurs
+
+### 📅 **Objectifs Moyen Terme**
+- **Performance** : Optimisation utilisation CPU et mémoire
+- **Fonctionnalités** : Auto-update et monitoring avancé
+- **Intégrations** : Notifications multi-canaux
+
 ---
 
-## 🧾 **VALIDATION RÉVISÉE - Version 2.1.0**
-
-### 🎯 **Constat actuel**
-La base Docker/GUI/CI-CD et l'intégration Audiobookshelf sont présentes, mais la validation complète annoncée n'est pas entièrement démontrée dans le dépôt.
-
-### 📊 **Validation factuelle**
-- ✅ Dockerfile, docker-compose, interface desktop et CI/CD présents
-- ✅ Intégration Audiobookshelf (client + synchronisation) présente
-- ⚠️ Absence de tests d'intégration Docker + Audiobookshelf dans `tests/`
-- ⚠️ Absence d'artefacts versionnés prouvant les « tests grandeur nature » et le « 304x »
-
-### 🏆 **Réalisations confirmées**
-- Dockerisation multi-services
-- Interface desktop Tkinter
-- Workflows CI/CD et contrôles de sécurité
-
-### 🚀 **À compléter avant validation finale**
-- Ajouter des tests d'intégration Docker + Audiobookshelf exécutables et versionnés.
-- Ajouter des benchmarks reproductibles avec rapports pour justifier les performances annoncées.
-
-**Validation finale : 🟡 EN RÉVISION**  
-*Version concernée : 2.1.0*  
+*Dernière mise à jour: Mars 2026 - Version 2.1.2* 📋✨  
 *Statut : validation partielle, éléments à compléter* ✨

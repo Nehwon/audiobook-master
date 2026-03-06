@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import re
@@ -15,6 +16,7 @@ import urllib.error
 import urllib.request
 import zipfile
 from dataclasses import asdict, dataclass, field
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -56,6 +58,37 @@ job_queue: "queue.Queue[str]" = queue.Queue()
 jobs: Dict[str, Job] = {}
 review_bin: List[Dict] = []
 worker_started = False
+MAX_JOB_EVENTS = 500
+job_events: List[Dict] = []
+
+
+def _setup_logging() -> logging.Logger:
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("audiobook.web")
+    if logger.handlers:
+        return logger
+
+    level_name = os.getenv("AUDIOBOOK_LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logger.setLevel(level)
+
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+
+    file_handler = RotatingFileHandler(TEMP_DIR / "web_debug.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(level)
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    stream_handler.setLevel(level)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+    logger.propagate = False
+    return logger
+
+
+logger = _setup_logging()
 
 
 def _default_config() -> Dict:
@@ -558,6 +591,30 @@ def _guess_output_file(folder_name: str, start_time: float) -> Optional[str]:
     return candidates[0].name if candidates else None
 
 
+def _push_job_event(job_id: str, folder: str, stage: str, message: str, level: str = "info") -> None:
+    event = {
+        "timestamp": time.time(),
+        "job_id": job_id,
+        "folder": folder,
+        "stage": stage,
+        "message": message,
+        "level": level,
+    }
+    with jobs_lock:
+        job_events.append(event)
+        if len(job_events) > MAX_JOB_EVENTS:
+            del job_events[: len(job_events) - MAX_JOB_EVENTS]
+
+    log_fn = logger.info
+    if level == "error":
+        log_fn = logger.error
+    elif level == "warning":
+        log_fn = logger.warning
+    elif level == "debug":
+        log_fn = logger.debug
+    log_fn("[%s] %s - %s", job_id, stage, message)
+
+
 def _worker_loop() -> None:
     while True:
         job_id = job_queue.get()
@@ -569,11 +626,22 @@ def _worker_loop() -> None:
             job.stage = "Préparation"
             job.progress = 5
             job.started_at = time.time()
+            _push_job_event(job.id, job.folder, job.stage, "Job démarré")
 
         try:
             folder_path = MEDIA_DIR / job.folder
             if not folder_path.exists() or not folder_path.is_dir():
                 raise FileNotFoundError(f"Dossier introuvable: {job.folder}")
+
+            audio_files = _count_audio_files(folder_path)
+            folder_size_mb = _folder_size(folder_path) / 1024 / 1024
+            _push_job_event(
+                job.id,
+                job.folder,
+                "Analyse",
+                f"Dossier prêt: {audio_files} fichier(s) audio, {folder_size_mb:.1f} MB",
+                "debug",
+            )
 
             processor = AudiobookProcessor(str(MEDIA_DIR), str(OUTPUT_DIR), str(TEMP_DIR))
             processor.config = _build_processing_config()
@@ -581,6 +649,7 @@ def _worker_loop() -> None:
             with jobs_lock:
                 job.stage = "Conversion"
                 job.progress = 30
+                _push_job_event(job.id, job.folder, job.stage, "Conversion démarrée")
 
             success = processor.process_audiobook(folder_path)
 
@@ -590,11 +659,19 @@ def _worker_loop() -> None:
                     job.stage = "Terminé"
                     job.progress = 100
                     job.output_file = _guess_output_file(job.folder, job.started_at or time.time())
+                    _push_job_event(job.id, job.folder, job.stage, f"Succès. Fichier: {job.output_file or 'inconnu'}")
                 else:
                     job.status = "failed"
                     job.stage = "Erreur"
                     job.error = "Échec conversion"
                     job.progress = 100
+                    _push_job_event(
+                        job.id,
+                        job.folder,
+                        job.stage,
+                        "Le processeur a renvoyé False sans exception (voir web_debug.log et logs du processor).",
+                        "error",
+                    )
                 job.ended_at = time.time()
         except Exception as exc:  # noqa: BLE001
             with jobs_lock:
@@ -603,6 +680,7 @@ def _worker_loop() -> None:
                 job.error = str(exc)
                 job.progress = 100
                 job.ended_at = time.time()
+                _push_job_event(job.id, job.folder, job.stage, f"Exception: {exc}", "error")
         finally:
             job_queue.task_done()
 
@@ -770,7 +848,19 @@ def api_jobs():
     running = sorted([j for j in values if j["status"] == "running"], key=sort_key)
     done = sorted([j for j in values if j["status"] in {"completed", "failed"}], key=sort_key, reverse=True)
 
-    return jsonify({"pending": pending, "running": running, "done": done, "review": review_bin})
+    return jsonify({"pending": pending, "running": running, "done": done, "review": review_bin, "events": job_events[-100:]})
+
+
+@app.route("/api/logs")
+def api_logs_tail():
+    lines = int(request.args.get("lines", 80))
+    lines = min(max(lines, 10), 300)
+    log_file = TEMP_DIR / "web_debug.log"
+    if not log_file.exists():
+        return jsonify({"lines": [], "path": str(log_file)})
+
+    content = log_file.read_text(encoding="utf-8", errors="ignore").splitlines()
+    return jsonify({"lines": content[-lines:], "path": str(log_file)})
 
 
 @app.route("/api/jobs/review", methods=["POST"])

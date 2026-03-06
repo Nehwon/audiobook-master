@@ -110,6 +110,12 @@
         <div class="card"><h3>En attente</h3><div id="pendingList"></div></div>
         <div class="card"><h3>En cours</h3><div id="runningList"></div></div>
         <div class="card"><h3>Terminés</h3><div id="doneList"></div></div>
+        <div class="card"><h3>Suivi traitement (temps réel)</h3><div id="liveEvents" class="muted">Aucun événement.</div></div>
+        <div class="card">
+            <h3>Logs debug backend (web)</h3>
+            <div class="row" style="margin-bottom:8px"><button class="secondary" onclick="loadDebugLogs()">Rafraîchir logs</button></div>
+            <pre id="debugLogs" style="white-space:pre-wrap;max-height:260px;overflow:auto;background:var(--bg);border:1px solid var(--border);padding:8px;border-radius:8px" class="muted">Chargement...</pre>
+        </div>
     </section>
 
     <section id="page-review" class="page">
@@ -451,11 +457,35 @@ function renderJobs(containerId, jobs, withActions=false){
       </div>`).join('');
 }
 
+function renderEvents(items){
+    const c = document.getElementById('liveEvents');
+    if (!c) return;
+    if (!items?.length) { c.innerHTML = '<p class="muted">Aucun événement.</p>'; return; }
+    c.innerHTML = items.slice().reverse().map(e => {
+        const when = new Date((e.timestamp || 0) * 1000).toLocaleTimeString();
+        const lvl = e.level === 'error' ? '❌' : (e.level === 'warning' ? '⚠️' : 'ℹ️');
+        return `<div style="border-bottom:1px solid var(--border);padding:6px 0;">${lvl} <strong>${when}</strong> [${e.stage || '-'}] <strong>${e.folder || '-'}</strong><br><span class="muted">${e.message || ''}</span></div>`;
+    }).join('');
+}
+
+async function loadDebugLogs(){
+    const pre = document.getElementById('debugLogs');
+    if (!pre) return;
+    try {
+        const data = await api('/api/logs?lines=120');
+        pre.textContent = (data.lines || []).join('\n') || 'Aucun log debug pour le moment.';
+        pre.scrollTop = pre.scrollHeight;
+    } catch (err) {
+        pre.textContent = `Impossible de charger les logs: ${err.message || err}`;
+    }
+}
+
 async function loadJobs(){
     const data = await api('/api/jobs');
     renderJobs('pendingList', data.pending);
     renderJobs('runningList', data.running);
     renderJobs('doneList', data.done, true);
+    renderEvents(data.events || []);
 
     const review = document.getElementById('reviewList');
     if (!data.review.length) review.innerHTML = '<p class="muted">Aucune entrée.</p>';
@@ -616,7 +646,9 @@ loadLibrary();
 loadJobs();
 loadConfig();
 loadOllamaStatus();
+loadDebugLogs();
 setInterval(loadJobs, 5000);
+setInterval(loadDebugLogs, 8000);
 </script>
 </body>
 </html>

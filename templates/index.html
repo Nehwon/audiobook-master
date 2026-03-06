@@ -92,6 +92,7 @@
 <div class="tabs">
     <button class="tab active" data-page="library">Bibliothèque</button>
     <button class="tab" data-page="processing">Traitements</button>
+    <button class="tab" data-page="submission">Soumission</button>
     <button class="tab config-tab" data-page="config">Configuration</button>
 </div>
 <main>
@@ -131,11 +132,28 @@
         <div class="card"><h3>En cours</h3><div id="runningList"></div></div>
         <div class="card"><h3>Terminés</h3><div id="doneList"></div></div>
         <div class="card"><h3>En attente de suppression / retraitement</h3><div id="reviewList"></div></div>
-        <div class="card"><h3>Suivi traitement (temps réel)</h3><div id="liveEvents" class="muted events-scroll">Aucun événement.</div></div>
-        <div class="card">
+        <div id="liveTrackingCard" class="card" style="display:none"><h3>Suivi traitement (temps réel)</h3><div id="liveEvents" class="muted events-scroll">Aucun événement.</div></div>
+        <div id="debugLogsCard" class="card" style="display:none">
             <h3>Logs debug backend (web)</h3>
             <div class="row" style="margin-bottom:8px"><button class="secondary" onclick="loadDebugLogs()">Rafraîchir logs</button></div>
             <pre id="debugLogs" style="white-space:pre-wrap;max-height:260px;overflow:auto;background:var(--bg);border:1px solid var(--border);padding:8px;border-radius:8px" class="muted">Chargement...</pre>
+        </div>
+    </section>
+
+
+
+    <section id="page-submission" class="page">
+        <div class="card">
+            <div class="row">
+                <button onclick="loadSubmissionQueue()">Rafraîchir</button>
+            </div>
+        </div>
+        <div class="card">
+            <h3>Fichiers M4B en attente de migration vers Audiobookshelf</h3>
+            <table>
+                <thead><tr><th>Fichier</th><th>Taille MB</th><th>Créé le</th><th>Actions</th></tr></thead>
+                <tbody id="submissionBody"></tbody>
+            </table>
         </div>
     </section>
 
@@ -151,6 +169,25 @@
                 <label><input id="cfgComp" type="checkbox" checked> Compresseur</label>
                 <label><input id="cfgAutoExtract" type="checkbox"> Auto-décompresser les archives</label>
                 <button onclick="saveConfig()">Sauvegarder</button>
+            </div>
+        </div>
+        <div class="card">
+            <h3>Visibilité des blocs dans Traitements</h3>
+            <div class="row">
+                <label><input id="cfgShowLiveTracking" type="checkbox"> Afficher "Suivi traitement (temps réel)"</label>
+                <label><input id="cfgShowDebugLogs" type="checkbox"> Afficher "Logs debug backend (web)"</label>
+            </div>
+            <p class="muted">Ces options sont désactivées par défaut.</p>
+        </div>
+        <div class="card">
+            <h3>Connexion Audiobookshelf (serveur distant)</h3>
+            <div class="row">
+                <label>URL serveur <input id="cfgAbsServerUrl" type="url" placeholder="https://audiobookshelf.example.com"></label>
+                <label>Login <input id="cfgAbsUsername" placeholder="utilisateur"></label>
+                <label>Mot de passe <input id="cfgAbsPassword" type="password" placeholder="mot de passe"></label>
+            </div>
+            <div class="row" style="margin-top:8px">
+                <label>API Key <input id="cfgAbsApiKey" placeholder="clé API Audiobookshelf"></label>
             </div>
         </div>
         <div class="card">
@@ -255,6 +292,7 @@ function setRenameBusy(isBusy){
 }
 
 function fmtMb(v){ return (v/1024/1024).toFixed(1); }
+function fmtDateTime(ts){ if(!ts) return '-'; const d = new Date(ts * 1000); return Number.isNaN(d.getTime()) ? '-' : d.toLocaleString(); }
 function selectedValues(name){ return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value); }
 function escapeHtml(value){
     return String(value)
@@ -644,6 +682,45 @@ function renderJobs(containerId, jobs, withActions=false){
     }).join('');
 }
 
+function renderSubmissionQueue(files){
+    const body = document.getElementById('submissionBody');
+    if (!body) return;
+    if (!files?.length) {
+        body.innerHTML = '<tr><td colspan="4" class="muted">Aucun fichier M4B en attente.</td></tr>';
+        return;
+    }
+    body.innerHTML = files.map(file => `
+        <tr>
+            <td>${escapeHtml(file.name || '-')}</td>
+            <td>${fmtMb(file.size || 0)}</td>
+            <td>${fmtDateTime(file.created)}</td>
+            <td class="row">
+                <button class="secondary" onclick="window.open('/api/download/${encodeURIComponent(file.name)}','_blank')">Télécharger</button>
+                <button class="secondary" onclick="window.open('/api/stream/${encodeURIComponent(file.name)}','_blank')">Écouter</button>
+            </td>
+        </tr>`).join('');
+}
+
+async function loadSubmissionQueue(){
+    try {
+        const files = await api('/api/outputs');
+        renderSubmissionQueue(files || []);
+    } catch (err) {
+        const body = document.getElementById('submissionBody');
+        if (body) body.innerHTML = `<tr><td colspan="4" class="muted">Impossible de charger la file de soumission: ${escapeHtml(err.message || String(err))}</td></tr>`;
+    }
+}
+
+function applyProcessingPanelsVisibility(config){
+    const liveCard = document.getElementById('liveTrackingCard');
+    const logsCard = document.getElementById('debugLogsCard');
+    const showLive = !!config?.show_live_processing_tracking;
+    const showLogs = !!config?.show_backend_debug_logs;
+    if (liveCard) liveCard.style.display = showLive ? '' : 'none';
+    if (logsCard) logsCard.style.display = showLogs ? '' : 'none';
+    if (showLogs) loadDebugLogs();
+}
+
 function renderEvents(items){
     const c = document.getElementById('liveEvents');
     if (!c) return;
@@ -789,6 +866,13 @@ async function loadConfig(){
     cfgBitrate.value = c.bitrate; cfgRate.value = c.sample_rate; cfgMode.value = c.processing_mode;
     cfgGpu.checked = c.enable_gpu; cfgLoud.checked = c.enable_loudnorm; cfgComp.checked = c.enable_compressor;
     cfgAutoExtract.checked = c.auto_extract_archives;
+    cfgShowLiveTracking.checked = !!c.show_live_processing_tracking;
+    cfgShowDebugLogs.checked = !!c.show_backend_debug_logs;
+    cfgAbsServerUrl.value = c.audiobookshelf_server_url || "";
+    cfgAbsUsername.value = c.audiobookshelf_username || "";
+    cfgAbsPassword.value = c.audiobookshelf_password || "";
+    cfgAbsApiKey.value = c.audiobookshelf_api_key || "";
+    applyProcessingPanelsVisibility(c);
     ollamaEnabled.checked = c.ollama_enabled;
     ollamaModel.value = c.ollama_model || "";
     ollamaExtractModel.value = c.ollama_extract_model || "";
@@ -816,8 +900,18 @@ async function saveConfig(){
         enable_gpu: cfgGpu.checked,
         enable_loudnorm: cfgLoud.checked,
         enable_compressor: cfgComp.checked,
-        auto_extract_archives: cfgAutoExtract.checked
+        auto_extract_archives: cfgAutoExtract.checked,
+        show_live_processing_tracking: cfgShowLiveTracking.checked,
+        show_backend_debug_logs: cfgShowDebugLogs.checked,
+        audiobookshelf_server_url: cfgAbsServerUrl.value.trim(),
+        audiobookshelf_username: cfgAbsUsername.value.trim(),
+        audiobookshelf_password: cfgAbsPassword.value,
+        audiobookshelf_api_key: cfgAbsApiKey.value.trim()
     })});
+    applyProcessingPanelsVisibility({
+        show_live_processing_tracking: cfgShowLiveTracking.checked,
+        show_backend_debug_logs: cfgShowDebugLogs.checked
+    });
     notify('Configuration sauvegardée.', 'success');
 }
 
@@ -856,10 +950,13 @@ setupTheme();
 loadLibrary();
 loadJobs();
 loadConfig();
+loadSubmissionQueue();
 loadOllamaStatus();
-loadDebugLogs();
 setInterval(() => loadJobs({forceDoneRefresh: false}), 5000);
-setInterval(loadDebugLogs, 8000);
+setInterval(() => {
+    const card = document.getElementById('debugLogsCard');
+    if (card && card.style.display !== 'none') loadDebugLogs();
+}, 8000);
 </script>
 </body>
 </html>

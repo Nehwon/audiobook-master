@@ -288,8 +288,6 @@ class TestMainTargetedCoverage(unittest.TestCase):
         mock_processor = MagicMock()
         mock_processor.process_all.return_value = {'success': 1, 'failed': 0, 'skipped': 0}
         mock_processor_class.return_value = mock_processor
-        
-        # Mock sys.argv
         with patch('sys.argv', ['main.py', '--source', str(self.source_dir), '--output', str(self.output_dir)]):
             main()
             
@@ -301,7 +299,8 @@ class TestMainTargetedCoverage(unittest.TestCase):
     @patch('shutil.which')
     @patch('core.main.AudiobookProcessor')
     @patch('core.main.ProcessingConfig')
-    def test_main_upload_enabled(self, mock_config_class, mock_processor_class, mock_which, mock_exit):
+    @patch('core.main.AudiobookshelfClient')
+    def test_main_upload_enabled(self, mock_abs_client_class, mock_config_class, mock_processor_class, mock_which, mock_exit):
         """Test avec upload activé"""
         # Mock des dépendances
         mock_which.return_value = '/usr/bin/ffmpeg'
@@ -314,7 +313,6 @@ class TestMainTargetedCoverage(unittest.TestCase):
         mock_processor = MagicMock()
         mock_processor.process_all.return_value = {'success': 1, 'failed': 0, 'skipped': 0}
         mock_processor_class.return_value = mock_processor
-        
         # Mock sys.argv
         with patch('sys.argv', ['main.py', '--source', str(self.source_dir), '--upload']):
             main()
@@ -338,7 +336,6 @@ class TestMainTargetedCoverage(unittest.TestCase):
         mock_processor = MagicMock()
         mock_processor.process_all.return_value = {'success': 1, 'failed': 0, 'skipped': 0}
         mock_processor_class.return_value = mock_processor
-        
         # Mock sys.argv
         with patch('sys.argv', ['main.py', '--source', str(self.source_dir), '--upload']):
             main()

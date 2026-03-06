@@ -29,7 +29,8 @@ class TestMainExtendedCoverage(unittest.TestCase):
     @patch('shutil.which')
     @patch('core.main.AudiobookProcessor')
     @patch('core.main.ProcessingConfig')
-    def test_main_upload_enabled(self, mock_config_class, mock_processor_class, mock_which, mock_exit):
+    @patch('core.main.AudiobookshelfClient')
+    def test_main_upload_enabled(self, mock_abs_client_class, mock_config_class, mock_processor_class, mock_which, mock_exit):
         """Test l'upload vers Audiobookshelf activé"""
         # Mock des dépendances
         mock_which.return_value = '/usr/bin/ffmpeg'
@@ -40,7 +41,10 @@ class TestMainExtendedCoverage(unittest.TestCase):
         mock_processor = MagicMock()
         mock_processor.process_all.return_value = {'success': 1, 'failed': 0, 'skipped': 0}
         mock_processor_class.return_value = mock_processor
-        
+        mock_abs_client = MagicMock()
+        mock_abs_client.token = 'token'
+        mock_abs_client.get_libraries.return_value = [{'id': 'lib1'}]
+        mock_abs_client_class.return_value = mock_abs_client
         # Mock sys.argv
         with patch('sys.argv', ['main.py', '--source', str(self.source_dir), '--upload']):
             main()
@@ -64,7 +68,6 @@ class TestMainExtendedCoverage(unittest.TestCase):
         mock_processor = MagicMock()
         mock_processor.process_all.return_value = {'success': 1, 'failed': 0, 'skipped': 0}
         mock_processor_class.return_value = mock_processor
-        
         # Mock sys.argv
         with patch('sys.argv', ['main.py', '--source', str(self.source_dir), '--upload']):
             main()
@@ -277,7 +280,6 @@ class TestMainExtendedCoverage(unittest.TestCase):
         mock_processor = MagicMock()
         mock_processor.process_all.return_value = {'success': 1, 'failed': 0, 'skipped': 0}
         mock_processor_class.return_value = mock_processor
-        
         # Mock sys.argv
         with patch('sys.argv', ['main.py', '--source', str(self.source_dir)]):
             # Le test vérifie juste que le code s'exécute sans erreur

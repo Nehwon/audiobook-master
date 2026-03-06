@@ -15,6 +15,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
 from .processor import AudiobookProcessor, AudiobookMetadata
 from .config import ProcessingConfig
+from integrations.audiobookshelf import AudiobookshelfClient, AudiobookshelfConfig
 
 # Configuration du logging
 logging.basicConfig(
@@ -277,53 +278,58 @@ def main():
     # Upload vers Audiobookshelf si demandé
     if args.upload and config.enable_upload and not args.dry_run:
         logger.info("Upload vers Audiobookshelf...")
-        
+
         if not config.audiobookshelf_host:
             logger.error("Configuration Audiobookshelf manquante")
             logger.error("Configurez les variables d'environnement ou le fichier de configuration")
             sys.exit(1)
             return
-        
-        # TODO: Implémenter l'intégration Audiobookshelf
-        logger.warning("Intégration Audiobookshelf non implémentée")
-        """
-        # Configuration du client
+
         abs_config = AudiobookshelfConfig(
             host=config.audiobookshelf_host,
             port=config.audiobookshelf_port,
             username=config.audiobookshelf_username,
             password=config.audiobookshelf_password
         )
-        
         client = AudiobookshelfClient(abs_config)
-        
-        # Récupération des bibliothèques
+
+        if not client.token and not client.authenticate():
+            logger.error("Impossible de s'authentifier auprès d'Audiobookshelf")
+            sys.exit(1)
+            return
+
         libraries = client.get_libraries()
         if not libraries:
             logger.error("Aucune bibliothèque trouvée sur Audiobookshelf")
             sys.exit(1)
-        
-        # Upload des fichiers traités
-        output_path = Path(config.output_directory)
-        library_id = libraries[0]['id']  # Utilise la première bibliothèque
-        
-        upload_count = 0
-        for m4b_file in output_path.glob('*.m4b'):
-            # Métadonnées basiques (à améliorer)
-            metadata = {
-                'title': m4b_file.stem.split(' - ')[-1] if ' - ' in m4b_file.stem else m4b_file.stem,
-                'author': m4b_file.stem.split(' - ')[0] if ' - ' in m4b_file.stem else 'Inconnu'
-            }
-            
-            if client.upload_audiobook(m4b_file, library_id, metadata):
-                upload_count += 1
-        
-        logger.info(f"✅ {upload_count} fichiers uploadés sur Audiobookshelf")
-        
-        # Déclenchement du scan
-        if upload_count > 0:
-            client.scan_library(library_id)
-        """
+            return
+
+        library_id = str(libraries[0].get('id', ''))
+        if not library_id:
+            logger.error("Identifiant de bibliothèque Audiobookshelf invalide")
+            sys.exit(1)
+            return
+
+        output_path = pathlib.Path(config.output_directory)
+        m4b_files = sorted(output_path.glob('*.m4b'))
+
+        if not m4b_files:
+            logger.warning("Aucun fichier .m4b trouvé pour l'upload")
+        else:
+            upload_count = 0
+            for m4b_file in m4b_files:
+                metadata = {
+                    'title': m4b_file.stem.split(' - ')[-1] if ' - ' in m4b_file.stem else m4b_file.stem,
+                    'author': m4b_file.stem.split(' - ')[0] if ' - ' in m4b_file.stem else 'Inconnu'
+                }
+
+                if client.upload_audiobook(m4b_file, library_id, metadata):
+                    upload_count += 1
+
+            logger.info(f"✅ {upload_count}/{len(m4b_files)} fichiers uploadés sur Audiobookshelf")
+
+            if upload_count > 0:
+                client.scan_library(library_id)
     
     logger.info("Traitement terminé!")
 

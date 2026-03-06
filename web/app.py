@@ -73,9 +73,13 @@ def _default_config() -> Dict:
         "ollama_extract_model": "nuextract",
         "ollama_default_prompt": (
             "Tu es un agent de métadonnées audiobook. À partir du nom de dossier '{folder_name}', "
-            "propose une stratégie de recherche web et retourne UNIQUEMENT un JSON valide avec les clés: "
-            "title, author, confidence, search_query, source_url, notes. "
-            "Si l'information est incertaine, laisse source_url vide et explique dans notes."
+            "retourne UNIQUEMENT un JSON valide avec les clés: title, author, series, volume, confidence, "
+            "search_query, source_url, notes. Commence par inférer localement depuis le nom; "
+            "si un élément critique manque (ex: volume absent), alors lance une recherche web avec les MCP tools "
+            "et vérifie sur des sources éditoriales fiables (éditeur, Goodreads, OpenLibrary, sites libraires). "
+            "Exemple: 'T. Kingfisher - Nettle and Bone. Comment tuer un prince' => auteur=T. Kingfisher, "
+            "série=Nettle and Bone, titre=Comment tuer un prince; vérifier si la série existe et trouver le numéro "
+            "de volume correspondant. Si introuvable, laisser volume vide et expliquer dans notes."
         ),
         "ollama_mcp_tools": json.dumps(
             [
@@ -93,6 +97,11 @@ def _default_config() -> Dict:
                     "name": "extract_metadata",
                     "description": "Extraction structurée title/author/series/narrator en JSON",
                     "input_schema": {"content": "string", "template": "json"},
+                },
+                {
+                    "name": "mcp_web_lookup",
+                    "description": "Tool MCP externe pour recherche internet quand la déduction locale est insuffisante",
+                    "input_schema": {"query": "string", "need": "string"},
                 },
             ],
             ensure_ascii=False,
@@ -372,18 +381,12 @@ def _guess_author_with_ollama(title_hint: str) -> Optional[str]:
     return author
 
 
-def _smart_rename(folder: str) -> str:
-    """Transforme un nom de dossier en format lisible pour les audiobooks."""
+def _smart_rename_local(folder: str) -> str:
+    """Transforme un nom de dossier via heuristiques locales uniquement."""
     cleaned = _clean_name(folder)
-
-    ollama_name = _rename_from_ollama(folder, _load_config())
-    if ollama_name:
-        return ollama_name
-
     parts = [p.strip() for p in re.split(r"\s+-\s+", cleaned) if p.strip()]
 
     if len(parts) == 2 and re.search(r",", parts[0]):
-        # Cas: "Titre - Auteur"
         return f"{parts[1]} - {parts[0]}"
 
     if len(parts) == 2:
@@ -426,13 +429,28 @@ def _smart_rename(folder: str) -> str:
 
         return f"{author} - {series_block} - {book}"
 
+    return cleaned
+
+
+def _smart_rename(folder: str) -> str:
+    """Transforme un nom de dossier; Ollama seulement en dernier recours."""
+    local_name = _smart_rename_local(folder)
+    cleaned = _clean_name(folder)
+
+    if local_name != cleaned:
+        return local_name
+
     compact_vol = re.match(r"^(?P<title>.+?)\s+(?P<volume>\d+)$", cleaned)
     if compact_vol:
         author = _guess_author_with_ollama(compact_vol.group("title"))
         if author:
             return f"{author} - {compact_vol.group('title')} - Vol {int(compact_vol.group('volume'))}"
 
-    return cleaned
+    ollama_name = _rename_from_ollama(folder, _load_config())
+    if ollama_name:
+        return ollama_name
+
+    return local_name
 
 
 def _count_audio_files(path: Path) -> int:

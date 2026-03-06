@@ -24,7 +24,7 @@ import rarfile
 from flask import Flask, jsonify, render_template, request, send_file
 
 from core.config import ProcessingConfig
-from core.processor import AudiobookProcessor
+from core.processor import AudiobookProcessor, PROCESSOR_LOG_PATH
 
 app = Flask(__name__, template_folder="../templates")
 app.config["SECRET_KEY"] = "audiobook_manager_2024"
@@ -32,6 +32,8 @@ app.config["SECRET_KEY"] = "audiobook_manager_2024"
 MEDIA_DIR = Path(os.getenv("AUDIOBOOK_MEDIA_DIR", os.getenv("SOURCE_DIR", "/app/data/source")))
 OUTPUT_DIR = Path(os.getenv("AUDIOBOOK_OUTPUT_DIR", os.getenv("OUTPUT_DIR", "/app/data/output")))
 TEMP_DIR = Path(os.getenv("AUDIOBOOK_TEMP_DIR", os.getenv("TEMP_DIR", "/tmp/audiobooks_web")))
+LOG_DIR = Path(os.getenv("AUDIOBOOK_LOG_DIR", os.getenv("LOG_DIR", "/app/logs")))
+WEB_DEBUG_LOG_PATH = LOG_DIR / "web_debug.log"
 CONFIG_PATH = TEMP_DIR / "web_config.json"
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
 
@@ -64,6 +66,7 @@ job_events: List[Dict] = []
 
 def _setup_logging() -> logging.Logger:
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("audiobook.web")
     if logger.handlers:
         return logger
@@ -74,7 +77,7 @@ def _setup_logging() -> logging.Logger:
 
     formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 
-    file_handler = RotatingFileHandler(TEMP_DIR / "web_debug.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+    file_handler = RotatingFileHandler(WEB_DEBUG_LOG_PATH, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
     file_handler.setFormatter(formatter)
     file_handler.setLevel(level)
 
@@ -669,7 +672,7 @@ def _worker_loop() -> None:
                         job.id,
                         job.folder,
                         job.stage,
-                        "Le processeur a renvoyé False sans exception (voir web_debug.log et logs du processor).",
+                        f"Le processeur a renvoyé False sans exception (web: {WEB_DEBUG_LOG_PATH}, processor: {PROCESSOR_LOG_PATH}).",
                         "error",
                     )
                 job.ended_at = time.time()
@@ -855,7 +858,7 @@ def api_jobs():
 def api_logs_tail():
     lines = int(request.args.get("lines", 80))
     lines = min(max(lines, 10), 300)
-    log_file = TEMP_DIR / "web_debug.log"
+    log_file = WEB_DEBUG_LOG_PATH
     if not log_file.exists():
         return jsonify({"lines": [], "path": str(log_file)})
 

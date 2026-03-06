@@ -97,8 +97,8 @@
         <div class="card">
             <div class="row">
                 <button onclick="loadLibrary()">Rafraîchir</button>
-                <button class="secondary" onclick="extractSelected()">Décompresser sélection</button>
-                <label><input id="deleteArchiveAfter" type="checkbox"> Supprimer archive après extraction</label>
+                <button class="secondary" onclick="validateSelectedArchives()">Valider sélection</button>
+                <button class="secondary" onclick="extractSelected()">Extraire sélection</button>
                 <button id="renameSelectedBtn" class="secondary" onclick="renameSelected()">Renommage batch</button>
                 <button onclick="enqueueSelected()">Ajouter sélection à la queue M4B</button>
                 <button class="secondary" onclick="searchSelectedWithLlm()">Recherche LLM sélection</button>
@@ -114,7 +114,7 @@
         <div class="card">
             <h3>Archives à la racine /app/data/source</h3>
             <table>
-                <thead><tr><th></th><th>Archive</th><th>Taille MB</th></tr></thead>
+                <thead><tr><th></th><th>Archive</th><th>Taille MB</th><th>Actions</th></tr></thead>
                 <tbody id="archivesBody"></tbody>
             </table>
         </div>
@@ -388,6 +388,7 @@ async function loadLibrary() {
         const jsFolder = toJsString(f.name);
         const isManualMode = manualRenameRow === f.name;
         const folderNameEscaped = escapeHtml(f.name);
+        const folderIcon = f.extracted_from_archive ? '📦 ' : '';
         const job = f.job || null;
         const hideActionsForJob = !!job;
         const issues = (f.issues || []).length
@@ -410,7 +411,7 @@ async function loadLibrary() {
         fb.innerHTML += `<tr>
             <td><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''}></td>
             <td>
-                ${folderNameEscaped}${issues}
+                ${folderIcon}${folderNameEscaped}${issues}
                 ${manualInput}
             </td>
             <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
@@ -421,17 +422,41 @@ async function loadLibrary() {
     if (!data.folders.length) fb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier</td></tr>';
 
     data.archives.forEach(a => {
-        ab.innerHTML += `<tr><td><input type="checkbox" name="archiveSel" value="${a.name}"></td><td>${a.name}</td><td>${fmtMb(a.size)}</td></tr>`;
+        const archiveEscaped = escapeHtml(a.name);
+        const archiveJs = toJsString(a.name);
+        ab.innerHTML += `<tr><td><input type="checkbox" name="archiveSel" value="${archiveEscaped}"></td><td>${archiveEscaped}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> <button onclick="extractArchives(['${archiveJs}'])">Extraire</button></td></tr>`;
     });
-    if (!data.archives.length) ab.innerHTML = '<tr><td colspan="3" class="muted">Aucune archive</td></tr>';
+    if (!data.archives.length) ab.innerHTML = '<tr><td colspan="4" class="muted">Aucune archive</td></tr>';
+}
+
+async function validateArchives(archives){
+    const data = await api('/api/archive/validate',{method:'POST', body: JSON.stringify({archives})});
+    if (data.results?.length) {
+        const invalid = data.results.filter(r => !r.valid);
+        const valid = data.results.filter(r => r.valid);
+        if (valid.length) notify(`${valid.length} archive(s) valide(s).`, 'success');
+        invalid.forEach(r => notify(`${r.archive}: ${r.message}`, 'warn', 6000));
+    }
+    (data.errors || []).forEach(e => notify(e, 'error', 7000));
+}
+
+async function validateSelectedArchives(){
+    const archives = selectedValues('archiveSel');
+    if (!archives.length) return notify('Sélectionner des archives.', 'warn');
+    await validateArchives(archives);
+}
+
+async function extractArchives(archives){
+    const report = await api('/api/extract',{method:'POST', body: JSON.stringify({archives})});
+    (report.results || []).forEach(r => notify(`${r.archive} extraite vers ${r.folder} (${r.extracted_files} fichier(s)).`, 'success', 5000));
+    (report.errors || []).forEach(e => notify(e, 'error', 7000));
+    await loadLibrary();
 }
 
 async function extractSelected(){
     const archives = selectedValues('archiveSel');
     if (!archives.length) return notify('Sélectionner des archives.', 'warn');
-    await api('/api/extract',{method:'POST', body: JSON.stringify({archives, delete_archive: document.getElementById('deleteArchiveAfter').checked})});
-    notify('Extraction terminée.', 'success');
-    await loadLibrary();
+    await extractArchives(archives);
 }
 
 async function renameOne(folder){

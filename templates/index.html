@@ -844,11 +844,18 @@ async function clearReview(folder){
 
 async function refreshDashboardData({forceDoneRefresh=false} = {}){
     await Promise.all([
-        loadLibrary(),
         loadJobs({forceDoneRefresh}),
         loadSubmissionQueue(),
     ]);
 }
+
+function shouldRefreshLibrary(){
+    if (renameInProgress || manualRenameRow) return false;
+    const active = document.activeElement;
+    if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) return false;
+    return true;
+}
+
 
 
 
@@ -1021,11 +1028,10 @@ loadJobs();
 loadConfig();
 loadSubmissionQueue();
 loadOllamaStatus();
-setInterval(() => refreshDashboardData({forceDoneRefresh: false}), 5000);
-setInterval(() => {
-    const card = document.getElementById('debugLogsCard');
-    if (card && card.style.display !== 'none') loadDebugLogs();
-}, 8000);
+
+// Mode AJAX pur: aucun rafraîchissement automatique périodique.
+// Les mises à jour sont déclenchées uniquement par les actions utilisateur
+// (et les callbacks API déjà présents dans les handlers).
 </script>
 </body>
 </html>

@@ -261,6 +261,7 @@ class TestWebRenameApi(unittest.TestCase):
 
         self.assertTrue(done.is_set(), 'Deadlock détecté lors de _push_job_event')
 
+
     def test_logs_endpoint_returns_json(self):
         resp = self.client.get('/api/logs?lines=20')
         self.assertEqual(resp.status_code, 200)

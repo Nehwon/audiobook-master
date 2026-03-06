@@ -1650,6 +1650,7 @@ def api_ollama_search_metadata():
     return jsonify({"results": results})
 
 
+
 @app.route("/api/outputs")
 def api_outputs():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

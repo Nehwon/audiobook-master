@@ -47,7 +47,7 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 
 #### Version 2.2.0 (Avril 2026 - non démarrée)
 - [ ] **Auto-update intégré** : Mises à jour automatiques dans l'application
-- [ ] **Notifications avancées** : Slack/Discord/Email multi-canaux
+- [ ] **Notifications avancées** : Telegram/WhatsApp/Discord/Email multi-canaux
 - [ ] **Performance monitoring** : Métriques détaillées en production
 - [ ] **Plugin system MVP** : Architecture extensible de base
 - [ ] **Interface Electron** : Version desktop moderne et responsive
@@ -162,11 +162,7 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 - [ ] **AI mastering** : Post-traitement automatique
 
 #### Version 6.0.0 (Août 2027)
-- [ ] **Quantum computing** : Optimisation future-ready
-- [ ] **Blockchain integration** : Droits numériques
-- [ ] **Neural networks** : Modèles propriétaires avancés
 - [ ] **Edge computing** : Traitement distribué
-- [ ] **Global CDN** : Distribution mondiale optimisée
 
 ---
 

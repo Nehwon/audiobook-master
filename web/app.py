@@ -105,6 +105,7 @@ def _default_config() -> Dict:
         "enable_compressor": True,
         "auto_extract_archives": False,
         "ignored_folders": [],
+        "recently_extracted_folders": [],
         "ollama_enabled": False,
         "ollama_model": "qwen2.5:7b",
         "ollama_extract_model": "nuextract",
@@ -506,7 +507,12 @@ def _should_show_ignore_for_folder(file_count: int, folder_size: int, suggest_de
 
 def _list_media() -> Dict:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-    ignored = set(_load_config().get("ignored_folders", []))
+    config = _load_config()
+    ignored = set(config.get("ignored_folders", []))
+    extracted_folders = {
+        Path(name).name for name in config.get("recently_extracted_folders", []) if isinstance(name, str) and name.strip()
+    }
+    changed = False
     folders = []
     archives = []
 
@@ -537,8 +543,11 @@ def _list_media() -> Dict:
                     "suggest_delete": suggest_delete,
                     "can_ignore": _should_show_ignore_for_folder(file_count, folder_size, suggest_delete),
                     "modified": item.stat().st_mtime,
+                    "extracted_from_archive": item.name in extracted_folders,
                 }
             )
+            if item.name in extracted_folders:
+                extracted_folders.remove(item.name)
         elif item.is_file() and item.suffix.lower() in ARCHIVE_EXTENSIONS:
             archives.append(
                 {
@@ -548,10 +557,74 @@ def _list_media() -> Dict:
                 }
             )
 
+    if extracted_folders:
+        config["recently_extracted_folders"] = sorted(
+            {folder["name"] for folder in folders if folder.get("extracted_from_archive")}
+        )
+        changed = True
+
+    if changed:
+        _save_config(config)
+
     return {"base_path": str(MEDIA_DIR), "folders": folders, "archives": archives}
 
 
-def _extract_archive(path: Path, delete_archive: bool = False) -> Dict:
+def _validate_archive(path: Path) -> Dict:
+    if not path.exists() or not path.is_file():
+        raise FileNotFoundError(f"Archive introuvable: {path.name}")
+    if path.suffix.lower() not in ARCHIVE_EXTENSIONS:
+        raise ValueError("Archive non supportée")
+
+    if path.suffix.lower() == ".zip":
+        with zipfile.ZipFile(path, "r") as zf:
+            if not zf.namelist():
+                return {"valid": False, "message": "Archive ZIP vide"}
+            if any(info.flag_bits & 0x1 for info in zf.infolist()):
+                return {"valid": False, "message": "Archive ZIP protégée par mot de passe"}
+            bad_file = zf.testzip()
+            if bad_file:
+                return {"valid": False, "message": f"Archive ZIP corrompue (erreur sur: {bad_file})"}
+        return {"valid": True, "message": "Archive ZIP valide"}
+
+    with rarfile.RarFile(path, "r") as rf:
+        if not rf.infolist():
+            return {"valid": False, "message": "Archive RAR vide"}
+        if rf.needs_password():
+            return {"valid": False, "message": "Archive RAR protégée par mot de passe"}
+        bad_file = rf.testrar()
+        if bad_file:
+            return {"valid": False, "message": f"Archive RAR corrompue (erreur sur: {bad_file})"}
+    return {"valid": True, "message": "Archive RAR valide"}
+
+
+def _mark_folder_as_recently_extracted(folder_name: str) -> None:
+    config = _load_config()
+    existing = {
+        Path(name).name for name in config.get("recently_extracted_folders", []) if isinstance(name, str) and name.strip()
+    }
+    existing.add(Path(folder_name).name)
+    config["recently_extracted_folders"] = sorted(existing)
+    _save_config(config)
+
+
+def _clear_recently_extracted_flag(folder_name: str) -> None:
+    config = _load_config()
+    existing = {
+        Path(name).name for name in config.get("recently_extracted_folders", []) if isinstance(name, str) and name.strip()
+    }
+    normalized = Path(folder_name).name
+    if normalized not in existing:
+        return
+    existing.remove(normalized)
+    config["recently_extracted_folders"] = sorted(existing)
+    _save_config(config)
+
+
+def _extract_archive(path: Path, delete_archive: bool = True) -> Dict:
+    validation = _validate_archive(path)
+    if not validation["valid"]:
+        raise ValueError(validation["message"])
+
     target_dir = MEDIA_DIR / path.stem
     if target_dir.exists():
         stamp = int(time.time())
@@ -567,10 +640,23 @@ def _extract_archive(path: Path, delete_archive: bool = False) -> Dict:
     else:
         raise ValueError("Archive non supportée")
 
+    extracted_files = [f for f in target_dir.rglob("*") if f.is_file()]
+    if not extracted_files:
+        shutil.rmtree(target_dir, ignore_errors=True)
+        raise ValueError("Extraction invalide: aucun fichier extrait")
+
     if delete_archive:
         path.unlink(missing_ok=True)
 
-    return {"archive": path.name, "folder": target_dir.name}
+    _mark_folder_as_recently_extracted(target_dir.name)
+
+    return {
+        "archive": path.name,
+        "folder": target_dir.name,
+        "validation": validation,
+        "extracted_files": len(extracted_files),
+        "archive_deleted": delete_archive,
+    }
 
 
 def _build_processing_config() -> ProcessingConfig:
@@ -777,7 +863,6 @@ def api_library():
 def api_extract():
     payload = request.get_json(silent=True) or {}
     names = payload.get("archives", [])
-    delete_archive = bool(payload.get("delete_archive", False))
 
     results = []
     errors = []
@@ -785,7 +870,28 @@ def api_extract():
         archive_path = MEDIA_DIR / name
         try:
             if archive_path.exists() and archive_path.suffix.lower() in ARCHIVE_EXTENSIONS:
-                results.append(_extract_archive(archive_path, delete_archive=delete_archive))
+                results.append(_extract_archive(archive_path, delete_archive=True))
+            else:
+                errors.append(f"Archive introuvable: {name}")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{name}: {exc}")
+
+    return jsonify({"results": results, "errors": errors})
+
+
+@app.route("/api/archive/validate", methods=["POST"])
+def api_archive_validate():
+    payload = request.get_json(silent=True) or {}
+    names = payload.get("archives", [])
+
+    results = []
+    errors = []
+    for name in names:
+        archive_path = MEDIA_DIR / name
+        try:
+            if archive_path.exists() and archive_path.suffix.lower() in ARCHIVE_EXTENSIONS:
+                outcome = _validate_archive(archive_path)
+                results.append({"archive": name, **outcome})
             else:
                 errors.append(f"Archive introuvable: {name}")
         except Exception as exc:  # noqa: BLE001
@@ -842,6 +948,7 @@ def api_rename():
         try:
             src.rename(dst)
             renamed.append({"old": folder, "new": new_name})
+            _clear_recently_extracted_flag(folder)
         except OSError as exc:
             skipped.append({"folder": folder, "reason": f"erreur système: {exc}"})
 

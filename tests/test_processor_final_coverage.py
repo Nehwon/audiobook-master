@@ -47,7 +47,10 @@ class TestProcessorFinalCoverage(unittest.TestCase):
             result = self.processor.convert_to_m4b(audio_files, output_file, metadata)
 
         self.assertTrue(result)
-        self.assertGreaterEqual(mock_run.call_count, 4)
+        self.assertGreaterEqual(mock_run.call_count, 6)
+
+        loudnorm_present = any('loudnorm=I=-18.0' in ' '.join(call.args[0]) for call in mock_run.call_args_list)
+        self.assertTrue(loudnorm_present)
 
     def test_convert_to_m4b_encode_error(self):
         audio_files = self._prepare_audio_files(1)

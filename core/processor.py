@@ -1449,6 +1449,7 @@ class AudiobookProcessor:
             work_dir.mkdir(parents=True, exist_ok=True)
 
             encoded_files: List[Path] = []
+            normalized_files: List[Path] = []
             chapter_durations_ms: List[int] = []
 
             def get_duration_ms(audio_path: Path) -> int:
@@ -1464,15 +1465,7 @@ class AudiobookProcessor:
                 except ValueError:
                     return 0
 
-            filters = []
-            if config.enable_loudnorm:
-                filters.append(
-                    f"loudnorm=I={config.loudnorm_target}:LRA={config.loudnorm_range}:TP={config.loudnorm_true_peak}"
-                )
-            if config.enable_compressor:
-                filters.append(config.compressor_settings)
-
-            logger.info("🔧 Étape 1/5: Encodage uniforme en AAC")
+            logger.info("🔧 Étape 1/6: Encodage uniforme en AAC")
             for index, audio_file in enumerate(audio_files, start=1):
                 encoded_file = work_dir / f"part_{index:04d}.m4a"
                 encode_cmd = [
@@ -1481,8 +1474,6 @@ class AudiobookProcessor:
                     '-vn',
                     '-map', '0:a:0',
                 ]
-                if filters:
-                    encode_cmd.extend(['-af', ','.join(filters)])
                 encode_cmd.extend([
                     '-c:a', 'aac',
                     '-b:a', config.audio_bitrate,
@@ -1507,7 +1498,46 @@ class AudiobookProcessor:
                     mapped_progress,
                 )
 
-            logger.info("📚 Étape 2/5: Génération chapters.txt")
+            logger.info("🎚️ Étape 2/6: Normalisation à -18 LUFS")
+            for index, encoded_file in enumerate(encoded_files, start=1):
+                normalized_file = work_dir / f"norm_{index:04d}.m4a"
+                normalize_filters = [
+                    f"loudnorm=I=-18.0:LRA={config.loudnorm_range}:TP={config.loudnorm_true_peak}"
+                ]
+                if config.enable_compressor:
+                    normalize_filters.append(config.compressor_settings)
+
+                normalize_cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(encoded_file),
+                    '-vn',
+                    '-map', '0:a:0',
+                    '-af', ','.join(normalize_filters),
+                    '-c:a', 'aac',
+                    '-b:a', config.audio_bitrate,
+                    '-ac', str(config.audio_channels),
+                    '-ar', str(config.sample_rate),
+                    '-aac_coder', config.aac_coder,
+                    '-profile:a', config.aac_profile,
+                    str(normalized_file),
+                ]
+
+                normalize_process = subprocess.run(normalize_cmd, capture_output=True, text=True, timeout=1800)
+                if normalize_process.returncode != 0:
+                    logger.error("❌ Échec normalisation LUFS (%s): %s", encoded_file.name, normalize_process.stderr)
+                    return False
+
+                normalized_files.append(normalized_file)
+                mapped_progress = 65 + int((index / len(encoded_files)) * 10)
+                self._emit_progress(
+                    "Conversion",
+                    f"Normalisation -18 LUFS {index}/{len(encoded_files)}",
+                    mapped_progress,
+                )
+
+            chapter_durations_ms = [get_duration_ms(normalized_file) for normalized_file in normalized_files]
+
+            logger.info("📚 Étape 3/6: Génération chapters.txt")
             chapters_file = work_dir / "chapters.txt"
             with open(chapters_file, 'w', encoding='utf-8') as chapter_writer:
                 chapter_writer.write(';FFMETADATA1\n')
@@ -1522,11 +1552,11 @@ class AudiobookProcessor:
                     chapter_writer.write(f'title=Chapitre {index:03d} - {chapter_title}\n')
                     current_start = end_ms
 
-            logger.info("🔗 Étape 3/5: Concaténation simple en M4A temporaire")
+            logger.info("🔗 Étape 4/6: Concaténation simple en M4A temporaire")
             concat_list = work_dir / "concat_list.txt"
             with open(concat_list, 'w', encoding='utf-8') as concat_writer:
-                for encoded_file in encoded_files:
-                    concat_writer.write(self._ffmpeg_concat_file_entry(encoded_file))
+                for normalized_file in normalized_files:
+                    concat_writer.write(self._ffmpeg_concat_file_entry(normalized_file))
 
             temp_concat_file = work_dir / "temp.m4a"
             concat_cmd = [
@@ -1543,7 +1573,7 @@ class AudiobookProcessor:
                 return False
             self._emit_progress("Conversion", "Concaténation terminée", 75)
 
-            logger.info("🧩 Étape 4/5: Injection chapitres + métadonnées")
+            logger.info("🧩 Étape 5/6: Injection chapitres + métadonnées")
             if config.enable_chapters:
                 finalize_cmd = [
                     'ffmpeg', '-y',
@@ -1573,7 +1603,7 @@ class AudiobookProcessor:
                 logger.error("❌ Échec finalisation M4B: %s", finalize_process.stderr)
                 return False
 
-            logger.info("✅ Étape 5/5: Conversion M4B terminée")
+            logger.info("✅ Étape 6/6: Conversion M4B terminée")
             self._emit_progress("Finalisation", "M4B final prêt", 95)
             return True
 

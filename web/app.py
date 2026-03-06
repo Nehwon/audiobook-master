@@ -606,6 +606,13 @@ def _should_show_ignore_for_folder(file_count: int, folder_size: int, suggest_de
     return not is_normal
 
 
+def _normalize_media_label(value: str) -> str:
+    label = value.strip().lower()
+    label = re.sub(r"\.[a-z0-9]{2,4}$", "", label)
+    label = re.sub(r"[^a-z0-9]+", " ", label)
+    return " ".join(label.split())
+
+
 def _list_media() -> Dict:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     config = _load_config()
@@ -616,10 +623,17 @@ def _list_media() -> Dict:
     changed = False
     folders = []
     archives = []
+    output_keys = {
+        _normalize_media_label(file.stem)
+        for file in OUTPUT_DIR.glob("*.m4b")
+        if file.is_file()
+    } if OUTPUT_DIR.exists() else set()
 
     for item in sorted(MEDIA_DIR.iterdir(), key=lambda x: x.name.lower()):
         if item.is_dir():
             if item.name in ignored:
+                continue
+            if _normalize_media_label(item.name) in output_keys:
                 continue
             file_count = sum(1 for f in item.rglob("*") if f.is_file())
             if file_count == 0:

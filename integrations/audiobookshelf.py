@@ -4,11 +4,11 @@ Client pour l'upload vers Audiobookshelf
 """
 
 import requests
-import json
 from pathlib import Path
 from typing import Optional, Dict, List
 import logging
 from dataclasses import dataclass
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -20,21 +20,34 @@ class AudiobookshelfConfig:
     username: Optional[str] = None
     password: Optional[str] = None
     token: Optional[str] = None
+    use_ssl: bool = False
 
 class AudiobookshelfClient:
     def __init__(self, config: AudiobookshelfConfig):
         self.config = config
-        self.base_url = f"http://{config.host}:{config.port}"
+        self.base_url = self._build_base_url(config)
         self.session = requests.Session()
         self.token = config.token
+
+        if self.token:
+            self.session.headers.update({'Authorization': f'Bearer {self.token}'})
         
         if not self.token and config.username and config.password:
             self.authenticate()
+
+    def _build_base_url(self, config: AudiobookshelfConfig) -> str:
+        """Construit l'URL de base à partir d'un host nu ou complet."""
+        host = (config.host or "").strip().rstrip('/')
+        if re.match(r'^https?://', host):
+            return host
+
+        protocol = "https" if config.use_ssl else "http"
+        return f"{protocol}://{host}:{config.port}"
     
     def authenticate(self) -> bool:
         """Authentification auprès d'Audiobookshelf"""
         try:
-            auth_url = f"{self.base_url}/login"
+            auth_url = f"{self.base_url}/api/login"
             auth_data = {
                 "username": self.config.username,
                 "password": self.config.password
@@ -43,7 +56,7 @@ class AudiobookshelfClient:
             response = self.session.post(auth_url, json=auth_data)
             if response.status_code == 200:
                 auth_result = response.json()
-                self.token = auth_result.get('user', {}).get('token')
+                self.token = auth_result.get('token') or auth_result.get('user', {}).get('token')
                 if self.token:
                     self.session.headers.update({'Authorization': f'Bearer {self.token}'})
                     logger.info("Authentification réussie")
@@ -63,7 +76,10 @@ class AudiobookshelfClient:
             response = self.session.get(url)
             
             if response.status_code == 200:
-                return response.json().get('libraries', [])
+                payload = response.json()
+                if isinstance(payload, list):
+                    return payload
+                return payload.get('libraries', [])
             
             return []
             
@@ -93,7 +109,7 @@ class AudiobookshelfClient:
                 files = {'file': (audiobook_path.name, f, 'audio/m4b')}
                 response = self.session.post(url, files=files, data=upload_data)
             
-            if response.status_code == 200:
+            if response.status_code in (200, 201):
                 logger.info(f"✅ Upload réussi: {audiobook_path.name}")
                 return True
             else:

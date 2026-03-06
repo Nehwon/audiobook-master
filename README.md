@@ -148,6 +148,7 @@ python3 -m web.app
 ```
 
 ### 🔄 **Fonctionnalités**
+- **Upload CLI `--upload`** : envoie automatiquement chaque fichier `.m4b` du dossier de sortie via l'API Audiobookshelf (`/api/libraries/{id}/upload`) puis déclenche un scan de bibliothèque.
 - **Upload automatique** : Métadonnées + fichiers après conversion
 - **Synchronisation bidirectionnelle** : Local ↔ distant
 - **Gestion des conflits** : Stratégies de résolution

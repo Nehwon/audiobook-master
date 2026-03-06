@@ -305,6 +305,34 @@ def _clean_manual_title(title: str) -> str:
     return cleaned
 
 
+def _rename_from_ollama(folder: str, config: Dict) -> Optional[str]:
+    """Construit un nom cible depuis les métadonnées Ollama si disponibles."""
+    if not config.get("ollama_enabled", False):
+        return None
+
+    result = _run_ollama_metadata_search(folder, config)
+    if not isinstance(result, dict) or result.get("error"):
+        return None
+
+    author = _clean_manual_title(str(result.get("author", "")))
+    title = _clean_manual_title(str(result.get("title", "")))
+    series = _clean_manual_title(str(result.get("series", "")))
+    volume = str(result.get("volume", "")).strip()
+
+    if not author or not title:
+        return None
+
+    chunks = [author, title]
+    if series:
+        chunks.append(series)
+
+    vol_match = re.search(r"\d+", volume)
+    if vol_match:
+        chunks.append(f"Vol {int(vol_match.group(0))}")
+
+    return " - ".join(chunks)
+
+
 def _guess_author_with_ollama(title_hint: str) -> Optional[str]:
     """Essaie de deviner l'auteur via Ollama pour les cas ambigus."""
     prompt = (
@@ -347,6 +375,11 @@ def _guess_author_with_ollama(title_hint: str) -> Optional[str]:
 def _smart_rename(folder: str) -> str:
     """Transforme un nom de dossier en format lisible pour les audiobooks."""
     cleaned = _clean_name(folder)
+
+    ollama_name = _rename_from_ollama(folder, _load_config())
+    if ollama_name:
+        return ollama_name
+
     parts = [p.strip() for p in re.split(r"\s+-\s+", cleaned) if p.strip()]
 
     if len(parts) == 2 and re.search(r",", parts[0]):

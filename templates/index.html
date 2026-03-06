@@ -220,7 +220,8 @@ function setRenameBusy(isBusy){
     }
     document.querySelectorAll('[data-rename-btn="1"]').forEach(btn => {
         btn.disabled = isBusy;
-        btn.textContent = isBusy ? 'Renommage...' : 'Renommer';
+        const defaultLabel = btn.dataset.defaultLabel || 'Renommer';
+        btn.textContent = isBusy ? 'Renommage...' : defaultLabel;
     });
 }
 
@@ -292,7 +293,8 @@ async function loadLibrary() {
             <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
             <td>${fmtMb(f.size)}</td>
             <td>
-                <button data-rename-btn="1" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="renameOne('${f.name.replaceAll("'", "\\'")}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
+                <button data-rename-btn="1" data-default-label="Renommer" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="renameOne('${f.name.replaceAll("'", "\\'")}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
+                <button data-rename-btn="1" data-default-label="Renommer (titre manuel)" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="renameOneManual('${f.name.replaceAll("'", "\\'")}')">${renameInProgress ? 'Renommage...' : 'Renommer (titre manuel)'}</button>
                 ${f.can_ignore ? `<button class="secondary" onclick="ignoreOne('${f.name.replaceAll("'", "\\'")}')">Ignorer</button>` : ''}
                 ${f.suggest_delete ? `<button class="danger" onclick="deleteSuspectFolder('${f.name.replaceAll("'", "\\'")}')">Supprimer</button>` : ''}
                 <button onclick="enqueueFolders(['${f.name.replaceAll("'", "\\'")}'])">Traiter M4B</button>
@@ -322,6 +324,19 @@ async function renameOne(folder){
         const folders = [folder];
         const overrides = collectManualOverrides(folders);
         await api('/api/rename',{method:'POST', body: JSON.stringify({folders, overrides})});
+        await loadLibrary();
+    } finally {
+        setRenameBusy(false);
+    }
+}
+
+async function renameOneManual(folder){
+    if (renameInProgress) return;
+    const overrides = collectManualOverrides([folder]);
+    if (!overrides[folder]) return alert('Saisir un titre manuel avant de cliquer sur ce bouton.');
+    setRenameBusy(true);
+    try {
+        await api('/api/rename',{method:'POST', body: JSON.stringify({folders:[folder], overrides})});
         await loadLibrary();
     } finally {
         setRenameBusy(false);

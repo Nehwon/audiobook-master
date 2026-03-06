@@ -24,7 +24,7 @@ import rarfile
 from flask import Flask, jsonify, render_template, request, send_file
 
 from core.config import ProcessingConfig
-from core.processor import AudiobookProcessor
+from core.processor import AudiobookProcessor, PROCESSOR_LOG_PATH
 
 app = Flask(__name__, template_folder="../templates")
 app.config["SECRET_KEY"] = "audiobook_manager_2024"
@@ -672,7 +672,7 @@ def _worker_loop() -> None:
                         job.id,
                         job.folder,
                         job.stage,
-                        "Le processeur a renvoyé False sans exception (voir web_debug.log et logs du processor).",
+                        f"Le processeur a renvoyé False sans exception (web: {WEB_DEBUG_LOG_PATH}, processor: {PROCESSOR_LOG_PATH}).",
                         "error",
                     )
                 job.ended_at = time.time()

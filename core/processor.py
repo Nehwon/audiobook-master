@@ -17,6 +17,7 @@ import sys
 import time
 import threading
 import logging
+from logging.handlers import RotatingFileHandler
 import unicodedata
 import tempfile
 import zipfile
@@ -35,8 +36,40 @@ from mutagen.id3 import ID3, APIC, TPE1, TIT2, TALB
 from .config import ProcessingConfig
 
 # Configuration
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+LOG_DIR = Path(os.getenv("AUDIOBOOK_LOG_DIR", os.getenv("LOG_DIR", "/app/logs")))
+PROCESSOR_LOG_PATH = LOG_DIR / "processor.log"
+
+
+def _setup_processor_logger() -> logging.Logger:
+    logger = logging.getLogger(__name__)
+    if logger.handlers:
+        return logger
+
+    level_name = os.getenv("AUDIOBOOK_LOG_LEVEL", os.getenv("LOG_LEVEL", "INFO")).upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logger.setLevel(level)
+
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    stream_handler.setLevel(level)
+    logger.addHandler(stream_handler)
+
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(PROCESSOR_LOG_PATH, maxBytes=5_000_000, backupCount=5, encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(level)
+        logger.addHandler(file_handler)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Impossible de configurer le log fichier processor (%s): %s", PROCESSOR_LOG_PATH, exc)
+
+    logger.propagate = False
+    return logger
+
+
+logger = _setup_processor_logger()
 
 @dataclass
 class AudiobookMetadata:

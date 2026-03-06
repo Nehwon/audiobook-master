@@ -49,6 +49,12 @@
         .progress-track { width:100%; height:6px; background: color-mix(in srgb, var(--border) 70%, transparent); overflow:hidden; }
         .progress-indeterminate { height:100%; width:35%; background: var(--primary); animation: indeterminate 1.1s infinite; }
         .progress-determinate { height:100%; width:0%; background: var(--primary); transition: width .2s ease; }
+        .toast-wrap { position: fixed; left: 16px; right: 16px; bottom: 16px; display:flex; flex-direction:column; gap:8px; z-index: 1200; pointer-events:none; }
+        .toast { background: var(--card); border:1px solid var(--border); border-left:4px solid var(--primary); border-radius:8px; padding:10px 12px; box-shadow:0 8px 24px rgba(0,0,0,.12); pointer-events:auto; }
+        .toast.warn { border-left-color: #d97706; }
+        .toast.error { border-left-color: var(--danger); }
+        .toast.success { border-left-color: #059669; }
+        .toast-actions { margin-top:8px; display:flex; gap:8px; }
         @keyframes indeterminate { from { transform: translateX(-120%);} to { transform: translateX(330%);} }
     </style>
 </head>
@@ -169,10 +175,12 @@
     </section>
 
 </main>
+<div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
 
 <script>
 let libraryCache = { folders: [], archives: [] };
 let renameInProgress = false;
+let manualRenameRow = null;
 let pendingApiCalls = 0;
 let ollamaPullTicker = null;
 
@@ -236,15 +244,70 @@ function escapeHtml(value){
         .replaceAll("'", '&#39;');
 }
 
-function collectManualOverrides(folders){
-    const overrides = {};
-    document.querySelectorAll('[data-manual-title="1"]').forEach(input => {
-        const folder = input.dataset.folder;
-        if (!folders.includes(folder)) return;
-        const value = (input.value || '').trim();
-        if (value) overrides[folder] = value;
+function notify(message, type='info', timeoutMs=3600){
+    const wrap = document.getElementById('toastWrap');
+    if (!wrap) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    wrap.appendChild(toast);
+    setTimeout(() => toast.remove(), timeoutMs);
+}
+
+function askConfirmation(message, {confirmText='Valider', cancelText='Annuler', type='warn'}={}){
+    return new Promise(resolve => {
+        const wrap = document.getElementById('toastWrap');
+        if (!wrap) { resolve(false); return; }
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.innerHTML = `<div>${escapeHtml(message)}</div>`;
+        const actions = document.createElement('div');
+        actions.className = 'toast-actions';
+        actions.innerHTML = `<button>${confirmText}</button><button class="secondary">${cancelText}</button>`;
+        toast.appendChild(actions);
+        wrap.appendChild(toast);
+
+        const [okBtn, cancelBtn] = actions.querySelectorAll('button');
+        okBtn.addEventListener('click', () => { toast.remove(); resolve(true); });
+        cancelBtn.addEventListener('click', () => { toast.remove(); resolve(false); });
+        setTimeout(() => {
+            if (toast.isConnected) {
+                toast.remove();
+                resolve(false);
+            }
+        }, 15000);
     });
-    return overrides;
+}
+
+function enterManualRename(folder){
+    if (renameInProgress) return;
+    manualRenameRow = folder;
+    loadLibrary();
+}
+
+function cancelManualRename(){
+    manualRenameRow = null;
+    loadLibrary();
+}
+
+async function validateManualRename(folder){
+    if (renameInProgress) return;
+    const input = document.querySelector(`[data-manual-title="1"][data-folder="${CSS.escape(folder)}"]`);
+    const title = (input?.value || '').trim();
+    if (!title) {
+        notify('Saisir un titre manuel avant de valider.', 'warn');
+        return;
+    }
+
+    setRenameBusy(true);
+    try {
+        await api('/api/rename',{method:'POST', body: JSON.stringify({folders:[folder], overrides:{[folder]: title}})});
+        manualRenameRow = null;
+        notify('Renommage manuel effectué.', 'success');
+        await loadLibrary();
+    } finally {
+        setRenameBusy(false);
+    }
 }
 
 async function api(url, options={}) {
@@ -278,28 +341,33 @@ async function loadLibrary() {
     ab.innerHTML = '';
 
     data.folders.forEach(f => {
+        const jsFolder = f.name.replaceAll("'", "\\'");
+        const isManualMode = manualRenameRow === f.name;
         const issues = (f.issues || []).length
             ? `<div class="muted" style="font-size:12px">⚠️ ${(f.issues || []).join(' | ')}${f.suggest_delete ? ' — suppression suggérée' : ''}</div>`
             : '';
         const folderNameEscaped = escapeHtml(f.name);
+        const manualInput = isManualMode
+            ? `<div style="margin-top:6px"><input data-manual-title="1" data-folder="${folderNameEscaped}" type="text" style="min-width:260px" placeholder="Titre manuel" autofocus></div>`
+            : '';
+        const actionButtons = isManualMode
+            ? `<button data-rename-btn="1" data-default-label="Valider" ${renameInProgress ? 'disabled' : ''} onclick="validateManualRename('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Valider'}</button>
+               <button class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="cancelManualRename()">Annuler</button>`
+            : `<button data-rename-btn="1" data-default-label="Renommer" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="renameOne('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
+               <button data-rename-btn="1" data-default-label="Renommage manuel" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="enterManualRename('${jsFolder}')">Renommage manuel</button>
+               ${f.can_ignore ? `<button class="secondary" onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
+               ${f.suggest_delete ? `<button class="danger" onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
+               <button onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>
+               <button class="secondary" onclick="searchOneWithLlm('${jsFolder}')">Recherche LLM</button>`;
         fb.innerHTML += `<tr>
             <td><input type="checkbox" name="folderSel" value="${folderNameEscaped}"></td>
             <td>
                 ${folderNameEscaped}${issues}
-                <div style="margin-top:6px">
-                    <input data-manual-title="1" data-folder="${folderNameEscaped}" type="text" style="min-width:260px" placeholder="Titre manuel (optionnel)">
-                </div>
+                ${manualInput}
             </td>
             <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
             <td>${fmtMb(f.size)}</td>
-            <td>
-                <button data-rename-btn="1" data-default-label="Renommer" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="renameOne('${f.name.replaceAll("'", "\\'")}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
-                <button data-rename-btn="1" data-default-label="Renommer (titre manuel)" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="renameOneManual('${f.name.replaceAll("'", "\\'")}')">${renameInProgress ? 'Renommage...' : 'Renommer (titre manuel)'}</button>
-                ${f.can_ignore ? `<button class="secondary" onclick="ignoreOne('${f.name.replaceAll("'", "\\'")}')">Ignorer</button>` : ''}
-                ${f.suggest_delete ? `<button class="danger" onclick="deleteSuspectFolder('${f.name.replaceAll("'", "\\'")}')">Supprimer</button>` : ''}
-                <button onclick="enqueueFolders(['${f.name.replaceAll("'", "\\'")}'])">Traiter M4B</button>
-                <button class="secondary" onclick="searchOneWithLlm('${f.name.replaceAll("'", "\\'")}')">Recherche LLM</button>
-            </td>
+            <td>${actionButtons}</td>
         </tr>`;
     });
     if (!data.folders.length) fb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier</td></tr>';
@@ -312,8 +380,9 @@ async function loadLibrary() {
 
 async function extractSelected(){
     const archives = selectedValues('archiveSel');
-    if (!archives.length) return alert('Sélectionner des archives');
+    if (!archives.length) return notify('Sélectionner des archives.', 'warn');
     await api('/api/extract',{method:'POST', body: JSON.stringify({archives, delete_archive: document.getElementById('deleteArchiveAfter').checked})});
+    notify('Extraction terminée.', 'success');
     await loadLibrary();
 }
 
@@ -321,35 +390,22 @@ async function renameOne(folder){
     if (renameInProgress) return;
     setRenameBusy(true);
     try {
-        const folders = [folder];
-        const overrides = collectManualOverrides(folders);
-        await api('/api/rename',{method:'POST', body: JSON.stringify({folders, overrides})});
+        await api('/api/rename',{method:'POST', body: JSON.stringify({folders:[folder]})});
+        notify('Renommage effectué.', 'success');
         await loadLibrary();
     } finally {
         setRenameBusy(false);
     }
 }
 
-async function renameOneManual(folder){
-    if (renameInProgress) return;
-    const overrides = collectManualOverrides([folder]);
-    if (!overrides[folder]) return alert('Saisir un titre manuel avant de cliquer sur ce bouton.');
-    setRenameBusy(true);
-    try {
-        await api('/api/rename',{method:'POST', body: JSON.stringify({folders:[folder], overrides})});
-        await loadLibrary();
-    } finally {
-        setRenameBusy(false);
-    }
-}
 async function renameSelected(){
     if (renameInProgress) return;
     const folders = selectedValues('folderSel');
-    if (!folders.length) return alert('Sélectionner des dossiers');
+    if (!folders.length) return notify('Sélectionner des dossiers.', 'warn');
     setRenameBusy(true);
     try {
-        const overrides = collectManualOverrides(folders);
-        await api('/api/rename',{method:'POST', body: JSON.stringify({folders, overrides})});
+        await api('/api/rename',{method:'POST', body: JSON.stringify({folders})});
+        notify('Renommage batch terminé.', 'success');
         await loadLibrary();
     } finally {
         setRenameBusy(false);
@@ -362,8 +418,10 @@ async function ignoreOne(folder){
 }
 
 async function deleteSuspectFolder(folder){
-    if (!confirm(`Supprimer définitivement le dossier suspect "${folder}" ?`)) return;
+    const confirmed = await askConfirmation(`Supprimer définitivement le dossier suspect "${folder}" ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
     await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder})});
+    notify(`Dossier "${folder}" supprimé.`, 'success');
     await loadLibrary();
 }
 
@@ -373,7 +431,7 @@ async function enqueueFolders(folders){
 }
 async function enqueueSelected(){
     const folders = selectedValues('folderSel');
-    if (!folders.length) return alert('Sélectionner des dossiers');
+    if (!folders.length) return notify('Sélectionner des dossiers.', 'warn');
     await enqueueFolders(folders);
 }
 
@@ -439,13 +497,13 @@ function renderLlmResults(items){
 }
 
 async function searchFoldersWithLlm(folders){
-    if (!folders.length) return alert('Sélectionner des dossiers');
+    if (!folders.length) return notify('Sélectionner des dossiers.', 'warn');
     try {
         const data = await api('/api/ollama/search',{method:'POST', body: JSON.stringify({folders})});
         renderLlmResults(data.results || []);
     } catch (err) {
         renderLlmResults([{folder: folders.join(', '), error: err.message || 'Erreur LLM'}]);
-        alert(err.message || 'Erreur pendant la recherche LLM');
+        notify(err.message || 'Erreur pendant la recherche LLM', 'error');
     }
 }
 
@@ -470,28 +528,30 @@ async function loadOllamaStatus(){
 
 async function pullOllamaModel(){
     const model = document.getElementById('ollamaModelToPull').value.trim();
-    if (!model) return alert('Nom du modèle requis');
+    if (!model) return notify('Nom du modèle requis.', 'warn');
     startPullProgress();
     try {
         await api('/api/ollama/pull',{method:'POST', body: JSON.stringify({model})});
         endPullProgress(true);
         await loadOllamaStatus();
-        alert(`Modèle ${model} téléchargé`);
+        notify(`Modèle ${model} téléchargé.`, 'success');
     } catch (err) {
         endPullProgress(false);
-        alert(err.message || `Impossible de télécharger ${model}`);
+        notify(err.message || `Impossible de télécharger ${model}`, 'error');
     }
 }
 
 async function deleteOllamaModel(){
     const model = document.getElementById('ollamaModelToDelete').value.trim();
-    if (!model) return alert('Nom du modèle requis');
-    if (!confirm(`Supprimer le modèle ${model} ?`)) return;
+    if (!model) return notify('Nom du modèle requis.', 'warn');
+    const confirmed = await askConfirmation(`Supprimer le modèle ${model} ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
     try {
         await api('/api/ollama/delete',{method:'POST', body: JSON.stringify({model})});
         await loadOllamaStatus();
+        notify(`Modèle ${model} supprimé.`, 'success');
     } catch (err) {
-        alert(err.message || `Impossible de supprimer ${model}`);
+        notify(err.message || `Impossible de supprimer ${model}`, 'error');
     }
 }
 
@@ -516,7 +576,7 @@ async function saveOllamaConfig(){
         ollama_mcp_tools: ollamaTools.value
     })});
     await loadOllamaStatus();
-    alert('Configuration Ollama sauvegardée');
+    notify('Configuration Ollama sauvegardée.', 'success');
 }
 
 async function saveConfig(){
@@ -529,7 +589,7 @@ async function saveConfig(){
         enable_compressor: cfgComp.checked,
         auto_extract_archives: cfgAutoExtract.checked
     })});
-    alert('Configuration sauvegardée');
+    notify('Configuration sauvegardée.', 'success');
 }
 
 function setupTabs(){

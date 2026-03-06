@@ -84,6 +84,81 @@ class TestAudiobookProcessor(unittest.TestCase):
 
         self.assertFalse(result)
 
+    @patch.object(AudiobookProcessor, 'encode_cpu_optimized_phase2', return_value=True)
+    def test_process_audiobook_flattens_single_subfolder_with_audio(self, mock_encode):
+        book_dir = self.source_dir / "Auteur - Livre"
+        child_dir = book_dir / "CD1"
+        child_dir.mkdir(parents=True)
+        (child_dir / "chapitre1.mp3").write_bytes(b"FAKE_AUDIO_DATA")
+
+        result = self.processor.process_audiobook(book_dir)
+
+        self.assertTrue(result)
+        self.assertFalse(child_dir.exists())
+        self.assertTrue((book_dir / "chapitre1.mp3").exists())
+        mock_encode.assert_called_once()
+
+    def test_process_audiobook_fails_with_nested_subdirectories(self):
+        book_dir = self.source_dir / "MonLivre"
+        nested_dir = book_dir / "Partie1" / "CD1"
+        nested_dir.mkdir(parents=True)
+        (nested_dir / "chapitre1.mp3").write_bytes(b"FAKE_AUDIO_DATA")
+
+        result = self.processor.process_audiobook(book_dir)
+
+        self.assertFalse(result)
+
+    def test_process_audiobook_fails_when_no_audio_files(self):
+        book_dir = self.source_dir / "MonLivre"
+        book_dir.mkdir(parents=True)
+        (book_dir / "notes.txt").write_text("pas d'audio")
+
+        result = self.processor.process_audiobook(book_dir)
+
+        self.assertFalse(result)
+
+    def test_process_audiobook_fails_when_m4b_is_present(self):
+        book_dir = self.source_dir / "MonLivre"
+        book_dir.mkdir(parents=True)
+        (book_dir / "book.m4b").write_bytes(b"FAKE_M4B")
+
+        result = self.processor.process_audiobook(book_dir)
+
+        self.assertFalse(result)
+
+    def test_process_all_promotes_grouped_book_folders(self):
+        grouped = self.source_dir / "SagaComplete"
+        grouped.mkdir(parents=True)
+
+        book1 = grouped / "Auteur A - Livre A"
+        book2 = grouped / "Auteur B - Serie 2 - Livre B"
+        book1.mkdir()
+        book2.mkdir()
+        (book1 / "01.mp3").write_bytes(b"FAKE_AUDIO_DATA")
+        (book2 / "01.mp3").write_bytes(b"FAKE_AUDIO_DATA")
+
+        with patch.object(self.processor, 'process_audiobook', return_value=True) as mock_process:
+            results = self.processor.process_all()
+
+        self.assertEqual(results["success"], 2)
+        self.assertEqual(mock_process.call_count, 2)
+        self.assertTrue((self.source_dir / "Auteur A - Livre A").exists())
+        self.assertTrue((self.source_dir / "Auteur B - Serie 2 - Livre B").exists())
+
+    def test_process_all_fails_on_grouped_nested_subdirectories(self):
+        grouped = self.source_dir / "SagaComplete"
+        grouped.mkdir(parents=True)
+
+        book1 = grouped / "Auteur A - Livre A" / "CD1"
+        book2 = grouped / "Auteur B - Livre B"
+        book1.mkdir(parents=True)
+        book2.mkdir()
+        (book1 / "01.mp3").write_bytes(b"FAKE_AUDIO_DATA")
+        (book2 / "01.mp3").write_bytes(b"FAKE_AUDIO_DATA")
+
+        with self.assertRaises(ValueError):
+            self.processor.process_all()
+
 
 if __name__ == '__main__':
     unittest.main()

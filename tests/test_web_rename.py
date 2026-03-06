@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from web.app import _smart_rename
 
@@ -76,6 +77,38 @@ class TestWebRename(unittest.TestCase):
         self.assertEqual(
             _smart_rename(folder),
             "T. Kingfisher - Nettle and bone. Comment tuer un prince - 2024",
+        )
+
+    @mock.patch("web.app._load_config")
+    @mock.patch("web.app._run_ollama_metadata_search")
+    def test_ollama_can_reorder_title_and_author(self, mocked_search, mocked_load_config):
+        mocked_load_config.return_value = {"ollama_enabled": True}
+        mocked_search.return_value = {
+            "author": "Benjamin Brillaud",
+            "title": "Mais c'est un complot",
+            "series": "",
+            "volume": "",
+        }
+
+        self.assertEqual(
+            _smart_rename("Mais c'est un complot - Benjamin Brillaud"),
+            "Benjamin Brillaud - Mais c'est un complot",
+        )
+
+    @mock.patch("web.app._load_config")
+    @mock.patch("web.app._run_ollama_metadata_search")
+    def test_ollama_can_extract_series_and_author_at_end(self, mocked_search, mocked_load_config):
+        mocked_load_config.return_value = {"ollama_enabled": True}
+        mocked_search.return_value = {
+            "author": "Adrien Fortin",
+            "title": "Mythologie",
+            "series": "Collection complète",
+            "volume": "",
+        }
+
+        self.assertEqual(
+            _smart_rename("Mythologie - Collection complète - Adrien Fortin"),
+            "Adrien Fortin - Mythologie - Collection complète",
         )
 
 

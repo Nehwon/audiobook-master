@@ -297,6 +297,42 @@ def _clean_name(name: str) -> str:
     return cleaned or "Dossier"
 
 
+def _clean_manual_title(title: str) -> str:
+    """Nettoie une saisie manuelle sans appliquer les heuristiques auto."""
+    cleaned = _fix_mojibake(title).replace("+", " ")
+    cleaned = re.sub(r'[<>:"/\\|?*]', "_", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+    return cleaned
+
+
+def _rename_from_ollama(folder: str, config: Dict) -> Optional[str]:
+    """Construit un nom cible depuis les métadonnées Ollama si disponibles."""
+    if not config.get("ollama_enabled", False):
+        return None
+
+    result = _run_ollama_metadata_search(folder, config)
+    if not isinstance(result, dict) or result.get("error"):
+        return None
+
+    author = _clean_manual_title(str(result.get("author", "")))
+    title = _clean_manual_title(str(result.get("title", "")))
+    series = _clean_manual_title(str(result.get("series", "")))
+    volume = str(result.get("volume", "")).strip()
+
+    if not author or not title:
+        return None
+
+    chunks = [author, title]
+    if series:
+        chunks.append(series)
+
+    vol_match = re.search(r"\d+", volume)
+    if vol_match:
+        chunks.append(f"Vol {int(vol_match.group(0))}")
+
+    return " - ".join(chunks)
+
+
 def _guess_author_with_ollama(title_hint: str) -> Optional[str]:
     """Essaie de deviner l'auteur via Ollama pour les cas ambigus."""
     prompt = (
@@ -339,6 +375,11 @@ def _guess_author_with_ollama(title_hint: str) -> Optional[str]:
 def _smart_rename(folder: str) -> str:
     """Transforme un nom de dossier en format lisible pour les audiobooks."""
     cleaned = _clean_name(folder)
+
+    ollama_name = _rename_from_ollama(folder, _load_config())
+    if ollama_name:
+        return ollama_name
+
     parts = [p.strip() for p in re.split(r"\s+-\s+", cleaned) if p.strip()]
 
     if len(parts) == 2 and re.search(r",", parts[0]):
@@ -592,8 +633,11 @@ def api_extract():
 def api_rename():
     payload = request.get_json(silent=True) or {}
     folders = payload.get("folders", [])
+    overrides = payload.get("overrides", {})
     if not isinstance(folders, list):
         return jsonify({"error": "Le champ 'folders' doit être une liste"}), 400
+    if not isinstance(overrides, dict):
+        return jsonify({"error": "Le champ 'overrides' doit être un objet"}), 400
 
     renamed = []
     skipped = []
@@ -611,7 +655,17 @@ def api_rename():
             skipped.append({"folder": folder, "reason": "introuvable"})
             continue
 
-        new_name = _smart_rename(folder)
+        manual_title = overrides.get(folder)
+        if manual_title is not None:
+            if not isinstance(manual_title, str):
+                skipped.append({"folder": folder, "reason": "titre manuel invalide"})
+                continue
+            new_name = _clean_manual_title(manual_title)
+            if not new_name:
+                skipped.append({"folder": folder, "reason": "titre manuel vide"})
+                continue
+        else:
+            new_name = _smart_rename(folder)
         dst = MEDIA_DIR / new_name
         if new_name == folder:
             skipped.append({"folder": folder, "reason": "déjà conforme"})

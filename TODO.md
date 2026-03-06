@@ -5,6 +5,22 @@ Système de traitement d'audiobooks ultra-rapide avec multithreading CPU optimis
 
 ---
 
+## ✅ **ACCOMPLI - Version 2.1.2**
+
+### 🚀 **PRIORITÉ 1: Interface Web Avancée et Corrections Robustes**
+- [x] **Progression dynamique** : Barres de progression temps réel par job
+- [x] **Notifications système** : Remplacement des popups par notifications élégantes
+- [x] **Renommage intelligent** : Édition manuelle avec assistance Ollama
+- [x] **Logs détaillés** : Tracking live des traitements avec debug complet
+- [x] **Indicateur busy global** : État de l'application visible en permanence
+- [x] **Validation sous-dossiers** : Rejet des dossiers contenant des sous-dossiers
+- [x] **Logs persistants** : Processor logs dans `/app/logs` avec diagnostics
+- [x] **Jobs lock deadlock** : Correction deadlock bloquant logs et status APIs
+- [x] **Fix Ollama GUI** : Correction échecs API search et model pull
+- [x] **Live tracking UI** : Interface tracking live des traitements
+
+---
+
 ## ✅ **ACCOMPLI - Version 2.1.1**
 
 ### 🚀 **PRIORITÉ 1: Corrections et Améliorations Docker**

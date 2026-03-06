@@ -45,6 +45,18 @@ Devenir la solution de référence pour la gestion et conversion d'audiobooks, c
 - [x] **Nginx permissions** : Fix permissions logs dans container
 - [x] **GUI updates** : Alignement avec docker-compose.yml
 
+#### Version 2.1.2 ✅ (Terminée - 2026-03-06)
+- [x] **Interface Web Avancée** : Progression dynamique et notifications système
+- [x] **Renommage Intelligent** : Édition manuelle avec assistance Ollama
+- [x] **Logs Détaillés** : Tracking live des traitements avec debug complet
+- [x] **Validation Robuste** : Rejet des dossiers contenant des sous-dossiers
+- [x] **Diagnostics Avancés** : Logs persistants dans `/app/logs` avec analyse d'échecs
+- [x] **Notifications Système** : Remplacement des popups par notifications élégantes
+- [x] **Indicateur Busy Global** : État de l'application visible en permanence
+- [x] **Progress Bars Dynamiques** : Barres de progression temps réel par job
+- [x] **Fix Ollama GUI** : Correction échecs API search et model pull
+- [x] **Jobs Lock Deadlock** : Correction deadlock bloquant logs et status APIs
+
 #### Version 2.2.0 (Avril 2026 - non démarrée)
 - [ ] **Auto-update intégré** : Mises à jour automatiques dans l'application
 - [ ] **Notifications avancées** : Telegram/WhatsApp/Discord/Email multi-canaux
@@ -283,6 +295,6 @@ Avec une exécution disciplinée et une écoute attentive des utilisateurs, nous
 
 ---
 
-*Roadmap maintenue activement • Mise à jour trimestrielle • Validation révisée (v2.1.0/v2.2.0)* 🗺️✨
+*Roadmap maintenue activement • Mise à jour trimestrielle • Version 2.1.2 - 2026-03-06* 🗺️✨
 
 *Pour suivre la progression en temps réel, consultez le [Projet GitHub](https://github.com/Nehwon/audiobook-master/projects).*

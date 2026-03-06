@@ -4,6 +4,44 @@ Historique des versions et évolutions du système de traitement d'audiobooks.
 
 ---
 
+## [2.1.2] - 2026-03-06
+
+### 🚀 **Version Mineure - Interface Web Avancée et Corrections Robustes**
+
+#### ⚡ **Nouvelles Fonctionnalités Principales**
+- **🖥️ Interface Web Avancée** : Progression dynamique et notifications système
+- **🔄 Renommage Intelligent** : Édition manuelle avec assistance Ollama
+- **📊 Logs Détaillés** : Tracking live des traitements avec debug complet
+- **🔍 Recherche IA Intégrée** : Ollama pour analyse et suggestions de métadonnées
+
+#### 🖥️ **Interface Web Améliorée**
+- **Progression dynamique** : Barres de progression temps réel par job (`8f9aca2`)
+- **Notifications système** : Remplacement des popups par notifications élégantes (`d473558`)
+- **Indicateur busy global** : État de l'application visible en permanence (`aecb0fd`)
+- **Boutons désactivés** : Pendant conversion pour éviter les conflits (`9c8ec77`)
+- **Progress bar model pull** : Barre de progression pour téléchargement modèles Ollama (`aecb0fd`)
+
+#### 🔧 **Renommage et Métadonnées**
+- **Édition manuelle titres** : Permettre la saisie manuelle des titres (`09e163c`)
+- **Assistance Ollama** : Renommage assisté par IA pour suggestions (`42072d8`)
+- **Notifications remplacement** : Popups remplacés par notifications système (`1eabcff`)
+- **Bouton titre manuel** : Interface pour édition manuelle améliorée (`80ee814`)
+
+#### 🐛 **Corrections Robustes**
+- **Validation sous-dossiers** : Rejet des dossiers contenant des sous-dossiers (`841dc6f`)
+- **Logs persistants** : Processor logs dans `/app/logs` avec diagnostics (`6b3dac7`)
+- **Debug log location** : Fix localisation logs debug web (`3ce04b6`)
+- **Jobs lock deadlock** : Correction deadlock bloquant logs et status APIs (`c95cbbe`)
+- **Backend logs API** : Fix erreur 504 sur logs backend (`bd3929b`)
+
+#### 🤖 **Intégration Ollama**
+- **Fix GUI failures** : Correction échecs API Ollama search et model pull (`1475f40`)
+- **Failed API calls** : Correction appels GUI échoués (`a66bf0e`)
+- **Live tracking UI** : Interface tracking live des traitements (`d8f922b`)
+- **Debug logging** : Logs détaillés pour soumissions avec tracking (`d8f922b`)
+
+---
+
 ## [2.1.1] - 2026-03-04
 
 ### 🚀 **Version Mineure - Corrections et Améliorations Docker**

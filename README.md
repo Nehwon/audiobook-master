@@ -16,6 +16,15 @@ Système professionnel de traitement d'audiobooks avec multithreading CPU optimi
 - **Registry GHCR** : Images GitHub Container Registry intégrées
 - **Workflow GitHub Actions** : Build Docker automatisé
 
+#### 🖥️ **Interface Web Avancée**
+- **Application Flask moderne** : Interface responsive avec SocketIO
+- **Progression dynamique** : Barres de progression temps réel par job
+- **Notifications système** : Remplacement des popups par notifications élégantes
+- **Renommage intelligent** : Édition manuelle des titres avec assistance Ollama
+- **Logs détaillés** : Tracking live des traitements avec debug complet
+- **Indicateur busy global** : État de l'application visible en permanence
+- **Recherche IA intégrée** : Ollama pour analyse et suggestions de métadonnées
+
 #### 🖥️ **Interface Graphique Desktop**
 - **Application Tkinter** : Interface moderne et intuitive (`gui/desktop_app.py`)
 - **Progression temps réel** : Barres, logs, status détaillés
@@ -38,6 +47,8 @@ Système professionnel de traitement d'audiobooks avec multithreading CPU optimi
 - **Déploiement automatisé** : Staging/production
 - **Releases GitHub** : Assets multi-plateformes
 - **Smart folder renaming** : Renommage intelligent avec apostrophes normalisées
+- **Validation robuste** : Rejet des dossiers contenant des sous-dossiers
+- **Diagnostics avancés** : Logs persistants dans `/app/logs` avec analyse d'échecs
 
 ---
 
@@ -304,22 +315,28 @@ docker-compose up -d
 
 | Date | Description du Commit | Commit GitHub | Commit Gitea |
 |------|----------------------|---------------|--------------|
-| 2026-03-04 | Fix server 500 errors and JSON issues | `993d078` | `993d078` |
-| 2026-03-04 | Use GHCR image in compose instead of local build | `767a095` | `767a095` |
-| 2026-03-04 | Parametrize docker-compose with defaults and add .env.example | `798e680` | `798e680` |
-| 2026-03-04 | Fix rename button functionality | `3f0afcd` | `3f0afcd` |
-| 2026-03-04 | Normalize apostrophes for FFmpeg-safe folder renaming | `e006531` | `e006531` |
-| 2026-03-04 | Fix smart folder renaming in web UI API | `5adf2d1` | `5adf2d1` |
-| 2026-03-04 | Configure Docker image build in GitHub Actions | `55b21db` | `55b21db` |
-| 2026-03-04 | Update GUI to match docker-compose.yml | `b2e14fb` | `b2e14fb` |
-| 2026-03-04 | Fix nginx access log permission error | `2ae16c4` | `2ae16c4` |
-| 2026-03-04 | Fix CLI synopsis disable flag compatibility | `11f56a3` | `11f56a3` |
-| 2026-03-04 | Documentation complète v2.1.0 - Mise à jour et nouveaux guides | `c3c46eb` | `c3c46eb` |
+| 2026-03-06 | Remove audiobook buttons during conversion + dynamic job bars | `9c8ec77` | `9c8ec77` |
+| 2026-03-06 | Expose conversion progress to API and render dynamic job bars | `8f9aca2` | `8f9aca2` |
+| 2026-03-06 | Fix FFmpeg error on audio processing + reject subdirectories | `53267b3` | `53267b3` |
+| 2026-03-06 | Reject audiobook folders that contain subdirectories | `841dc6f` | `841dc6f` |
+| 2026-03-06 | Fix log file not found error + persist processor logs | `4d5d9a2` | `4d5d9a2` |
+| 2026-03-06 | Persist processor logs in /app/logs and improve failure diagnostics | `6b3dac7` | `6b3dac7` |
+| 2026-03-06 | Fix web debug log location to use /app/logs | `3ce04b6` | `3ce04b6` |
+| 2026-03-06 | Fix backend logs API error 504 + jobs lock deadlock | `bd3929b` | `bd3929b` |
+| 2026-03-06 | Fix web jobs lock deadlock blocking logs and status APIs | `c95cbbe` | `c95cbbe` |
+| 2026-03-06 | Add detailed web processing logs and live tracking UI | `d8f922b` | `d8f922b` |
+| 2026-03-06 | Refactor rename functionality and replace popups by notifications | `1eabcff` | `1eabcff` |
+| 2026-03-06 | Améliore le renommage manuel et remplace les popups par notifications | `d473558` | `d473558` |
+| 2026-03-06 | Allow user to edit title manually + Ollama assisted renaming | `80ee814` | `80ee814` |
+| 2026-03-06 | Ajouter bouton titre manuel et renommage assisté par Ollama | `42072d8` | `42072d8` |
+| 2026-03-06 | Fix failed API calls in GUI for Ollama search and model pull | `a66bf0e` | `a66bf0e` |
+| 2026-03-06 | Fix Ollama UI failures for search and model pull | `1475f40` | `1475f40` |
+| 2026-03-06 | Add global busy indicator and model pull progress bar | `aecb0fd` | `aecb0fd` |
 
 ### 📈 **Statistiques de Synchronisation**
 
-- **Total commits synchronisés** : 11
-- **Dernière synchronisation** : 4 Mars 2026
+- **Total commits synchronisés** : 17
+- **Dernière synchronisation** : 6 Mars 2026
 - **Statut** : ✅ GitHub et Gitea parfaitement synchronisés
 - **Prochaine mise à jour requise** : À chaque modification du README.md
 
@@ -331,4 +348,4 @@ docker-compose up -d
 
 ---
 
-*Dernière mise à jour du tableau : 4 Mars 2026* 📊✨
+*Dernière mise à jour du tableau : 6 Mars 2026* 📊✨

@@ -52,9 +52,24 @@
         .muted { color: var(--muted); }
         .pill { border:1px solid var(--border); border-radius:999px; padding:2px 8px; font-size:12px; }
         audio { width:100%; max-width: 300px; }
-        .global-busy { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; display:none; }
-        .global-busy.active { display:block; }
-        .global-busy .label { font-size: 12px; padding: 4px 12px; background: var(--card); border-bottom:1px solid var(--border); }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--muted) 60%, transparent);
+            box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.0);
+            transition: background-color .2s ease;
+            display: inline-block;
+        }
+        .status-dot.active {
+            background: var(--primary);
+            animation: softPulse 1.8s ease-in-out infinite;
+        }
+        @keyframes softPulse {
+            0% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.35); transform: scale(1); }
+            70% { box-shadow: 0 0 0 9px rgba(79, 70, 229, 0); transform: scale(1.04); }
+            100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); transform: scale(1); }
+        }
         .progress-track { width:100%; height:6px; background: color-mix(in srgb, var(--border) 70%, transparent); overflow:hidden; }
         .progress-indeterminate { height:100%; width:35%; background: var(--primary); animation: indeterminate 1.1s infinite; }
         .progress-determinate { height:100%; width:0%; background: var(--primary); transition: width .2s ease; }
@@ -116,12 +131,8 @@
     <div>
         <strong class="app-title">Audiobook Manager</strong>
     </div>
-    <label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label>
+    <div class="row"><span id="apiActivityDot" class="status-dot" title="Activité API"></span><label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label></div>
 </header>
-<div id="globalBusy" class="global-busy" aria-live="polite">
-    <div class="label" id="globalBusyLabel">Traitement en cours...</div>
-    <div class="progress-track"><div class="progress-indeterminate"></div></div>
-</div>
 <div class="tabs">
     <button class="tab active" data-page="library">Bibliothèque</button>
     <button class="tab" data-page="processing">Traitements</button>
@@ -283,6 +294,7 @@ let manualRenameRow = null;
 let pendingApiCalls = 0;
 let ollamaPullTicker = null;
 let hiddenDuplicateDeleteTargets = new Set();
+let enqueueInFlight = new Set();
 
 function isAudiobookshelfConfigMissing(config){
     if (!config || typeof config !== 'object') return true;
@@ -300,11 +312,9 @@ function updateSubmissionWarning(config){
     el.classList.toggle('hidden', !isAudiobookshelfConfigMissing(config));
 }
 
-function setGlobalBusy(isBusy, label='Traitement en cours...'){
-    const box = document.getElementById('globalBusy');
-    const txt = document.getElementById('globalBusyLabel');
-    if (txt) txt.textContent = label;
-    if (box) box.classList.toggle('active', isBusy);
+function setGlobalBusy(isBusy){
+    const dot = document.getElementById('apiActivityDot');
+    if (dot) dot.classList.toggle('active', isBusy);
 }
 
 function startPullProgress(){
@@ -500,7 +510,7 @@ async function validateManualRename(folder){
 
 async function api(url, options={}) {
     pendingApiCalls += 1;
-    setGlobalBusy(true, 'Traitement en cours...');
+    setGlobalBusy(true);
     try {
         const r = await fetch(url, { headers: {'Content-Type':'application/json'}, ...options });
         const raw = await r.text();
@@ -684,8 +694,19 @@ async function deleteSuspectFolder(folder){
 }
 
 async function enqueueFolders(folders){
-    await api('/api/jobs/enqueue',{method:'POST', body: JSON.stringify({folders})});
-    await refreshDashboardData({forceDoneRefresh: true});
+    const uniqueFolders = [...new Set((folders || []).filter(Boolean))].filter((folder) => !enqueueInFlight.has(folder));
+    if (!uniqueFolders.length) return notify('Ces dossiers sont déjà en file d'attente.', 'warn');
+
+    uniqueFolders.forEach((folder) => enqueueInFlight.add(folder));
+    try {
+        const result = await api('/api/jobs/enqueue',{method:'POST', body: JSON.stringify({folders: uniqueFolders})});
+        const skipped = result?.skipped || [];
+        if (skipped.length) notify(`${skipped.length} dossier(s) ignoré(s): déjà en attente/en cours.`, 'warn');
+        await refreshDashboardData({forceDoneRefresh: true});
+        await loadLibrary();
+    } finally {
+        uniqueFolders.forEach((folder) => enqueueInFlight.delete(folder));
+    }
 }
 async function enqueueSelected(){
     const folders = selectedValues('folderSel');
@@ -860,7 +881,6 @@ function shouldRefreshLibrary(){
 
 
 
-
 const monitorState = {
     sourceSig: '',
     outputSig: '',
@@ -894,6 +914,67 @@ async function monitorAndPatchDom(){
         monitorState.sourceSig = signs.source_sig || monitorState.sourceSig;
         monitorState.outputSig = signs.output_sig || monitorState.outputSig;
         monitorState.jobsSig = signs.jobs_sig || monitorState.jobsSig;
+    } catch (err) {
+        // On garde l'UI interactive; les actions utilisateur déclenchent déjà les updates AJAX directes.
+    } finally {
+        monitorState.inFlight = false;
+    }
+}
+
+const monitorState = {
+    sourceSig: '',
+    outputSig: '',
+    jobsSig: '',
+    pendingLibraryRefresh: false,
+    inFlight: false,
+};
+
+function isLibraryTabActive(){
+    const activeTab = document.querySelector('.tab.active');
+    return activeTab?.dataset?.page === 'library';
+}
+
+function hasLibrarySelection(){
+    return selectedValues('folderSel').length > 0 || selectedValues('archiveSel').length > 0;
+}
+
+function canPatchLibrarySafely(){
+    return shouldRefreshLibrary() && isLibraryTabActive() && !hasLibrarySelection();
+}
+
+async function monitorAndPatchDom(){
+    if (monitorState.inFlight) return;
+    monitorState.inFlight = true;
+    try {
+        const qs = new URLSearchParams({
+            source_sig: monitorState.sourceSig,
+            output_sig: monitorState.outputSig,
+            jobs_sig: monitorState.jobsSig,
+        });
+        const payload = await api(`/api/monitor?${qs.toString()}`);
+        const signs = payload?.signatures || {};
+        const changes = payload?.changes || {};
+
+        const firstSync = !monitorState.sourceSig && !monitorState.outputSig && !monitorState.jobsSig;
+        monitorState.sourceSig = signs.source_sig || monitorState.sourceSig;
+        monitorState.outputSig = signs.output_sig || monitorState.outputSig;
+        monitorState.jobsSig = signs.jobs_sig || monitorState.jobsSig;
+
+        if (firstSync) return;
+
+        if (changes.jobs) {
+            await loadJobs({forceDoneRefresh: false});
+        }
+        if (changes.outputs) {
+            await loadSubmissionQueue();
+        }
+        if (changes.library) {
+            monitorState.pendingLibraryRefresh = true;
+        }
+        if (monitorState.pendingLibraryRefresh && canPatchLibrarySafely()) {
+            await loadLibrary();
+            monitorState.pendingLibraryRefresh = false;
+        }
     } catch (err) {
         // On garde l'UI interactive; les actions utilisateur déclenchent déjà les updates AJAX directes.
     } finally {
@@ -1040,6 +1121,9 @@ function setupTabs(){
         if (updateHash && location.hash !== `#${page}`) {
             history.replaceState(null, '', `#${page}`);
         }
+        if (page === 'library' && monitorState.pendingLibraryRefresh && canPatchLibrarySafely()) {
+            loadLibrary().then(() => { monitorState.pendingLibraryRefresh = false; });
+        }
     };
 
     document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page)));
@@ -1050,7 +1134,9 @@ function setupTabs(){
 
     window.addEventListener('hashchange', () => {
         const next = (location.hash || '').replace('#', '');
-        if (document.querySelector(`.tab[data-page="${next}"]`)) setPage(next, false);
+        if (document.querySelector(`.tab[data-page="${next}"]`)) {
+            setPage(next, false);
+        }
     });
 }
 
@@ -1070,14 +1156,14 @@ loadJobs();
 loadConfig();
 loadSubmissionQueue();
 loadOllamaStatus();
-monitorAndPatchDom();
+setTimeout(() => monitorAndPatchDom(), 600);
 
 // Monitoring AJAX précis (sans rechargement de page):
 // - vérifie régulièrement les changements dossiers/jobs côté backend
 // - applique uniquement les patchs DOM nécessaires.
 setInterval(() => {
     monitorAndPatchDom();
-}, 1000);
+}, 1500);
 </script>
 </body>
 </html>

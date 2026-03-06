@@ -1546,17 +1546,30 @@ def api_enqueue_jobs():
     _ensure_worker()
     payload = request.get_json(silent=True) or {}
     folders = payload.get("folders", [])
+    if not isinstance(folders, list):
+        return jsonify({"error": "Le champ 'folders' doit être une liste"}), 400
+
     queued = []
+    skipped = []
 
     with jobs_lock:
+        active_folders = {j.folder for j in jobs.values() if j.status in {"pending", "running"}}
         for folder in folders:
+            folder_name = str(folder or "").strip()
+            if not folder_name:
+                skipped.append({"folder": str(folder), "reason": "nom invalide"})
+                continue
+            if folder_name in active_folders:
+                skipped.append({"folder": folder_name, "reason": "déjà en attente/en cours"})
+                continue
             jid = f"job-{int(time.time() * 1000)}-{len(jobs)}"
-            job = Job(id=jid, folder=folder)
+            job = Job(id=jid, folder=folder_name)
             jobs[jid] = job
             job_queue.put(jid)
             queued.append(asdict(job))
+            active_folders.add(folder_name)
 
-    return jsonify({"queued": queued})
+    return jsonify({"queued": queued, "skipped": skipped})
 
 
 @app.route("/api/jobs")

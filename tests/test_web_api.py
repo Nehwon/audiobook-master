@@ -233,6 +233,30 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertIn('details', last_event)
         self.assertEqual(last_event['details']['eta'], '00h12mn')
 
+
+    def test_enqueue_rejects_duplicate_active_folder(self):
+        folder = self.media_dir / 'Livre Unique'
+        folder.mkdir()
+        (folder / 'a.mp3').write_text('x')
+
+        first = self.client.post('/api/jobs/enqueue', json={'folders': ['Livre Unique']})
+        self.assertEqual(first.status_code, 200)
+        payload1 = first.get_json()
+        self.assertEqual(len(payload1['queued']), 1)
+
+        second = self.client.post('/api/jobs/enqueue', json={'folders': ['Livre Unique']})
+        self.assertEqual(second.status_code, 200)
+        payload2 = second.get_json()
+        self.assertEqual(len(payload2['queued']), 0)
+        self.assertEqual(len(payload2['skipped']), 1)
+        self.assertEqual(payload2['skipped'][0]['reason'], 'déjà en attente/en cours')
+
+    def test_enqueue_rejects_non_list_payload(self):
+        resp = self.client.post('/api/jobs/enqueue', json={'folders': 'not-a-list'})
+        self.assertEqual(resp.status_code, 400)
+        payload = resp.get_json()
+        self.assertIn('folders', payload['error'])
+
     def test_jobs_payload_contains_events(self):
         folder = self.media_dir / 'Livre'
         folder.mkdir()

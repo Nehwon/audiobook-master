@@ -262,6 +262,46 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertTrue(done.is_set(), 'Deadlock détecté lors de _push_job_event')
 
 
+
+    def test_monitor_endpoint_detects_no_change_with_same_signatures(self):
+        first = self.client.get('/api/monitor')
+        self.assertEqual(first.status_code, 200)
+        first_payload = first.get_json()
+
+        signatures = first_payload['signatures']
+        second = self.client.get('/api/monitor', query_string={
+            'source_sig': signatures['source_sig'],
+            'output_sig': signatures['output_sig'],
+            'jobs_sig': signatures['jobs_sig'],
+        })
+        self.assertEqual(second.status_code, 200)
+        payload = second.get_json()
+        self.assertFalse(payload['changes']['library'])
+        self.assertFalse(payload['changes']['outputs'])
+        self.assertFalse(payload['changes']['jobs'])
+
+    def test_monitor_endpoint_detects_source_output_and_job_changes(self):
+        baseline = self.client.get('/api/monitor').get_json()
+
+        folder = self.media_dir / 'Live Change'
+        folder.mkdir()
+        (folder / 'track.mp3').write_text('x')
+        (self.output_dir / 'Live Change.m4b').write_text('m4b')
+
+        with web_app.jobs_lock:
+            web_app.jobs['job-live'] = web_app.Job(id='job-live', folder='Live Change', status='running', progress=12)
+
+        changed = self.client.get('/api/monitor', query_string={
+            'source_sig': baseline['signatures']['source_sig'],
+            'output_sig': baseline['signatures']['output_sig'],
+            'jobs_sig': baseline['signatures']['jobs_sig'],
+        })
+        self.assertEqual(changed.status_code, 200)
+        payload = changed.get_json()
+        self.assertTrue(payload['changes']['library'])
+        self.assertTrue(payload['changes']['outputs'])
+        self.assertTrue(payload['changes']['jobs'])
+
     def test_logs_endpoint_returns_json(self):
         resp = self.client.get('/api/logs?lines=20')
         self.assertEqual(resp.status_code, 200)

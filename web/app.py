@@ -157,6 +157,8 @@ def _get_archive_fingerprint_from_db(archive_name: str, file_size: int, modified
     return {"md5": row[0], "sha256": row[1], "content_sig": row[2]}
 
 
+
+
 def _safe_iterdir(path: Path) -> List[Path]:
     if not path.exists() or not path.is_dir():
         return []
@@ -167,54 +169,54 @@ def _safe_iterdir(path: Path) -> List[Path]:
 
 
 def _path_entries_signature(path: Path, *, allowed_suffixes: Optional[set[str]] = None) -> str:
-    items: List[str] = []
+    entries: List[str] = []
     for entry in sorted(_safe_iterdir(path), key=lambda item: item.name.lower()):
         try:
             if allowed_suffixes is not None and not entry.is_dir() and entry.suffix.lower() not in allowed_suffixes:
                 continue
             stat = entry.stat()
-            kind = "d" if entry.is_dir() else "f"
-            items.append(f"{entry.name}|{kind}|{int(stat.st_size)}|{int(stat.st_mtime_ns)}")
+            entry_type = "d" if entry.is_dir() else "f"
+            entries.append(f"{entry.name}|{entry_type}|{int(stat.st_size)}|{int(stat.st_mtime_ns)}")
         except Exception:  # noqa: BLE001
             continue
-    return hashlib.sha1("\n".join(items).encode("utf-8")).hexdigest()
+    payload = "\n".join(entries).encode("utf-8")
+    return hashlib.sha1(payload).hexdigest()
 
 
 def _jobs_signature() -> str:
     with jobs_lock:
-        values = [asdict(j) for j in jobs.values()]
-        review_size = len(review_bin)
-        last_event_ts = job_events[-1].get("timestamp") if job_events else 0
+        compact_jobs = [
+            {
+                "id": j.id,
+                "status": j.status,
+                "progress": j.progress,
+                "stage": j.stage,
+                "error": j.error,
+                "output_file": j.output_file,
+            }
+            for j in jobs.values()
+        ]
+        compact_jobs.sort(key=lambda item: str(item.get("id")))
+        last_event_ts = job_events[-1]["timestamp"] if job_events else 0
+        review_count = len(review_bin)
+    payload = json.dumps(
+        {
+            "jobs": compact_jobs,
+            "last_event_ts": last_event_ts,
+            "review_count": review_count,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha1(payload).hexdigest()
 
-    compact = {
-        "jobs": sorted(
-            [
-                {
-                    "id": v.get("id"),
-                    "status": v.get("status"),
-                    "progress": v.get("progress"),
-                    "stage": v.get("stage"),
-                    "error": v.get("error"),
-                    "output_file": v.get("output_file"),
-                }
-                for v in values
-            ],
-            key=lambda item: str(item.get("id")),
-        ),
-        "review_size": review_size,
-        "last_event_ts": last_event_ts,
-    }
-    payload = json.dumps(compact, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
-
-def _compute_dom_signatures() -> Dict[str, str]:
+def _compute_monitor_signatures() -> Dict[str, str]:
     return {
         "source_sig": _path_entries_signature(MEDIA_DIR),
         "output_sig": _path_entries_signature(OUTPUT_DIR, allowed_suffixes={".m4b"}),
         "jobs_sig": _jobs_signature(),
     }
-
 
 def _save_archive_fingerprint_to_db(
     archive_name: str,
@@ -1709,6 +1711,23 @@ def api_ollama_search_metadata():
     return jsonify({"results": results})
 
 
+
+
+
+@app.route("/api/monitor")
+def api_monitor():
+    previous = {
+        "source_sig": request.args.get("source_sig") or "",
+        "output_sig": request.args.get("output_sig") or "",
+        "jobs_sig": request.args.get("jobs_sig") or "",
+    }
+    current = _compute_monitor_signatures()
+    changes = {
+        "library": previous["source_sig"] != current["source_sig"],
+        "outputs": previous["output_sig"] != current["output_sig"],
+        "jobs": previous["jobs_sig"] != current["jobs_sig"],
+    }
+    return jsonify({"changes": changes, "signatures": current})
 
 @app.route("/api/outputs")
 def api_outputs():

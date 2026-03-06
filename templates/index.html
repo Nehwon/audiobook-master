@@ -861,6 +861,46 @@ function shouldRefreshLibrary(){
 
 
 
+const monitorState = {
+    sourceSig: '',
+    outputSig: '',
+    jobsSig: '',
+    inFlight: false,
+};
+
+async function monitorAndPatchDom(){
+    if (monitorState.inFlight) return;
+    monitorState.inFlight = true;
+    try {
+        const qs = new URLSearchParams({
+            source_sig: monitorState.sourceSig,
+            output_sig: monitorState.outputSig,
+            jobs_sig: monitorState.jobsSig,
+        });
+        const payload = await api(`/api/monitor?${qs.toString()}`);
+        const signs = payload?.signatures || {};
+        const changes = payload?.changes || {};
+
+        if (changes.jobs) {
+            await loadJobs({forceDoneRefresh: false});
+        }
+        if (changes.outputs) {
+            await loadSubmissionQueue();
+        }
+        if (changes.library && shouldRefreshLibrary()) {
+            await loadLibrary();
+        }
+
+        monitorState.sourceSig = signs.source_sig || monitorState.sourceSig;
+        monitorState.outputSig = signs.output_sig || monitorState.outputSig;
+        monitorState.jobsSig = signs.jobs_sig || monitorState.jobsSig;
+    } catch (err) {
+        // On garde l'UI interactive; les actions utilisateur déclenchent déjà les updates AJAX directes.
+    } finally {
+        monitorState.inFlight = false;
+    }
+}
+
 function renderLlmResults(items){
     const c = document.getElementById('llmResults');
     if (!items?.length) { c.innerHTML = '<span class="muted">Aucun résultat.</span>'; return; }
@@ -1030,10 +1070,14 @@ loadJobs();
 loadConfig();
 loadSubmissionQueue();
 loadOllamaStatus();
+monitorAndPatchDom();
 
-// Mode AJAX pur: aucun rafraîchissement automatique périodique.
-// Les mises à jour sont déclenchées uniquement par les actions utilisateur
-// (et les callbacks API déjà présents dans les handlers).
+// Monitoring AJAX précis (sans rechargement de page):
+// - vérifie régulièrement les changements dossiers/jobs côté backend
+// - applique uniquement les patchs DOM nécessaires.
+setInterval(() => {
+    monitorAndPatchDom();
+}, 1000);
 </script>
 </body>
 </html>

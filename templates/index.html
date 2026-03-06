@@ -266,9 +266,20 @@ function toJsString(value){
 function renderInlineJobProgress(job){
     if (!job) return '';
     const pct = Math.max(0, Math.min(100, parseInt(job.progress ?? 0, 10) || 0));
-    const statusLabel = job.status === 'pending' ? 'En file d\'attente' : 'En conversion';
-    const stage = escapeHtml(job.stage || 'Traitement');
-    return `<div class="job-inline"><div class="meta">${statusLabel} · ${stage} · ${pct}%</div><div class="track"><div class="bar" style="width:${pct}%"></div></div></div>`;
+    const statusLabel = job.status === 'pending' ? 'En file d\'attente' : 'Traitement en cours';
+    const stageRaw = String(job.stage || 'Traitement');
+    const normalizedStage = stageRaw.toLowerCase();
+    const phase = (() => {
+        if (job.status === 'pending' || normalizedStage.includes('préparation')) return 1;
+        if (normalizedStage.includes('métadonnées')) return 2;
+        if (normalizedStage.includes('analyse')) return 3;
+        if (normalizedStage.includes('conversion')) return 4;
+        if (normalizedStage.includes('finalisation')) return 5;
+        if (normalizedStage.includes('terminé') || normalizedStage.includes('erreur')) return 6;
+        return 4;
+    })();
+    const stage = escapeHtml(stageRaw);
+    return `<div class="job-inline"><div class="meta">${statusLabel} · Phase ${phase}/6 · ${pct}%</div><div class="muted" style="font-size:12px">${stage}</div><div class="track"><div class="bar" style="width:${pct}%"></div></div></div>`;
 }
 
 function notify(message, type='info', timeoutMs=3600){

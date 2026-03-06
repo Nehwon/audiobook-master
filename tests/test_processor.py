@@ -171,6 +171,11 @@ class TestAudiobookProcessor(unittest.TestCase):
         self.assertEqual(self.processor._compute_threads_per_cpu_task(1), 1)
         self.assertEqual(self.processor._compute_threads_per_cpu_task(8), 2)
 
+    def test_compute_parallel_audiobooks(self):
+        self.assertEqual(self.processor._compute_parallel_audiobooks(3), 1)
+        self.assertEqual(self.processor._compute_parallel_audiobooks(8), 2)
+        self.assertEqual(self.processor._compute_parallel_audiobooks(32), 8)
+
 
 if __name__ == '__main__':
     unittest.main()

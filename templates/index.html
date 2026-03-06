@@ -858,45 +858,7 @@ function shouldRefreshLibrary(){
     return true;
 }
 
-const domSyncState = {
-    source_sig: '',
-    output_sig: '',
-    jobs_sig: '',
-    busy: false,
-};
 
-async function syncDomFromBackendChanges(){
-    if (domSyncState.busy) return;
-    domSyncState.busy = true;
-    try {
-        const query = new URLSearchParams({
-            source_sig: domSyncState.source_sig,
-            output_sig: domSyncState.output_sig,
-            jobs_sig: domSyncState.jobs_sig,
-        });
-        const payload = await api(`/api/dom/changes?${query.toString()}`);
-        const signatures = payload?.signatures || {};
-        const changes = payload?.changes || {};
-
-        if (changes.jobs) {
-            await loadJobs({forceDoneRefresh: false});
-        }
-        if (changes.outputs) {
-            await loadSubmissionQueue();
-        }
-        if (changes.library && shouldRefreshLibrary()) {
-            await loadLibrary();
-        }
-
-        domSyncState.source_sig = signatures.source_sig || domSyncState.source_sig;
-        domSyncState.output_sig = signatures.output_sig || domSyncState.output_sig;
-        domSyncState.jobs_sig = signatures.jobs_sig || domSyncState.jobs_sig;
-    } catch (err) {
-        // Fallback silencieux: les actions utilisateur continuent d'appeler les APIs directes.
-    } finally {
-        domSyncState.busy = false;
-    }
-}
 
 
 function renderLlmResults(items){
@@ -1068,17 +1030,10 @@ loadJobs();
 loadConfig();
 loadSubmissionQueue();
 loadOllamaStatus();
-syncDomFromBackendChanges();
 
-// Polling léger piloté par le backend : on ne met à jour le DOM que si les signatures changent.
-setInterval(() => {
-    syncDomFromBackendChanges();
-}, 3000);
-
-setInterval(() => {
-    const card = document.getElementById('debugLogsCard');
-    if (card && card.style.display !== 'none') loadDebugLogs();
-}, 8000);
+// Mode AJAX pur: aucun rafraîchissement automatique périodique.
+// Les mises à jour sont déclenchées uniquement par les actions utilisateur
+// (et les callbacks API déjà présents dans les handlers).
 </script>
 </body>
 </html>

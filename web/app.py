@@ -1710,21 +1710,6 @@ def api_ollama_search_metadata():
 
 
 
-
-@app.route("/api/dom/changes")
-def api_dom_changes():
-    current = _compute_dom_signatures()
-    previous = {
-        'source_sig': request.args.get('source_sig') or '',
-        'output_sig': request.args.get('output_sig') or '',
-        'jobs_sig': request.args.get('jobs_sig') or '',
-    }
-    changes = {
-        'library': previous['source_sig'] != current['source_sig'],
-        'outputs': previous['output_sig'] != current['output_sig'],
-        'jobs': previous['jobs_sig'] != current['jobs_sig'],
-    }
-    return jsonify({'signatures': current, 'changes': changes})
 @app.route("/api/outputs")
 def api_outputs():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

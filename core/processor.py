@@ -1496,6 +1496,12 @@ class AudiobookProcessor:
                     "Conversion",
                     f"Encodage AAC {index}/{len(audio_files)}",
                     mapped_progress,
+                    {
+                        "phase_key": "conversion",
+                        "phase_label": "Conversion AAC",
+                        "processed": index,
+                        "total": len(audio_files),
+                    },
                 )
 
             logger.info("🎚️ Étape 2/6: Normalisation à -18 LUFS")
@@ -1533,6 +1539,12 @@ class AudiobookProcessor:
                     "Conversion",
                     f"Normalisation -18 LUFS {index}/{len(encoded_files)}",
                     mapped_progress,
+                    {
+                        "phase_key": "normalization",
+                        "phase_label": "Normalisation",
+                        "processed": index,
+                        "total": len(encoded_files),
+                    },
                 )
 
             chapter_durations_ms = [get_duration_ms(normalized_file) for normalized_file in normalized_files]
@@ -1542,6 +1554,7 @@ class AudiobookProcessor:
             with open(chapters_file, 'w', encoding='utf-8') as chapter_writer:
                 chapter_writer.write(';FFMETADATA1\n')
                 current_start = 0
+                chapters_total = len(audio_files)
                 for index, (audio_file, duration_ms) in enumerate(zip(audio_files, chapter_durations_ms), start=1):
                     end_ms = current_start + max(duration_ms, 1000)
                     chapter_title = audio_file.stem
@@ -1551,6 +1564,17 @@ class AudiobookProcessor:
                     chapter_writer.write(f'END={end_ms}\n')
                     chapter_writer.write(f'title=Chapitre {index:03d} - {chapter_title}\n')
                     current_start = end_ms
+                    self._emit_progress(
+                        "Conversion",
+                        f"Génération chapitres {index}/{chapters_total}",
+                        75,
+                        {
+                            "phase_key": "chapters",
+                            "phase_label": "Génération chapitres",
+                            "processed": index,
+                            "total": chapters_total,
+                        },
+                    )
 
             logger.info("🔗 Étape 4/6: Concaténation simple en M4A temporaire")
             concat_list = work_dir / "concat_list.txt"
@@ -1571,7 +1595,17 @@ class AudiobookProcessor:
             if concat_process.returncode != 0:
                 logger.error("❌ Échec concaténation: %s", concat_process.stderr)
                 return False
-            self._emit_progress("Conversion", "Concaténation terminée", 75)
+            self._emit_progress(
+                "Conversion",
+                "Concaténation terminée",
+                80,
+                {
+                    "phase_key": "finalization",
+                    "phase_label": "Finalisation",
+                    "processed": 1,
+                    "total": 2,
+                },
+            )
 
             logger.info("🧩 Étape 5/6: Injection chapitres + métadonnées")
             if config.enable_chapters:
@@ -1604,7 +1638,17 @@ class AudiobookProcessor:
                 return False
 
             logger.info("✅ Étape 6/6: Conversion M4B terminée")
-            self._emit_progress("Finalisation", "M4B final prêt", 95)
+            self._emit_progress(
+                "Finalisation",
+                "M4B final prêt",
+                95,
+                {
+                    "phase_key": "finalization",
+                    "phase_label": "Finalisation",
+                    "processed": 2,
+                    "total": 2,
+                },
+            )
             return True
 
         except Exception as e:

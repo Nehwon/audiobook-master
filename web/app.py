@@ -48,6 +48,7 @@ class Job:
     status: str = "pending"
     progress: int = 0
     stage: str = "En attente"
+    phase_progress: Dict[str, Dict[str, object]] = field(default_factory=dict)
     error: Optional[str] = None
     output_file: Optional[str] = None
     created_at: float = field(default_factory=time.time)
@@ -669,6 +670,28 @@ def _worker_loop() -> None:
                     current_job.stage = stage
                     if isinstance(progress_value, (int, float)):
                         current_job.progress = max(0, min(100, int(progress_value)))
+
+                    phase_key = details.get("phase_key") if isinstance(details, dict) else None
+                    if isinstance(phase_key, str) and phase_key:
+                        phase_label = details.get("phase_label") or phase_key
+                        processed_raw = details.get("processed", 0)
+                        total_raw = details.get("total", 0)
+                        try:
+                            processed = max(0, int(processed_raw))
+                        except (TypeError, ValueError):
+                            processed = 0
+                        try:
+                            total = max(0, int(total_raw))
+                        except (TypeError, ValueError):
+                            total = 0
+                        if total and processed > total:
+                            processed = total
+                        current_job.phase_progress[phase_key] = {
+                            "label": str(phase_label),
+                            "processed": processed,
+                            "total": total,
+                        }
+
                     _push_job_event(current_job.id, current_job.folder, stage, message, "info", details)
 
             processor.progress_callback = _on_processor_progress
@@ -685,6 +708,7 @@ def _worker_loop() -> None:
                     job.status = "completed"
                     job.stage = "Terminé"
                     job.progress = 100
+                    job.phase_progress.setdefault("finalization", {"label": "Finalisation", "processed": 2, "total": 2})
                     job.output_file = _guess_output_file(job.folder, job.started_at or time.time())
                     _push_job_event(job.id, job.folder, job.stage, f"Succès. Fichier: {job.output_file or 'inconnu'}")
                 else:

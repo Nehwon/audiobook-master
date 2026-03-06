@@ -106,6 +106,26 @@ class TestAudiobookProcessor(unittest.TestCase):
             # Vérifie que la conversion échoue
             self.assertFalse(result)
 
+
+    def test_convert_to_m4b_does_not_use_progress_pipe(self):
+        """Vérifie que la commande FFmpeg n'utilise pas -progress pipe:1."""
+        test_audio = self.source_dir / "test_progress.mp3"
+        test_audio.write_bytes(b"FAKE_AUDIO_DATA")
+
+        output_path = self.output_dir / "output_progress.m4b"
+
+        mock_process = MagicMock()
+        mock_process.poll.side_effect = [0]
+        mock_process.returncode = 1
+        mock_process.communicate.return_value = ("", "mock error")
+
+        with patch('subprocess.Popen', return_value=mock_process) as mock_popen:
+            self.processor.convert_to_m4b([test_audio], output_path, MagicMock())
+
+            cmd = mock_popen.call_args[0][0]
+            self.assertNotIn('-progress', cmd)
+            self.assertNotIn('pipe:1', cmd)
+
     def test_ffmpeg_concat_file_entry_escapes_single_quotes(self):
         """Teste l'échappement des apostrophes dans la filelist concat FFmpeg."""
         audio_file = self.source_dir / "d'ouverture" / "01 Credits d'ouverture.mp3"

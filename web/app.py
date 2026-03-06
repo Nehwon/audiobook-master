@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import json
+import base64
 import hashlib
+import hmac
 import logging
 import sqlite3
 import os
 import queue
 import re
+import secrets
 import shutil
 import subprocess
 import threading
@@ -41,6 +44,8 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}
 ARCHIVE_EXTENSIONS = {".zip", ".rar"}
+SENSITIVE_CONFIG_KEYS = ("audiobookshelf_password", "audiobookshelf_api_key")
+SECRET_V1_PREFIX = "enc:v1:"
 
 
 @dataclass
@@ -66,7 +71,8 @@ worker_started = False
 MAX_JOB_EVENTS = 500
 job_events: List[Dict] = []
 archive_validation_cache: Dict[str, Dict[str, object]] = {}
-STATE_DB_PATH = TEMP_DIR / "web_state.db"
+def _state_db_path() -> Path:
+    return TEMP_DIR / "web_state.db"
 
 
 def _setup_logging() -> logging.Logger:
@@ -100,7 +106,7 @@ logger = _setup_logging()
 
 def _ensure_state_db() -> None:
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(STATE_DB_PATH) as conn:
+    with sqlite3.connect(_state_db_path()) as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS archive_fingerprints (
@@ -127,11 +133,17 @@ def _ensure_state_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_m4b_candidates_source_folder
+            ON m4b_candidates(source_folder)
+            """
+        )
 
 
 def _get_archive_fingerprint_from_db(archive_name: str, file_size: int, modified: float) -> Optional[Dict[str, Optional[str]]]:
     _ensure_state_db()
-    with sqlite3.connect(STATE_DB_PATH) as conn:
+    with sqlite3.connect(_state_db_path()) as conn:
         row = conn.execute(
             """
             SELECT md5, sha256, content_sig
@@ -154,7 +166,7 @@ def _save_archive_fingerprint_to_db(
     content_sig: Optional[str],
 ) -> None:
     _ensure_state_db()
-    with sqlite3.connect(STATE_DB_PATH) as conn:
+    with sqlite3.connect(_state_db_path()) as conn:
         conn.execute(
             """
             INSERT INTO archive_fingerprints
@@ -174,18 +186,54 @@ def _save_archive_fingerprint_to_db(
 
 def _delete_archive_fingerprint_from_db(archive_name: str) -> None:
     _ensure_state_db()
-    with sqlite3.connect(STATE_DB_PATH) as conn:
+    with sqlite3.connect(_state_db_path()) as conn:
         conn.execute("DELETE FROM archive_fingerprints WHERE archive_name = ?", (archive_name,))
 
 
 def _cleanup_archive_fingerprint_db(existing_archive_names: List[str]) -> None:
     _ensure_state_db()
     keep = set(existing_archive_names)
-    with sqlite3.connect(STATE_DB_PATH) as conn:
+    with sqlite3.connect(_state_db_path()) as conn:
         rows = conn.execute("SELECT archive_name FROM archive_fingerprints").fetchall()
         for (name,) in rows:
             if name not in keep:
                 conn.execute("DELETE FROM archive_fingerprints WHERE archive_name = ?", (name,))
+
+
+def _save_m4b_candidate(source_folder: str, output_name: str) -> None:
+    _ensure_state_db()
+    with sqlite3.connect(_state_db_path()) as conn:
+        conn.execute(
+            """
+            INSERT INTO m4b_candidates
+                (source_folder, output_name, metadata_status, metadata_payload, created_at, updated_at)
+            VALUES (?, ?, 'completed', NULL, ?, ?)
+            ON CONFLICT(source_folder) DO UPDATE SET
+                output_name = excluded.output_name,
+                metadata_status = excluded.metadata_status,
+                updated_at = excluded.updated_at
+            """,
+            (source_folder, output_name, time.time(), time.time()),
+        )
+
+
+def _get_completed_folders_with_existing_outputs() -> set[str]:
+    _ensure_state_db()
+    if not OUTPUT_DIR.exists():
+        return set()
+
+    existing_outputs = {file.name for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()}
+    if not existing_outputs:
+        return set()
+
+    placeholders = ",".join("?" for _ in existing_outputs)
+    query = (
+        "SELECT source_folder FROM m4b_candidates "
+        "WHERE metadata_status = 'completed' AND output_name IN (" + placeholders + ")"
+    )
+    with sqlite3.connect(_state_db_path()) as conn:
+        rows = conn.execute(query, tuple(existing_outputs)).fetchall()
+    return {str(row[0]) for row in rows if row and row[0]}
 
 
 _ensure_state_db()
@@ -420,7 +468,11 @@ def _load_config() -> Dict:
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     if CONFIG_PATH.exists():
         try:
-            return {**_default_config(), **json.loads(CONFIG_PATH.read_text(encoding="utf-8"))}
+            loaded = {**_default_config(), **json.loads(CONFIG_PATH.read_text(encoding="utf-8"))}
+            for key in SENSITIVE_CONFIG_KEYS:
+                raw_value = loaded.get(key, "")
+                loaded[key] = _decrypt_config_secret(raw_value) if isinstance(raw_value, str) else ""
+            return loaded
         except Exception:
             return _default_config()
     return _default_config()
@@ -428,7 +480,63 @@ def _load_config() -> Dict:
 
 def _save_config(config: Dict) -> None:
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+    serialized = {**config}
+    for key in SENSITIVE_CONFIG_KEYS:
+        value = serialized.get(key, "")
+        serialized[key] = _encrypt_config_secret(value) if isinstance(value, str) and value else ""
+    CONFIG_PATH.write_text(json.dumps(serialized, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _config_secret_key() -> bytes:
+    secret = os.getenv("AUDIOBOOK_CONFIG_SECRET", app.config.get("SECRET_KEY", "audiobook_manager_2024"))
+    if not isinstance(secret, str):
+        secret = str(secret)
+    return hashlib.sha256(secret.encode("utf-8")).digest()
+
+
+def _stream_xor(data: bytes, key: bytes, nonce: bytes) -> bytes:
+    output = bytearray()
+    counter = 0
+    while len(output) < len(data):
+        block = hashlib.sha256(key + nonce + counter.to_bytes(4, "big")).digest()
+        output.extend(block)
+        counter += 1
+    return bytes(d ^ output[i] for i, d in enumerate(data))
+
+
+def _encrypt_config_secret(value: str) -> str:
+    if not value:
+        return ""
+    key = _config_secret_key()
+    nonce = secrets.token_bytes(16)
+    plaintext = value.encode("utf-8")
+    ciphertext = _stream_xor(plaintext, key, nonce)
+    mac = hmac.new(key, nonce + ciphertext, hashlib.sha256).digest()
+    payload = base64.urlsafe_b64encode(nonce + mac + ciphertext).decode("ascii")
+    return f"{SECRET_V1_PREFIX}{payload}"
+
+
+def _decrypt_config_secret(value: str) -> str:
+    if not value:
+        return ""
+    if not value.startswith(SECRET_V1_PREFIX):
+        return value
+
+    key = _config_secret_key()
+    try:
+        raw = base64.urlsafe_b64decode(value[len(SECRET_V1_PREFIX):].encode("ascii"))
+        if len(raw) < 48:
+            return ""
+        nonce = raw[:16]
+        mac = raw[16:48]
+        ciphertext = raw[48:]
+        expected = hmac.new(key, nonce + ciphertext, hashlib.sha256).digest()
+        if not hmac.compare_digest(mac, expected):
+            return ""
+        plaintext = _stream_xor(ciphertext, key, nonce)
+        return plaintext.decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
 
 
 def _clean_name(name: str) -> str:
@@ -628,10 +736,13 @@ def _list_media() -> Dict:
         for file in OUTPUT_DIR.glob("*.m4b")
         if file.is_file()
     } if OUTPUT_DIR.exists() else set()
+    completed_source_folders = _get_completed_folders_with_existing_outputs()
 
     for item in sorted(MEDIA_DIR.iterdir(), key=lambda x: x.name.lower()):
         if item.is_dir():
             if item.name in ignored:
+                continue
+            if item.name in completed_source_folders:
                 continue
             if _normalize_media_label(item.name) in output_keys:
                 continue
@@ -1139,6 +1250,9 @@ def _worker_loop() -> None:
                         "error",
                     )
                 job.ended_at = time.time()
+
+            if success and job.output_file:
+                _save_m4b_candidate(job.folder, job.output_file)
         except Exception as exc:  # noqa: BLE001
             with jobs_lock:
                 job.status = "failed"

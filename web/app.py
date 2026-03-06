@@ -65,6 +65,7 @@ worker_started = False
 MAX_JOB_EVENTS = 500
 job_events: List[Dict] = []
 archive_validation_cache: Dict[str, Dict[str, object]] = {}
+archive_fingerprint_cache: Dict[str, Dict[str, object]] = {}
 
 
 def _setup_logging() -> logging.Logger:
@@ -706,6 +707,11 @@ def _attach_archive_duplicate_hints(archives: List[Dict]) -> None:
     by_sha: Dict[str, List[str]] = {}
     by_content: Dict[str, List[str]] = {}
 
+    by_size: Dict[int, List[Dict]] = {}
+    for archive in archives:
+        size = int(archive.get("size", 0) or 0)
+        by_size.setdefault(size, []).append(archive)
+
     for archive in archives:
         primary_name = archive.get("primary_name")
         primary_path_raw = archive.get("primary_path")
@@ -715,19 +721,40 @@ def _attach_archive_duplicate_hints(archives: List[Dict]) -> None:
         if not primary_path.exists():
             continue
 
+        stat = primary_path.stat()
+        cached = archive_fingerprint_cache.get(primary_name)
+        if cached and cached.get("size") == stat.st_size and cached.get("modified") == stat.st_mtime:
+            md5 = cached.get("md5")
+            sha256 = cached.get("sha256")
+            content_sig = cached.get("content_sig")
+        else:
+            candidates = by_size.get(int(archive.get("size", 0) or 0), [])
+            has_same_size_peer = any(a.get("primary_name") != primary_name for a in candidates)
+
+            # Les hashs complets sont coûteux sur de gros volumes :
+            # on les calcule seulement s'il existe au moins un pair de même taille.
+            md5 = _file_hash(primary_path, "md5") if has_same_size_peer else None
+            sha256 = _file_hash(primary_path, "sha256") if has_same_size_peer else None
+            content_sig = _archive_content_signature(primary_path) if has_same_size_peer else None
+
+            archive_fingerprint_cache[primary_name] = {
+                "size": stat.st_size,
+                "modified": stat.st_mtime,
+                "md5": md5,
+                "sha256": sha256,
+                "content_sig": content_sig,
+            }
+
         title_key = _normalized_archive_title(primary_name)
         if title_key:
             by_title.setdefault(title_key, []).append(primary_name)
 
-        md5 = _file_hash(primary_path, "md5")
         if md5:
             by_md5.setdefault(md5, []).append(primary_name)
 
-        sha256 = _file_hash(primary_path, "sha256")
         if sha256:
             by_sha.setdefault(sha256, []).append(primary_name)
 
-        content_sig = _archive_content_signature(primary_path)
         if content_sig:
             by_content.setdefault(content_sig, []).append(primary_name)
 

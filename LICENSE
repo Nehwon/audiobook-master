@@ -541,6 +541,52 @@ program.  If not, see <https://www.gnu.org/licenses/>.
 
 Also add information on how to contact you by electronic and paper mail.
 
+---
+
+## 🇫🇷🇺 Version Française
+
+### POURQUOI LA LICENCE AGPL-3.0 ?
+
+La Licence Publique Générale Affero GNU (AGPL) est une licence de logiciel libre qui garantit que les utilisateurs puissent :
+- **Utiliser** le logiciel pour tous les usages
+- **Étudier** son fonctionnement et le modifier
+- **Partager** les versions modifiées avec la communauté
+- **Distribuer** des copies librement
+
+### CONDITIONS PRINCIPALES
+
+#### **Utilisation et Modification**
+- ✅ **Liberté d'utilisation** : Vous pouvez utiliser, copier, modifier et distribuer le programme
+- ✅ **Partage obligatoire** : Si vous distribuez des versions modifiées, vous devez partager le code source
+- ✅ **Patents** : Licence de brevet incluse pour protéger les utilisateurs
+
+#### **Distribution**
+- ✅ **Copie verbatim** : Distribution des copies exactes avec notice de copyright
+- ✅ **Modifications** : Versions modifiées doivent être clairement marquées
+- ✅ **Licence attachée** : Chaque copie doit inclure cette licence
+
+#### **Garantie et Responsabilité**
+- ⚠️ **AUCUNE GARANTIE** : Le logiciel est fourni "TEL QUEL"
+- ⚠️ **LIMITATION DE RESPONSABILITÉ** : Responsabilité limitée en cas de dommages
+
+---
+
+### CONTACT ET INFORMATIONS
+
+#### **Auteur**
+- **Nom** : Fabrice Lamachere
+- **Année** : 2026
+- **Email** : [à définir par l'auteur]
+
+#### **Ressources**
+- **Licence complète** : https://www.gnu.org/licenses/agpl-3.0.fr.html
+- **Documentation** : https://www.gnu.org/licenses/agpl-3.0.html
+- **FAQ AGPL** : https://www.gnu.org/licenses/agpl-3.0-faq.html
+
+---
+
+## 🌐 Version Internationale (Anglais)
+
 If the program does terminal interaction, make it output a short notice like this when it starts
 in an interactive mode:
 

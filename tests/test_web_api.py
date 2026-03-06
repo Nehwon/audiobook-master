@@ -37,6 +37,12 @@ class TestWebRenameApi(unittest.TestCase):
         payload = resp.get_json()
         self.assertIn('folders', payload['error'])
 
+    def test_rename_rejects_non_dict_overrides(self):
+        resp = self.client.post('/api/rename', json={'folders': ['a'], 'overrides': []})
+        self.assertEqual(resp.status_code, 400)
+        payload = resp.get_json()
+        self.assertIn('overrides', payload['error'])
+
     def test_rename_handles_destination_conflict(self):
         src = self.media_dir / 'Author_Book'
         src.mkdir()
@@ -48,6 +54,32 @@ class TestWebRenameApi(unittest.TestCase):
         payload = resp.get_json()
         self.assertEqual(payload['renamed'], [])
         self.assertEqual(payload['skipped'][0]['reason'], 'destination existante')
+
+    def test_rename_uses_manual_override_title(self):
+        src = self.media_dir / 'Author_Book'
+        src.mkdir()
+
+        resp = self.client.post(
+            '/api/rename',
+            json={'folders': ['Author_Book'], 'overrides': {'Author_Book': 'Mon Titre 2024'}},
+        )
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['renamed'], [{'old': 'Author_Book', 'new': 'Mon Titre 2024'}])
+        self.assertTrue((self.media_dir / 'Mon Titre 2024').exists())
+
+    def test_rename_rejects_invalid_manual_override_title(self):
+        src = self.media_dir / 'Author_Book'
+        src.mkdir()
+
+        resp = self.client.post(
+            '/api/rename',
+            json={'folders': ['Author_Book'], 'overrides': {'Author_Book': '   '}},
+        )
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['renamed'], [])
+        self.assertEqual(payload['skipped'][0]['reason'], 'titre manuel vide')
 
     def test_ignore_folder_hides_it_from_library(self):
         (self.media_dir / 'A_Garder').mkdir()

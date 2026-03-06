@@ -226,6 +226,25 @@ function setRenameBusy(isBusy){
 
 function fmtMb(v){ return (v/1024/1024).toFixed(1); }
 function selectedValues(name){ return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value); }
+function escapeHtml(value){
+    return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+function collectManualOverrides(folders){
+    const overrides = {};
+    document.querySelectorAll('[data-manual-title="1"]').forEach(input => {
+        const folder = input.dataset.folder;
+        if (!folders.includes(folder)) return;
+        const value = (input.value || '').trim();
+        if (value) overrides[folder] = value;
+    });
+    return overrides;
+}
 
 async function api(url, options={}) {
     pendingApiCalls += 1;
@@ -261,9 +280,15 @@ async function loadLibrary() {
         const issues = (f.issues || []).length
             ? `<div class="muted" style="font-size:12px">⚠️ ${(f.issues || []).join(' | ')}${f.suggest_delete ? ' — suppression suggérée' : ''}</div>`
             : '';
+        const folderNameEscaped = escapeHtml(f.name);
         fb.innerHTML += `<tr>
-            <td><input type="checkbox" name="folderSel" value="${f.name}"></td>
-            <td>${f.name}${issues}</td>
+            <td><input type="checkbox" name="folderSel" value="${folderNameEscaped}"></td>
+            <td>
+                ${folderNameEscaped}${issues}
+                <div style="margin-top:6px">
+                    <input data-manual-title="1" data-folder="${folderNameEscaped}" type="text" style="min-width:260px" placeholder="Titre manuel (optionnel)">
+                </div>
+            </td>
             <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
             <td>${fmtMb(f.size)}</td>
             <td>
@@ -294,7 +319,9 @@ async function renameOne(folder){
     if (renameInProgress) return;
     setRenameBusy(true);
     try {
-        await api('/api/rename',{method:'POST', body: JSON.stringify({folders:[folder]})});
+        const folders = [folder];
+        const overrides = collectManualOverrides(folders);
+        await api('/api/rename',{method:'POST', body: JSON.stringify({folders, overrides})});
         await loadLibrary();
     } finally {
         setRenameBusy(false);
@@ -306,7 +333,8 @@ async function renameSelected(){
     if (!folders.length) return alert('Sélectionner des dossiers');
     setRenameBusy(true);
     try {
-        await api('/api/rename',{method:'POST', body: JSON.stringify({folders})});
+        const overrides = collectManualOverrides(folders);
+        await api('/api/rename',{method:'POST', body: JSON.stringify({folders, overrides})});
         await loadLibrary();
     } finally {
         setRenameBusy(false);

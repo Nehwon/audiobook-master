@@ -297,6 +297,14 @@ def _clean_name(name: str) -> str:
     return cleaned or "Dossier"
 
 
+def _clean_manual_title(title: str) -> str:
+    """Nettoie une saisie manuelle sans appliquer les heuristiques auto."""
+    cleaned = _fix_mojibake(title).replace("+", " ")
+    cleaned = re.sub(r'[<>:"/\\|?*]', "_", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+    return cleaned
+
+
 def _guess_author_with_ollama(title_hint: str) -> Optional[str]:
     """Essaie de deviner l'auteur via Ollama pour les cas ambigus."""
     prompt = (
@@ -592,8 +600,11 @@ def api_extract():
 def api_rename():
     payload = request.get_json(silent=True) or {}
     folders = payload.get("folders", [])
+    overrides = payload.get("overrides", {})
     if not isinstance(folders, list):
         return jsonify({"error": "Le champ 'folders' doit être une liste"}), 400
+    if not isinstance(overrides, dict):
+        return jsonify({"error": "Le champ 'overrides' doit être un objet"}), 400
 
     renamed = []
     skipped = []
@@ -611,7 +622,17 @@ def api_rename():
             skipped.append({"folder": folder, "reason": "introuvable"})
             continue
 
-        new_name = _smart_rename(folder)
+        manual_title = overrides.get(folder)
+        if manual_title is not None:
+            if not isinstance(manual_title, str):
+                skipped.append({"folder": folder, "reason": "titre manuel invalide"})
+                continue
+            new_name = _clean_manual_title(manual_title)
+            if not new_name:
+                skipped.append({"folder": folder, "reason": "titre manuel vide"})
+                continue
+        else:
+            new_name = _smart_rename(folder)
         dst = MEDIA_DIR / new_name
         if new_name == folder:
             skipped.append({"folder": folder, "reason": "déjà conforme"})

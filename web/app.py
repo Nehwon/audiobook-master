@@ -594,7 +594,14 @@ def _guess_output_file(folder_name: str, start_time: float) -> Optional[str]:
     return candidates[0].name if candidates else None
 
 
-def _push_job_event(job_id: str, folder: str, stage: str, message: str, level: str = "info") -> None:
+def _push_job_event(
+    job_id: str,
+    folder: str,
+    stage: str,
+    message: str,
+    level: str = "info",
+    details: Optional[Dict] = None,
+) -> None:
     event = {
         "timestamp": time.time(),
         "job_id": job_id,
@@ -602,6 +609,7 @@ def _push_job_event(job_id: str, folder: str, stage: str, message: str, level: s
         "stage": stage,
         "message": message,
         "level": level,
+        "details": details or {},
     }
     with jobs_lock:
         job_events.append(event)
@@ -648,6 +656,22 @@ def _worker_loop() -> None:
 
             processor = AudiobookProcessor(str(MEDIA_DIR), str(OUTPUT_DIR), str(TEMP_DIR))
             processor.config = _build_processing_config()
+
+            def _on_processor_progress(payload: Dict[str, object]) -> None:
+                stage = str(payload.get("stage") or "Conversion")
+                message = str(payload.get("message") or "Mise à jour conversion")
+                progress_value = payload.get("progress")
+                details = payload.get("details") if isinstance(payload.get("details"), dict) else {}
+                with jobs_lock:
+                    current_job = jobs.get(job_id)
+                    if not current_job:
+                        return
+                    current_job.stage = stage
+                    if isinstance(progress_value, (int, float)):
+                        current_job.progress = max(0, min(100, int(progress_value)))
+                    _push_job_event(current_job.id, current_job.folder, stage, message, "info", details)
+
+            processor.progress_callback = _on_processor_progress
 
             with jobs_lock:
                 job.stage = "Conversion"
@@ -704,7 +728,25 @@ def index():
 
 @app.route("/api/library")
 def api_library():
-    return jsonify(_list_media())
+    media = _list_media()
+    with jobs_lock:
+        active_jobs = [asdict(j) for j in jobs.values() if j.status in {"pending", "running"}]
+
+    by_folder: Dict[str, Dict] = {}
+    for job in sorted(active_jobs, key=lambda j: j.get("created_at", 0), reverse=True):
+        folder_name = job.get("folder")
+        if isinstance(folder_name, str) and folder_name and folder_name not in by_folder:
+            by_folder[folder_name] = {
+                "job_id": job.get("id"),
+                "status": job.get("status"),
+                "progress": job.get("progress", 0),
+                "stage": job.get("stage", "En attente"),
+            }
+
+    for folder in media["folders"]:
+        folder["job"] = by_folder.get(folder["name"])
+
+    return jsonify(media)
 
 
 @app.route("/api/extract", methods=["POST"])

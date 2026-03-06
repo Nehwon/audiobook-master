@@ -1436,288 +1436,183 @@ class AudiobookProcessor:
     
     def convert_to_m4b(self, audio_files: List[Path], output_path: Path, metadata: AudiobookMetadata) -> bool:
         try:
-            logger.info(f"🎵 CONVERSION M4B HAUTE QUALITÉ: {len(audio_files)} fichiers")
-            self._emit_progress("Conversion", "Préparation de la conversion FFmpeg", 35)
-            
-            # Surveillance système
-            stop_monitoring = threading.Event()
-            system_stats = {'cpu_percent': 0, 'ram_mb': 0}
-            
-            def monitor_system():
-                while not stop_monitoring.is_set():
-                    try:
-                        system_stats['cpu_percent'] = psutil.cpu_percent(interval=0.5)
-                        memory = psutil.virtual_memory()
-                        system_stats['ram_mb'] = memory.used / (1024*1024)
-                        time.sleep(2)
-                    except:
-                        break
-            
-            monitor_thread = threading.Thread(target=monitor_system, daemon=True)
-            monitor_thread.start()
-            
-            # Crée la liste des fichiers pour ffmpeg
-            file_list = self.temp_dir / "filelist.txt"
-            with open(file_list, 'w') as f:
-                for audio_file in audio_files:
-                    f.write(self._ffmpeg_concat_file_entry(audio_file))
-            
-            # Configuration
+            logger.info(f"🎵 CONVERSION M4B EN PAS SÉPARÉS: {len(audio_files)} fichiers")
+            self._emit_progress("Conversion", "Préparation du pipeline FFmpeg en plusieurs étapes", 35)
+
             config = getattr(self, 'config', ProcessingConfig())
-            max_threads = os.cpu_count() or 24
-            use_cuda = self.detect_cuda_support()
-            
-            # Métadonnées
             metadata_dict = metadata.get_metadata_dict()
             metadata_args = []
             for key, value in metadata_dict.items():
                 metadata_args.extend(['-metadata', f'{key}={value}'])
-            
-            # Commande FFmpeg optimisée AAC
-            if use_cuda and config.enable_aac_optimization:
-                logger.info("🚀 UTILISATION CUDA RTX 4070 - AAC PARALLÈLE OPTIMISÉ")
-                cmd = [
-                    'ffmpeg', '-y',
-                    '-f', 'concat',
-                    '-safe', '0',
-                    '-i', str(file_list),
-                    # Multi-threading CPU maximum pour encodeur AAC
-                    '-threads', str(max_threads),
-                    '-thread_type', 'slice',
-                    # Filtres audio optimisés pour AAC
-                    '-c:a', 'aac',
-                    '-b:a', config.audio_bitrate,
-                    '-ac', str(config.audio_channels),
-                    '-ar', str(config.sample_rate),
-                    # Optimisations AAC spécifiques
-                    '-aac_coder', config.aac_coder,
-                    '-cutoff', str(config.cutoff_freq),
-                    '-profile:a', config.aac_profile,
-                    # CBR pour taille prévisible et compression maximale
-                    '-vbr', '0',  # CBR mode
-                    # Optimisations mémoire et cache
-                    '-bufsize', '16M',  # Buffer plus petit pour compression
-                    '-maxrate', config.audio_bitrate,
-                    # Paramètres conteneur M4B optimisé
-                    '-movflags', '+faststart',
-                    # Métadonnées
-                    *metadata_args,
-                    '-f', 'mp4',  # Conteneur MP4 pour M4B
-                    str(output_path)
+
+            work_dir = self.temp_dir / f"m4b_build_{int(time.time())}_{os.getpid()}"
+            work_dir.mkdir(parents=True, exist_ok=True)
+
+            encoded_files: List[Path] = []
+            normalized_files: List[Path] = []
+            chapter_durations_ms: List[int] = []
+
+            def get_duration_ms(audio_path: Path) -> int:
+                probe_cmd = [
+                    'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                    '-of', 'default=noprint_wrappers=1:nokey=1', str(audio_path)
                 ]
-                codec_info = f"AAC CBR64k + CUDA RTX 4070 + {max_threads} threads"
-            elif use_cuda:
-                logger.info("🚀 UTILISATION GPU NVIDIA RTX 4070 - AAC FILTRES ACCÉLÉRÉS")
-                cmd = [
-                    'ffmpeg', '-y',
-                    '-f', 'concat',
-                    '-safe', '0',
-                    '-i', str(file_list),
-                    # Multi-threading CPU maximum
-                    '-threads', str(max_threads),
-                    '-thread_type', 'slice',
-                    # Filtres audio avec accélération GPU
-                    '-c:a', 'aac',
-                    '-b:a', config.audio_bitrate,
-                    '-ac', str(config.audio_channels),
-                    '-ar', str(config.sample_rate),
-                    # Optimisations AAC
-                    '-aac_coder', config.aac_coder,
-                    '-cutoff', str(config.cutoff_freq),
-                    '-profile:a', config.aac_profile,
-                    '-vbr', '0',
-                    # Optimisations mémoire
-                    '-bufsize', '16M',
-                    '-maxrate', config.audio_bitrate,
-                    # Paramètres
-                    '-movflags', '+faststart',
-                    # Métadonnées
-                    *metadata_args,
-                    '-f', 'mp4',
-                    str(output_path)
-                ]
-                codec_info = f"AAC CBR64k + GPU RTX 4070 + {max_threads} threads"
-            else:
-                logger.info(f"⚙️ UTILISATION CPU AAC HAUTE QUALITÉ - {max_threads} threads")
-                cmd = [
-                    'ffmpeg', '-y',
-                    '-f', 'concat',
-                    '-safe', '0',
-                    '-i', str(file_list),
-                    # Multi-threading CPU maximum
-                    '-threads', str(max_threads),
-                    '-thread_type', 'slice',
-                    # AAC HAUTE QUALITÉ CPU
-                    '-c:a', 'aac',
-                    '-b:a', config.audio_bitrate,
-                    '-ac', str(config.audio_channels),
-                    '-ar', str(config.sample_rate),
-                    # Optimisations AAC complètes
-                    '-aac_coder', config.aac_coder,
-                    '-cutoff', str(config.cutoff_freq),
-                    '-profile:a', config.aac_profile,
-                    '-vbr', '0',
-                    # Optimisations mémoire
-                    '-bufsize', '16M',
-                    '-maxrate', config.audio_bitrate,
-                    # Paramètres
-                    '-movflags', '+faststart',
-                    # Métadonnées
-                    *metadata_args,
-                    '-f', 'mp4',
-                    str(output_path)
-                ]
-                codec_info = f"AAC CBR64k + CPU {max_threads} threads"
-            
-            # Calcul détaillé de la taille avec debug
-            total_input_size = 0
-            logger.info(f"🔍 DEBUG: Analyse des {len(audio_files)} fichiers audio:")
-            for i, f in enumerate(audio_files):
-                size_mb = f.stat().st_size / (1024*1024)
-                total_input_size += f.stat().st_size
-                logger.info(f"   {i+1:2d}. {f.name} = {size_mb:.1f}MB")
-            
-            total_input_mb = total_input_size / (1024*1024)
-            logger.info(f'📊 Taille source calculée: {total_input_mb:.1f}MB ({len(audio_files)} fichiers)')
-            logger.info(f'📊 Taille attendue: ~{total_input_mb * 0.3:.1f}MB (compression ~70%)')
-            self._emit_progress(
-                "Conversion",
-                f"FFmpeg en cours ({len(audio_files)} piste(s))",
-                40,
-                {"input_mb": round(total_input_mb, 1)},
-            )
-            
-            # Lance FFmpeg
-            # NOTE: on évite `-progress pipe:1` ici pour ne pas saturer stdout
-            # quand il n'est pas consommé en continu (risque de blocage en fin de conversion).
-            logger.info("🚀 LANCEMENT FFmpeg...")
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
-            
-            # Suivi de progression avec timeout et détection taille maximale
-            start_time = time.time()
-            last_size = 0
-            last_stats_time = 0
-            timeout = 7200  # 2 heures max pour gros audiobooks
-            max_output_size = total_input_mb * 1.5  # Taille maximale autorisée (150% de l'entrée)
-            
-            while True:
-                if process.poll() is not None:
-                    break
-                
-                current_time = time.time()
-                elapsed = current_time - start_time
-                
-                # Timeout de sécurité
-                if elapsed > timeout:
-                    logger.error(f"❌ TIMEOUT après {timeout/60:.0f} minutes")
-                    process.terminate()
-                    break
-                
-                # Vérification taille maximale pour éviter boucle infinie
-                if output_path.exists():
-                    current_size_mb = output_path.stat().st_size / (1024*1024)
-                    if current_size_mb > max_output_size:
-                        logger.error(f"❌ TAILLE EXCESSIVE: {current_size_mb:.1f}MB > {max_output_size:.1f}MB - BOUCLE INFINIE DÉTECTÉE")
-                        process.terminate()
-                        break
-                
-                # Stats système toutes les 10 secondes
-                if (current_time - last_stats_time) > 10:
-                    cpu = system_stats['cpu_percent']
-                    ram = system_stats['ram_mb']
-                    
-                    if output_path.exists():
-                        data = output_path.stat().st_size / (1024*1024)
-                        progress_percent = min(100, (data / total_input_mb) * 100)
-                        
-                        # Calcul vitesse et ETA
-                        if elapsed > 30 and data > 1:  # Attend 30s avant calcul
-                            speed_mbps = data / (elapsed / 60)  # MB/min
-                            if speed_mbps > 0:
-                                eta_minutes = (total_input_mb - data) / speed_mbps
-                                eta_hours = int(eta_minutes // 60)
-                                eta_mins = int(eta_minutes % 60)
-                                eta_str = f"{eta_hours:02d}h{eta_mins:02d}mn"
-                            else:
-                                eta_str = "--h--mn"
-                            
-                            speed_str = f"{speed_mbps:.1f}MB/min"
-                        else:
-                            data = 0
-                            progress_percent = 0
-                            speed_str = "--"
-                            eta_str = "--h--mn"
-                        
-                        # Barre de progression
-                        bar_length = 30
-                        filled = int(bar_length * progress_percent / 100)
-                        bar = '█' * filled + '░' * (bar_length - filled)
-                        
-                        logger.info(f"📊 [{bar}] {progress_percent:3.0f}% | {data:6.1f}MB/{total_input_mb:.1f}MB | {speed_str} | ETA {eta_str}")
-                        mapped_progress = 40 + min(55, int(progress_percent * 0.55))
-                        self._emit_progress(
-                            "Conversion",
-                            f"Encodage FFmpeg: {progress_percent:.0f}%",
-                            mapped_progress,
-                            {
-                                "speed": speed_str,
-                                "eta": eta_str,
-                                "output_mb": round(data, 1),
-                                "input_mb": round(total_input_mb, 1),
-                                "cpu_percent": round(cpu, 1),
-                                "ram_mb": round(ram, 1),
-                            },
-                        )
-                        last_stats_time = current_time
-                
-                time.sleep(0.5)  # Pause plus courte pour réactivité
-            
-            # Arrêt surveillance et nettoyage mémoire
-            stop_monitoring.set()
-            monitor_thread.join(timeout=2)
-            
-            # Force l'arrêt du processus FFmpeg s'il est encore actif
-            if process.poll() is None:
-                logger.warning("🔄 Force arrêt processus FFmpeg...")
-                process.terminate()
+                result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
+                if result.returncode != 0:
+                    return 0
                 try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    logger.error("💥 Force KILL processus FFmpeg...")
-                    process.kill()
-                    process.wait()
-            
-            # Nettoyage mémoire agressif
-            gc.collect()
-            logger.info("🧹 Nettoyage mémoire effectué")
-            
-            # Attend la fin
-            stdout, stderr = process.communicate()
-            
-            if process.returncode != 0:
-                logger.error(f'❌ Erreur FFmpeg: {stderr}')
+                    return max(0, int(float(result.stdout.strip()) * 1000))
+                except ValueError:
+                    return 0
+
+            logger.info("🔧 Étape 1/6: Encodage uniforme en AAC")
+            for index, audio_file in enumerate(audio_files, start=1):
+                encoded_file = work_dir / f"part_{index:04d}.m4a"
+                encode_cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(audio_file),
+                    '-vn',
+                    '-map', '0:a:0',
+                ]
+                encode_cmd.extend([
+                    '-c:a', 'aac',
+                    '-b:a', config.audio_bitrate,
+                    '-ac', str(config.audio_channels),
+                    '-ar', str(config.sample_rate),
+                    '-aac_coder', config.aac_coder,
+                    '-profile:a', config.aac_profile,
+                    str(encoded_file)
+                ])
+
+                process = subprocess.run(encode_cmd, capture_output=True, text=True, timeout=1800)
+                if process.returncode != 0:
+                    logger.error("❌ Échec encodage AAC (%s): %s", audio_file.name, process.stderr)
+                    return False
+
+                encoded_files.append(encoded_file)
+                chapter_durations_ms.append(get_duration_ms(encoded_file))
+                mapped_progress = 40 + int((index / len(audio_files)) * 25)
+                self._emit_progress(
+                    "Conversion",
+                    f"Encodage AAC {index}/{len(audio_files)}",
+                    mapped_progress,
+                )
+
+            logger.info("🎚️ Étape 2/6: Normalisation à -18 LUFS")
+            for index, encoded_file in enumerate(encoded_files, start=1):
+                normalized_file = work_dir / f"norm_{index:04d}.m4a"
+                normalize_filters = [
+                    f"loudnorm=I=-18.0:LRA={config.loudnorm_range}:TP={config.loudnorm_true_peak}"
+                ]
+                if config.enable_compressor:
+                    normalize_filters.append(config.compressor_settings)
+
+                normalize_cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(encoded_file),
+                    '-vn',
+                    '-map', '0:a:0',
+                    '-af', ','.join(normalize_filters),
+                    '-c:a', 'aac',
+                    '-b:a', config.audio_bitrate,
+                    '-ac', str(config.audio_channels),
+                    '-ar', str(config.sample_rate),
+                    '-aac_coder', config.aac_coder,
+                    '-profile:a', config.aac_profile,
+                    str(normalized_file),
+                ]
+
+                normalize_process = subprocess.run(normalize_cmd, capture_output=True, text=True, timeout=1800)
+                if normalize_process.returncode != 0:
+                    logger.error("❌ Échec normalisation LUFS (%s): %s", encoded_file.name, normalize_process.stderr)
+                    return False
+
+                normalized_files.append(normalized_file)
+                mapped_progress = 65 + int((index / len(encoded_files)) * 10)
+                self._emit_progress(
+                    "Conversion",
+                    f"Normalisation -18 LUFS {index}/{len(encoded_files)}",
+                    mapped_progress,
+                )
+
+            chapter_durations_ms = [get_duration_ms(normalized_file) for normalized_file in normalized_files]
+
+            logger.info("📚 Étape 3/6: Génération chapters.txt")
+            chapters_file = work_dir / "chapters.txt"
+            with open(chapters_file, 'w', encoding='utf-8') as chapter_writer:
+                chapter_writer.write(';FFMETADATA1\n')
+                current_start = 0
+                for index, (audio_file, duration_ms) in enumerate(zip(audio_files, chapter_durations_ms), start=1):
+                    end_ms = current_start + max(duration_ms, 1000)
+                    chapter_title = audio_file.stem
+                    chapter_writer.write('[CHAPTER]\n')
+                    chapter_writer.write('TIMEBASE=1/1000\n')
+                    chapter_writer.write(f'START={current_start}\n')
+                    chapter_writer.write(f'END={end_ms}\n')
+                    chapter_writer.write(f'title=Chapitre {index:03d} - {chapter_title}\n')
+                    current_start = end_ms
+
+            logger.info("🔗 Étape 4/6: Concaténation simple en M4A temporaire")
+            concat_list = work_dir / "concat_list.txt"
+            with open(concat_list, 'w', encoding='utf-8') as concat_writer:
+                for normalized_file in normalized_files:
+                    concat_writer.write(self._ffmpeg_concat_file_entry(normalized_file))
+
+            temp_concat_file = work_dir / "temp.m4a"
+            concat_cmd = [
+                'ffmpeg', '-y',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(concat_list),
+                '-c', 'copy',
+                str(temp_concat_file)
+            ]
+            concat_process = subprocess.run(concat_cmd, capture_output=True, text=True, timeout=7200)
+            if concat_process.returncode != 0:
+                logger.error("❌ Échec concaténation: %s", concat_process.stderr)
                 return False
-            
-            # Statistiques finales
-            total_time = time.time() - start_time
-            input_size = sum(f.stat().st_size for f in audio_files) / (1024*1024)
-            output_size = output_path.stat().st_size / (1024*1024) if output_path.exists() else 0
-            
-            logger.info(f"✅ Conversion terminée en {total_time//60:.0f}m{total_time%60:.0f}s")
-            logger.info(f"📊 Qualité: {codec_info} | {config.audio_bitrate} | {config.audio_channels} canaux | {config.sample_rate}Hz")
-            logger.info(f"📊 Compression M4B: {input_size:.1f}MB → {output_size:.1f}MB ({((1-output_size/input_size)*100):.1f}% - optimisé AAC)")
-            self._emit_progress(
-                "Finalisation",
-                "Conversion terminée, finalisation du job",
-                95,
-                {"duration_s": round(total_time, 1), "output_mb": round(output_size, 1)},
-            )
-            
+            self._emit_progress("Conversion", "Concaténation terminée", 75)
+
+            logger.info("🧩 Étape 5/6: Injection chapitres + métadonnées")
+            if config.enable_chapters:
+                finalize_cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(temp_concat_file),
+                    '-i', str(chapters_file),
+                    '-map', '0:a',
+                    '-map_metadata', '1',
+                    '-map_chapters', '1',
+                    '-c', 'copy',
+                    '-movflags', '+faststart',
+                    *metadata_args,
+                    str(output_path),
+                ]
+            else:
+                finalize_cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(temp_concat_file),
+                    '-map', '0:a',
+                    '-c', 'copy',
+                    '-movflags', '+faststart',
+                    *metadata_args,
+                    str(output_path),
+                ]
+
+            finalize_process = subprocess.run(finalize_cmd, capture_output=True, text=True, timeout=7200)
+            if finalize_process.returncode != 0:
+                logger.error("❌ Échec finalisation M4B: %s", finalize_process.stderr)
+                return False
+
+            logger.info("✅ Étape 6/6: Conversion M4B terminée")
+            self._emit_progress("Finalisation", "M4B final prêt", 95)
             return True
-            
+
         except Exception as e:
             logger.error(f"💥 Erreur conversion M4B: {e}")
             return False
+        finally:
+            if 'work_dir' in locals() and work_dir.exists():
+                shutil.rmtree(work_dir, ignore_errors=True)
     
     def process_audiobook(self, file_path: Path) -> bool:
         """Traite un fichier audiobook complet"""

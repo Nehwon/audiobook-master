@@ -60,6 +60,11 @@
         .job-inline .meta { font-size:12px; color: var(--muted); margin-bottom:4px; }
         .job-inline .track { width:220px; max-width:100%; height:8px; border-radius:999px; background: color-mix(in srgb, var(--border) 70%, transparent); overflow:hidden; }
         .job-inline .bar { height:100%; background: var(--primary); transition: width .25s ease; }
+        .events-scroll {
+            max-height: 300px;
+            overflow-y: auto;
+            padding-right: 6px;
+        }
     </style>
 </head>
 <body>
@@ -114,7 +119,7 @@
         <div class="card"><h3>En attente</h3><div id="pendingList"></div></div>
         <div class="card"><h3>En cours</h3><div id="runningList"></div></div>
         <div class="card"><h3>Terminés</h3><div id="doneList"></div></div>
-        <div class="card"><h3>Suivi traitement (temps réel)</h3><div id="liveEvents" class="muted">Aucun événement.</div></div>
+        <div class="card"><h3>Suivi traitement (temps réel)</h3><div id="liveEvents" class="muted events-scroll">Aucun événement.</div></div>
         <div class="card">
             <h3>Logs debug backend (web)</h3>
             <div class="row" style="margin-bottom:8px"><button class="secondary" onclick="loadDebugLogs()">Rafraîchir logs</button></div>

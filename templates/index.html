@@ -727,9 +727,10 @@ function renderJobs(containerId, jobs, withActions=false){
             const total = Math.max(0, parseInt(item.total ?? 0, 10) || 0);
             const processed = Math.max(0, Math.min(total || 0, parseInt(item.processed ?? 0, 10) || 0));
             const phasePct = total ? Math.round((processed / total) * 100) : 0;
+            const showPhaseBar = !(withActions && phasePct >= 100);
             return `<div class="phase-item">
                 <div class="phase-meta"><span>${escapeHtml(item.label || key)} (${processed}/${total})</span><span>${phasePct}%</span></div>
-                <div class="phase-track"><div class="phase-bar" style="width:${phasePct}%"></div></div>
+                ${showPhaseBar ? `<div class="phase-track"><div class="phase-bar" style="width:${phasePct}%"></div></div>` : ''}
             </div>`;
         }).filter(Boolean);
         const completedPhases = phaseOrder.filter((key) => {
@@ -740,22 +741,23 @@ function renderJobs(containerId, jobs, withActions=false){
         }).length;
         const totalPhases = phaseOrder.length;
         const overallPhasePct = Math.round((completedPhases / totalPhases) * 100);
+        const showOverallBar = !(withActions && pct >= 100);
+        const showPhaseSummaryBar = !(withActions && overallPhasePct >= 100);
         const phasesSummary = phaseRows.length
             ? `<div class="muted" style="margin-top:8px">Phases terminées: ${completedPhases}/${totalPhases} (${overallPhasePct}%)</div>
-               <div class="progress-track" style="margin-top:6px;max-width:420px;"><div class="progress-determinate" style="width:${overallPhasePct}%"></div></div>
+               ${showPhaseSummaryBar ? `<div class="progress-track" style="margin-top:6px;max-width:420px;"><div class="progress-determinate" style="width:${overallPhasePct}%"></div></div>` : ''}
                <div class="phase-list">${phaseRows.join('')}</div>`
             : '';
         return `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0;align-items:flex-start;">
         <div style="min-width:320px;max-width:100%;">
           <strong>${escapeHtml(j.folder || '-')}</strong> <span class="pill">${escapeHtml(j.stage || '-')}</span> ${j.error ? `<span class="muted">(${escapeHtml(j.error)})</span>`:''}
           <div class="muted">Progression globale: ${pct}%</div>
-          <div class="progress-track" style="margin-top:6px;max-width:420px;"><div class="progress-determinate" style="width:${pct}%"></div></div>
+          ${showOverallBar ? `<div class="progress-track" style="margin-top:6px;max-width:420px;"><div class="progress-determinate" style="width:${pct}%"></div></div>` : ''}
           ${phasesSummary}
           ${j.output_file ? `<audio controls src="/api/stream/${encodeURIComponent(j.output_file)}" style="margin-top:8px"></audio>` : ''}
         </div>
         <div class="row">
-          ${withActions ? `<button class="secondary" onclick="markReview('${toJsString(j.id)}','delete')">Mettre en attente suppression</button>
-          <button class="secondary" onclick="markReview('${toJsString(j.id)}','reprocess')">Mettre en attente retraitement</button>` : ''}
+          ${withActions ? `<button class="secondary" onclick="markReview('${toJsString(j.id)}','reprocess')">Retraiter</button>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -879,6 +881,45 @@ function shouldRefreshLibrary(){
 
 
 
+const monitorState = {
+    sourceSig: '',
+    outputSig: '',
+    jobsSig: '',
+    inFlight: false,
+};
+
+async function monitorAndPatchDom(){
+    if (monitorState.inFlight) return;
+    monitorState.inFlight = true;
+    try {
+        const qs = new URLSearchParams({
+            source_sig: monitorState.sourceSig,
+            output_sig: monitorState.outputSig,
+            jobs_sig: monitorState.jobsSig,
+        });
+        const payload = await api(`/api/monitor?${qs.toString()}`);
+        const signs = payload?.signatures || {};
+        const changes = payload?.changes || {};
+
+        if (changes.jobs) {
+            await loadJobs({forceDoneRefresh: false});
+        }
+        if (changes.outputs) {
+            await loadSubmissionQueue();
+        }
+        if (changes.library && shouldRefreshLibrary()) {
+            await loadLibrary();
+        }
+
+        monitorState.sourceSig = signs.source_sig || monitorState.sourceSig;
+        monitorState.outputSig = signs.output_sig || monitorState.outputSig;
+        monitorState.jobsSig = signs.jobs_sig || monitorState.jobsSig;
+    } catch (err) {
+        // On garde l'UI interactive; les actions utilisateur déclenchent déjà les updates AJAX directes.
+    } finally {
+        monitorState.inFlight = false;
+    }
+}
 
 const monitorState = {
     sourceSig: '',

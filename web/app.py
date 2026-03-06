@@ -631,6 +631,7 @@ def _group_archives_for_ui(archives: List[Dict]) -> List[Dict]:
                 "primary_path": None,
                 "part_numbers": [],
                 "duplicate_reasons": [],
+                "duplicate_peers": [],
             },
         )
         bucket["size"] += int(archive.get("size", 0) or 0)
@@ -770,13 +771,16 @@ def _attach_archive_duplicate_hints(archives: List[Dict]) -> None:
         if not primary_name:
             continue
         reasons = []
+        peers_union = set()
         for label, mapping in duplicate_sources:
             for names in mapping.values():
                 if primary_name in names and len(names) > 1:
                     peers = sorted(n for n in names if n != primary_name)
+                    peers_union.update(peers)
                     reasons.append(f"{label}: {', '.join(peers)}")
                     break
         archive["duplicate_reasons"] = reasons
+        archive["duplicate_peers"] = sorted(peers_union)
 
 
 def _validate_archive(path: Path) -> Dict:

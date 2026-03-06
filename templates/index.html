@@ -203,6 +203,7 @@ let renameInProgress = false;
 let manualRenameRow = null;
 let pendingApiCalls = 0;
 let ollamaPullTicker = null;
+let hiddenDuplicateDeleteTargets = new Set();
 
 function setGlobalBusy(isBusy, label='Traitement en cours...'){
     const box = document.getElementById('globalBusy');
@@ -294,6 +295,14 @@ function archiveDuplicateHint(archive){
     const reasons = archive?.duplicate_reasons || [];
     if (!reasons.length) return '';
     return `<div class="muted" style="font-size:12px">⚠️ Doublon possible (${escapeHtml(reasons.join(' | '))})</div>`;
+}
+
+function duplicateDeleteButton(archive){
+    const current = archive?.primary_name || archive?.name || '';
+    const peers = archive?.duplicate_peers || [];
+    if (!current || !peers.length || hiddenDuplicateDeleteTargets.has(current)) return '';
+    const jsName = toJsString(current);
+    return `<button class="danger" onclick="deleteDuplicateArchive('${jsName}')">Supprimer doublon</button>`;
 }
 
 function archiveValidationBadge(archive){
@@ -467,7 +476,8 @@ async function loadLibrary() {
         const actionBtn = isInvalid
             ? `<button class="danger" onclick="deleteArchive('${archiveJs}')">Supprimer</button>`
             : `<button onclick="extractArchives(['${archiveJs}'])">Extraire</button>`;
-        ab.innerHTML += `<tr><td><input type="checkbox" name="archiveSel" value="${archiveEscaped}" ${isInvalid ? 'disabled' : ''} onchange="bindSelectionState('archiveSel', 'archiveSelAll')"></td><td>${archiveValidationBadge(a)} ${archiveLabel}${archiveDuplicateHint(a)}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> ${actionBtn}</td></tr>`;
+        const dupDeleteBtn = duplicateDeleteButton(a);
+        ab.innerHTML += `<tr><td><input type="checkbox" name="archiveSel" value="${archiveEscaped}" ${isInvalid ? 'disabled' : ''} onchange="bindSelectionState('archiveSel', 'archiveSelAll')"></td><td>${archiveValidationBadge(a)} ${archiveLabel}${archiveDuplicateHint(a)}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> ${actionBtn} ${dupDeleteBtn}</td></tr>`;
     });
     if (!data.archives.length) ab.innerHTML = '<tr><td colspan="4" class="muted">Aucune archive</td></tr>';
     bindSelectionState('folderSel', 'folderSelAll');
@@ -517,12 +527,24 @@ async function extractSelected(){
     await extractArchives(archives);
 }
 
-async function deleteArchive(archive){
+async function deleteArchive(archive, {suppressDuplicateButtons=false} = {}){
     const confirmed = await askConfirmation(`Supprimer l'archive ${archive} ?`, {confirmText: 'Supprimer'});
     if (!confirmed) return;
+
+    if (suppressDuplicateButtons) {
+        const selected = (libraryCache.archives || []).find(a => (a.primary_name || a.name) === archive);
+        const peers = selected?.duplicate_peers || [];
+        hiddenDuplicateDeleteTargets.add(archive);
+        peers.forEach(name => hiddenDuplicateDeleteTargets.add(name));
+    }
+
     await api('/api/archive/delete',{method:'POST', body: JSON.stringify({archive})});
     notify(`Archive ${archive} supprimée.`, 'success');
     await loadLibrary();
+}
+
+async function deleteDuplicateArchive(archive){
+    await deleteArchive(archive, {suppressDuplicateButtons: true});
 }
 
 

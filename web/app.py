@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import queue
@@ -64,6 +65,7 @@ worker_started = False
 MAX_JOB_EVENTS = 500
 job_events: List[Dict] = []
 archive_validation_cache: Dict[str, Dict[str, object]] = {}
+archive_fingerprint_cache: Dict[str, Dict[str, object]] = {}
 
 
 def _setup_logging() -> logging.Logger:
@@ -560,6 +562,7 @@ def _list_media() -> Dict:
                 {
                     "name": item.name,
                     "size": item.stat().st_size,
+                    "path": str(item),
                     "modified": modified,
                     "validation": {
                         "valid": validation.get("valid"),
@@ -567,6 +570,9 @@ def _list_media() -> Dict:
                     } if validation else None,
                 }
             )
+
+    grouped_archives = _group_archives_for_ui(archives)
+    _attach_archive_duplicate_hints(grouped_archives)
 
     if extracted_folders:
         config["recently_extracted_folders"] = sorted(
@@ -577,7 +583,204 @@ def _list_media() -> Dict:
     if changed:
         _save_config(config)
 
-    return {"base_path": str(MEDIA_DIR), "folders": folders, "archives": archives}
+    return {"base_path": str(MEDIA_DIR), "folders": folders, "archives": grouped_archives}
+
+
+def _archive_group_parts(name: str) -> tuple[str, Optional[int]]:
+    match = re.match(r"(?i)^(?P<base>.+)\.part(?P<num>\d+)\.rar$", name)
+    if not match:
+        return name, None
+    base = match.group("base")
+    part_num = int(match.group("num"))
+    return f"{base}.rar", part_num
+
+
+def _archive_members_from_name(name: str) -> List[Path]:
+    normalized = Path(name).name
+    group_key, _ = _archive_group_parts(normalized)
+    exact_target = MEDIA_DIR / normalized
+
+    if exact_target.exists() and exact_target.is_file() and exact_target.suffix.lower() in ARCHIVE_EXTENSIONS:
+        return [exact_target]
+
+    matches: List[Path] = []
+    for item in MEDIA_DIR.iterdir():
+        if not item.is_file() or item.suffix.lower() not in ARCHIVE_EXTENSIONS:
+            continue
+        key, _ = _archive_group_parts(item.name)
+        if key == group_key:
+            matches.append(item)
+
+    return sorted(matches, key=lambda p: p.name.lower())
+
+
+def _group_archives_for_ui(archives: List[Dict]) -> List[Dict]:
+    grouped: Dict[str, Dict] = {}
+    for archive in archives:
+        archive_name = str(archive.get("name", ""))
+        group_key, part_num = _archive_group_parts(archive_name)
+        bucket = grouped.setdefault(
+            group_key,
+            {
+                "group_key": group_key,
+                "name": group_key,
+                "size": 0,
+                "members": [],
+                "validation": None,
+                "primary_name": None,
+                "primary_path": None,
+                "part_numbers": [],
+                "duplicate_reasons": [],
+                "duplicate_peers": [],
+            },
+        )
+        bucket["size"] += int(archive.get("size", 0) or 0)
+        bucket["members"].append(
+            {
+                "name": archive_name,
+                "size": archive.get("size", 0),
+                "path": archive.get("path"),
+                "part_num": part_num,
+                "validation": archive.get("validation"),
+            }
+        )
+
+    result: List[Dict] = []
+    for group_key in sorted(grouped.keys(), key=lambda n: n.lower()):
+        bucket = grouped[group_key]
+        members = sorted(bucket["members"], key=lambda m: (m.get("part_num") is None, m.get("part_num") or 0, m["name"].lower()))
+        bucket["members"] = [m["name"] for m in members]
+        primary = members[0]
+        bucket["primary_name"] = primary["name"]
+        bucket["primary_path"] = primary.get("path")
+        bucket["validation"] = primary.get("validation")
+        if any(m.get("part_num") is not None for m in members):
+            listed = ", ".join(m["name"] for m in members)
+            bucket["display_name"] = f"{primary['name']} (+{len(members)-1}): {listed}"
+        else:
+            bucket["display_name"] = primary["name"]
+        result.append(bucket)
+    return result
+
+
+def _file_hash(path: Path, algorithm: str) -> Optional[str]:
+    try:
+        hasher = hashlib.new(algorithm)
+    except ValueError:
+        return None
+    try:
+        with path.open("rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                hasher.update(chunk)
+        return hasher.hexdigest()
+    except OSError:
+        return None
+
+
+def _archive_content_signature(path: Path) -> Optional[str]:
+    try:
+        if path.suffix.lower() == ".zip":
+            with zipfile.ZipFile(path, "r") as zf:
+                members = [f"{i.filename}|{i.file_size}|{i.CRC}" for i in zf.infolist()]
+        else:
+            with rarfile.RarFile(path, "r") as rf:
+                members = [f"{i.filename}|{getattr(i, 'file_size', 0)}|{getattr(i, 'CRC', 0)}" for i in rf.infolist()]
+    except Exception:  # noqa: BLE001
+        return None
+    normalized = "\n".join(sorted(members)).encode("utf-8", errors="ignore")
+    return hashlib.sha256(normalized).hexdigest()
+
+
+def _normalized_archive_title(name: str) -> str:
+    cleaned = name.lower()
+    cleaned = re.sub(r"\.part\d+", "", cleaned)
+    cleaned = re.sub(r"\.(zip|rar)$", "", cleaned)
+    cleaned = re.sub(r"[^a-z0-9]+", " ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _attach_archive_duplicate_hints(archives: List[Dict]) -> None:
+    by_title: Dict[str, List[str]] = {}
+    by_md5: Dict[str, List[str]] = {}
+    by_sha: Dict[str, List[str]] = {}
+    by_content: Dict[str, List[str]] = {}
+
+    by_size: Dict[int, List[Dict]] = {}
+    for archive in archives:
+        size = int(archive.get("size", 0) or 0)
+        by_size.setdefault(size, []).append(archive)
+
+    for archive in archives:
+        primary_name = archive.get("primary_name")
+        primary_path_raw = archive.get("primary_path")
+        if not primary_name or not primary_path_raw:
+            continue
+        primary_path = Path(primary_path_raw)
+        if not primary_path.exists():
+            continue
+
+        stat = primary_path.stat()
+        cached = archive_fingerprint_cache.get(primary_name)
+        if cached and cached.get("size") == stat.st_size and cached.get("modified") == stat.st_mtime:
+            md5 = cached.get("md5")
+            sha256 = cached.get("sha256")
+            content_sig = cached.get("content_sig")
+        else:
+            candidates = by_size.get(int(archive.get("size", 0) or 0), [])
+            has_same_size_peer = any(a.get("primary_name") != primary_name for a in candidates)
+
+            # Les hashs complets sont coûteux sur de gros volumes :
+            # on les calcule seulement s'il existe au moins un pair de même taille.
+            md5 = _file_hash(primary_path, "md5") if has_same_size_peer else None
+            sha256 = _file_hash(primary_path, "sha256") if has_same_size_peer else None
+            content_sig = _archive_content_signature(primary_path) if has_same_size_peer else None
+
+            archive_fingerprint_cache[primary_name] = {
+                "size": stat.st_size,
+                "modified": stat.st_mtime,
+                "md5": md5,
+                "sha256": sha256,
+                "content_sig": content_sig,
+            }
+
+        title_key = _normalized_archive_title(primary_name)
+        if title_key:
+            by_title.setdefault(title_key, []).append(primary_name)
+
+        if md5:
+            by_md5.setdefault(md5, []).append(primary_name)
+
+        if sha256:
+            by_sha.setdefault(sha256, []).append(primary_name)
+
+        if content_sig:
+            by_content.setdefault(content_sig, []).append(primary_name)
+
+    duplicate_sources = [
+        ("titre", by_title),
+        ("MD5", by_md5),
+        ("SHA256", by_sha),
+        ("contenu", by_content),
+    ]
+
+    for archive in archives:
+        primary_name = archive.get("primary_name")
+        if not primary_name:
+            continue
+        reasons = []
+        peers_union = set()
+        for label, mapping in duplicate_sources:
+            for names in mapping.values():
+                if primary_name in names and len(names) > 1:
+                    peers = sorted(n for n in names if n != primary_name)
+                    peers_union.update(peers)
+                    reasons.append(f"{label}: {', '.join(peers)}")
+                    break
+        archive["duplicate_reasons"] = reasons
+        archive["duplicate_peers"] = sorted(peers_union)
 
 
 def _validate_archive(path: Path) -> Dict:
@@ -878,12 +1081,17 @@ def api_extract():
     results = []
     errors = []
     for name in names:
-        archive_path = MEDIA_DIR / name
+        archive_members = _archive_members_from_name(str(name))
+        if not archive_members:
+            errors.append(f"Archive introuvable: {name}")
+            continue
+
+        archive_path = archive_members[0]
         try:
-            if archive_path.exists() and archive_path.suffix.lower() in ARCHIVE_EXTENSIONS:
-                results.append(_extract_archive(archive_path, delete_archive=True))
-            else:
-                errors.append(f"Archive introuvable: {name}")
+            results.append(_extract_archive(archive_path, delete_archive=True))
+            for member in archive_members[1:]:
+                member.unlink(missing_ok=True)
+                archive_validation_cache.pop(member.name, None)
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{name}: {exc}")
 
@@ -898,29 +1106,30 @@ def api_archive_validate():
     results = []
     errors = []
     for name in names:
-        archive_path = MEDIA_DIR / name
+        archive_members = _archive_members_from_name(str(name))
+        if not archive_members:
+            errors.append(f"Archive introuvable: {name}")
+            continue
+
+        archive_path = archive_members[0]
         try:
-            if archive_path.exists() and archive_path.suffix.lower() in ARCHIVE_EXTENSIONS:
-                outcome = _validate_archive(archive_path)
-                archive_validation_cache[name] = {
+            outcome = _validate_archive(archive_path)
+            for member in archive_members:
+                archive_validation_cache[member.name] = {
                     "valid": bool(outcome.get("valid")),
                     "message": str(outcome.get("message", "")),
-                    "modified": archive_path.stat().st_mtime,
+                    "modified": member.stat().st_mtime,
                 }
-                results.append({"archive": name, **outcome})
-            else:
-                errors.append(f"Archive introuvable: {name}")
+            results.append({"archive": archive_path.name, **outcome})
         except Exception as exc:  # noqa: BLE001
-            if archive_path.exists() and archive_path.suffix.lower() in ARCHIVE_EXTENSIONS:
-                message = str(exc)
-                archive_validation_cache[name] = {
+            message = str(exc)
+            for member in archive_members:
+                archive_validation_cache[member.name] = {
                     "valid": False,
                     "message": message,
-                    "modified": archive_path.stat().st_mtime,
+                    "modified": member.stat().st_mtime,
                 }
-                results.append({"archive": name, "valid": False, "message": message})
-            else:
-                errors.append(f"{name}: {exc}")
+            results.append({"archive": archive_path.name, "valid": False, "message": message})
 
     return jsonify({"results": results, "errors": errors})
 
@@ -1006,12 +1215,13 @@ def api_delete_archive():
     if normalized != archive:
         return jsonify({"error": "nom d'archive invalide"}), 400
 
-    target = MEDIA_DIR / normalized
-    if not target.exists() or not target.is_file() or target.suffix.lower() not in ARCHIVE_EXTENSIONS:
+    targets = _archive_members_from_name(normalized)
+    if not targets:
         return jsonify({"error": "archive introuvable"}), 404
 
-    target.unlink()
-    archive_validation_cache.pop(normalized, None)
+    for target in targets:
+        target.unlink(missing_ok=True)
+        archive_validation_cache.pop(target.name, None)
     return jsonify({"deleted": normalized})
 
 

@@ -10,12 +10,18 @@ from web import app as web_app
 class TestWebRenameApi(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.media_dir = Path(self.tmp.name)
+        self.media_dir = Path(self.tmp.name) / "_media"
+        self.output_dir = Path(self.tmp.name) / "_output"
+        self.temp_dir = Path(self.tmp.name) / "_tmp"
         self.old_media_dir = web_app.MEDIA_DIR
+        self.old_output_dir = web_app.OUTPUT_DIR
         self.old_temp_dir = web_app.TEMP_DIR
         self.old_config_path = web_app.CONFIG_PATH
         web_app.MEDIA_DIR = self.media_dir
-        web_app.TEMP_DIR = self.media_dir / "tmp"
+        web_app.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+        web_app.OUTPUT_DIR = self.output_dir
+        web_app.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        web_app.TEMP_DIR = self.temp_dir
         web_app.CONFIG_PATH = web_app.TEMP_DIR / "web_config.json"
         with web_app.jobs_lock:
             web_app.jobs.clear()
@@ -24,6 +30,7 @@ class TestWebRenameApi(unittest.TestCase):
 
     def tearDown(self):
         web_app.MEDIA_DIR = self.old_media_dir
+        web_app.OUTPUT_DIR = self.old_output_dir
         web_app.TEMP_DIR = self.old_temp_dir
         web_app.CONFIG_PATH = self.old_config_path
         self.tmp.cleanup()
@@ -121,6 +128,34 @@ class TestWebRenameApi(unittest.TestCase):
         info = next(f for f in listing['folders'] if f['name'] == 'Dossier Normal')
         self.assertFalse(info['suggest_delete'])
         self.assertFalse(info['can_ignore'])
+
+    def test_library_hides_source_folder_when_matching_output_exists(self):
+        folder = self.media_dir / 'Mon Livre Source'
+        folder.mkdir()
+        (folder / 'track1.mp3').write_text('x')
+
+        output_name = 'Auteur - Mon Super Livre.m4b'
+        (web_app.OUTPUT_DIR / output_name).write_text('m4b')
+        web_app._save_m4b_candidate('Mon Livre Source', output_name)
+
+        listing = self.client.get('/api/library').get_json()
+        names = [entry['name'] for entry in listing['folders']]
+        self.assertNotIn('Mon Livre Source', names)
+
+    def test_save_config_encrypts_audiobookshelf_secrets_at_rest(self):
+        cfg = web_app._default_config()
+        cfg['audiobookshelf_password'] = 'MotDePasseUltraSecret'
+        cfg['audiobookshelf_api_key'] = 'api_key_123456'
+
+        web_app._save_config(cfg)
+
+        raw = web_app.CONFIG_PATH.read_text(encoding='utf-8')
+        self.assertNotIn('MotDePasseUltraSecret', raw)
+        self.assertNotIn('api_key_123456', raw)
+
+        loaded = web_app._load_config()
+        self.assertEqual(loaded['audiobookshelf_password'], 'MotDePasseUltraSecret')
+        self.assertEqual(loaded['audiobookshelf_api_key'], 'api_key_123456')
 
     def test_delete_suspect_folder(self):
         folder = self.media_dir / 'Suspect.part2'
@@ -225,6 +260,52 @@ class TestWebRenameApi(unittest.TestCase):
         worker.join(timeout=1)
 
         self.assertTrue(done.is_set(), 'Deadlock détecté lors de _push_job_event')
+
+
+    def test_dom_changes_reports_no_change_with_same_signatures(self):
+        first = self.client.get('/api/dom/changes')
+        self.assertEqual(first.status_code, 200)
+        payload = first.get_json()
+
+        signatures = payload['signatures']
+        second = self.client.get(
+            '/api/dom/changes',
+            query_string={
+                'source_sig': signatures['source_sig'],
+                'output_sig': signatures['output_sig'],
+                'jobs_sig': signatures['jobs_sig'],
+            },
+        )
+        self.assertEqual(second.status_code, 200)
+        payload2 = second.get_json()
+        self.assertFalse(payload2['changes']['library'])
+        self.assertFalse(payload2['changes']['outputs'])
+        self.assertFalse(payload2['changes']['jobs'])
+
+    def test_dom_changes_detects_source_and_output_and_jobs_updates(self):
+        initial = self.client.get('/api/dom/changes').get_json()
+
+        folder = self.media_dir / 'Nouveau Livre'
+        folder.mkdir()
+        (folder / 'track.mp3').write_text('x')
+        (self.output_dir / 'Sortie.m4b').write_text('m4b')
+
+        with web_app.jobs_lock:
+            web_app.jobs['job-100'] = web_app.Job(id='job-100', folder='Nouveau Livre', status='running', progress=5)
+
+        changed = self.client.get(
+            '/api/dom/changes',
+            query_string={
+                'source_sig': initial['signatures']['source_sig'],
+                'output_sig': initial['signatures']['output_sig'],
+                'jobs_sig': initial['signatures']['jobs_sig'],
+            },
+        )
+        self.assertEqual(changed.status_code, 200)
+        payload = changed.get_json()
+        self.assertTrue(payload['changes']['library'])
+        self.assertTrue(payload['changes']['outputs'])
+        self.assertTrue(payload['changes']['jobs'])
 
     def test_logs_endpoint_returns_json(self):
         resp = self.client.get('/api/logs?lines=20')

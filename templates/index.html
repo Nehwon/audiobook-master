@@ -25,9 +25,11 @@
         }
         body { font-family: Arial, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
         header { background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 20px; display:flex; justify-content:space-between; align-items:center; }
-        .tabs { display:flex; gap:8px; padding: 10px 20px; flex-wrap:wrap; }
+        .tabs { display:flex; gap:8px; padding: 10px 20px; flex-wrap:wrap; justify-content:flex-start; }
         .tab { border:1px solid var(--border); background:var(--card); color:var(--text); padding:8px 12px; border-radius:8px; cursor:pointer; }
         .tab.active { background:var(--primary); color:white; border-color:var(--primary); }
+        .tab.config-tab { background:#d100d1; border-color:#d100d1; color:white; }
+        .tab.config-tab.active { background:#a000a0; border-color:#a000a0; color:white; }
         main { padding: 0 20px 20px; }
         .page { display:none; }
         .page.active { display:block; }
@@ -88,9 +90,7 @@
 <div class="tabs">
     <button class="tab active" data-page="library">Bibliothèque</button>
     <button class="tab" data-page="processing">Traitements</button>
-    <button class="tab" data-page="review">Attente suppression/retraitement</button>
-    <button class="tab" data-page="config">Configuration</button>
-    <button class="tab" data-page="ollama">Ollama</button>
+    <button class="tab config-tab" data-page="config">Configuration</button>
 </div>
 <main>
     <section id="page-library" class="page active">
@@ -125,16 +125,13 @@
         <div class="card"><h3>En attente</h3><div id="pendingList"></div></div>
         <div class="card"><h3>En cours</h3><div id="runningList"></div></div>
         <div class="card"><h3>Terminés</h3><div id="doneList"></div></div>
+        <div class="card"><h3>En attente de suppression / retraitement</h3><div id="reviewList"></div></div>
         <div class="card"><h3>Suivi traitement (temps réel)</h3><div id="liveEvents" class="muted events-scroll">Aucun événement.</div></div>
         <div class="card">
             <h3>Logs debug backend (web)</h3>
             <div class="row" style="margin-bottom:8px"><button class="secondary" onclick="loadDebugLogs()">Rafraîchir logs</button></div>
             <pre id="debugLogs" style="white-space:pre-wrap;max-height:260px;overflow:auto;background:var(--bg);border:1px solid var(--border);padding:8px;border-radius:8px" class="muted">Chargement...</pre>
         </div>
-    </section>
-
-    <section id="page-review" class="page">
-        <div class="card"><h3>Dossiers traités en attente d'action</h3><div id="reviewList"></div></div>
     </section>
 
     <section id="page-config" class="page">
@@ -151,11 +148,8 @@
                 <button onclick="saveConfig()">Sauvegarder</button>
             </div>
         </div>
-    </section>
-
-    <section id="page-ollama" class="page">
         <div class="card">
-            <h3>Gestion Ollama (modèles + prompts + tools MCP)</h3>
+            <h3>Option Ollama (dans Configuration)</h3>
             <div class="row">
                 <label><input id="ollamaEnabled" type="checkbox"> Activer la recherche LLM</label>
                 <label>Modèle agent <input id="ollamaModel" placeholder="qwen2.5:7b"></label>
@@ -268,6 +262,18 @@ function escapeHtml(value){
 function toJsString(value){
     return String(value).replaceAll('\\', '\\\\').replaceAll("'", "\\'");
 }
+
+function archiveValidationBadge(archive){
+    const validation = archive?.validation;
+    if (!validation || typeof validation.valid !== 'boolean') {
+        return '<span class="muted">⏺️</span>';
+    }
+    if (validation.valid) {
+        return `<span title="${escapeHtml(validation.message || 'Archive valide')}">🟢</span>`;
+    }
+    return `<span title="${escapeHtml(validation.message || 'Archive invalide')}">🔴</span>`;
+}
+
 
 function renderInlineJobProgress(job){
     if (!job) return '';
@@ -424,7 +430,11 @@ async function loadLibrary() {
     data.archives.forEach(a => {
         const archiveEscaped = escapeHtml(a.name);
         const archiveJs = toJsString(a.name);
-        ab.innerHTML += `<tr><td><input type="checkbox" name="archiveSel" value="${archiveEscaped}"></td><td>${archiveEscaped}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> <button onclick="extractArchives(['${archiveJs}'])">Extraire</button></td></tr>`;
+        const isInvalid = a.validation && a.validation.valid === false;
+        const actionBtn = isInvalid
+            ? `<button class="danger" onclick="deleteArchive('${archiveJs}')">Supprimer</button>`
+            : `<button onclick="extractArchives(['${archiveJs}'])">Extraire</button>`;
+        ab.innerHTML += `<tr><td><input type="checkbox" name="archiveSel" value="${archiveEscaped}" ${isInvalid ? 'disabled' : ''}></td><td>${archiveValidationBadge(a)} ${archiveEscaped}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> ${actionBtn}</td></tr>`;
     });
     if (!data.archives.length) ab.innerHTML = '<tr><td colspan="4" class="muted">Aucune archive</td></tr>';
 }
@@ -438,6 +448,7 @@ async function validateArchives(archives){
         invalid.forEach(r => notify(`${r.archive}: ${r.message}`, 'warn', 6000));
     }
     (data.errors || []).forEach(e => notify(e, 'error', 7000));
+    await loadLibrary();
 }
 
 async function validateSelectedArchives(){
@@ -447,7 +458,19 @@ async function validateSelectedArchives(){
 }
 
 async function extractArchives(archives){
-    const report = await api('/api/extract',{method:'POST', body: JSON.stringify({archives})});
+    const invalidArchives = new Set((libraryCache.archives || [])
+        .filter(a => a?.validation && a.validation.valid === false)
+        .map(a => a.name));
+    const eligible = archives.filter(name => !invalidArchives.has(name));
+    if (!eligible.length) {
+        notify('Aucune archive extractible (certaines sont invalides).', 'warn');
+        return;
+    }
+    if (eligible.length !== archives.length) {
+        notify('Archives invalides ignorées pour extraction.', 'warn');
+    }
+
+    const report = await api('/api/extract',{method:'POST', body: JSON.stringify({archives: eligible})});
     (report.results || []).forEach(r => notify(`${r.archive} extraite vers ${r.folder} (${r.extracted_files} fichier(s)).`, 'success', 5000));
     (report.errors || []).forEach(e => notify(e, 'error', 7000));
     await loadLibrary();
@@ -458,6 +481,15 @@ async function extractSelected(){
     if (!archives.length) return notify('Sélectionner des archives.', 'warn');
     await extractArchives(archives);
 }
+
+async function deleteArchive(archive){
+    const confirmed = await askConfirmation(`Supprimer l'archive ${archive} ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
+    await api('/api/archive/delete',{method:'POST', body: JSON.stringify({archive})});
+    notify(`Archive ${archive} supprimée.`, 'success');
+    await loadLibrary();
+}
+
 
 async function renameOne(folder){
     if (renameInProgress) return;
@@ -583,11 +615,17 @@ async function loadDebugLogs(){
     }
 }
 
-async function loadJobs(){
+function hasActiveDoneAudioPlayback(){
+    return [...document.querySelectorAll('#doneList audio')].some((audio) => !audio.paused && !audio.ended);
+}
+
+async function loadJobs({forceDoneRefresh=false} = {}){
     const data = await api('/api/jobs');
     renderJobs('pendingList', data.pending);
     renderJobs('runningList', data.running);
-    renderJobs('doneList', data.done, true);
+    if (forceDoneRefresh || !hasActiveDoneAudioPlayback()) {
+        renderJobs('doneList', data.done, true);
+    }
     renderEvents(data.events || []);
 
     const review = document.getElementById('reviewList');
@@ -603,7 +641,8 @@ async function loadJobs(){
 
 async function markReview(jobId, action){
     await api('/api/jobs/review',{method:'POST', body: JSON.stringify({job_id: jobId, action})});
-    loadJobs();
+    notify(`Action ajoutée à la file d'attente (${action === 'delete' ? 'suppression' : 'retraitement'}).`, 'success');
+    loadJobs({forceDoneRefresh: true});
 }
 
 async function clearReview(folder){
@@ -726,12 +765,24 @@ async function saveConfig(){
 }
 
 function setupTabs(){
-    document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(`page-${btn.dataset.page}`).classList.add('active');
-    }));
+    const setPage = (page, updateHash = true) => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.page === page));
+        document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === `page-${page}`));
+        if (updateHash && location.hash !== `#${page}`) {
+            history.replaceState(null, '', `#${page}`);
+        }
+    };
+
+    document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page)));
+
+    const hashPage = (location.hash || '').replace('#', '');
+    const defaultPage = document.querySelector(`.tab[data-page="${hashPage}"]`) ? hashPage : 'library';
+    setPage(defaultPage, false);
+
+    window.addEventListener('hashchange', () => {
+        const next = (location.hash || '').replace('#', '');
+        if (document.querySelector(`.tab[data-page="${next}"]`)) setPage(next, false);
+    });
 }
 
 function setupTheme(){
@@ -750,7 +801,7 @@ loadJobs();
 loadConfig();
 loadOllamaStatus();
 loadDebugLogs();
-setInterval(loadJobs, 5000);
+setInterval(() => loadJobs({forceDoneRefresh: false}), 5000);
 setInterval(loadDebugLogs, 8000);
 </script>
 </body>

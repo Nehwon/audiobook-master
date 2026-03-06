@@ -63,6 +63,7 @@ review_bin: List[Dict] = []
 worker_started = False
 MAX_JOB_EVENTS = 500
 job_events: List[Dict] = []
+archive_validation_cache: Dict[str, Dict[str, object]] = {}
 
 
 def _setup_logging() -> logging.Logger:
@@ -549,11 +550,21 @@ def _list_media() -> Dict:
             if item.name in extracted_folders:
                 extracted_folders.remove(item.name)
         elif item.is_file() and item.suffix.lower() in ARCHIVE_EXTENSIONS:
+            modified = item.stat().st_mtime
+            validation = archive_validation_cache.get(item.name)
+            if validation and validation.get("modified") != modified:
+                archive_validation_cache.pop(item.name, None)
+                validation = None
+
             archives.append(
                 {
                     "name": item.name,
                     "size": item.stat().st_size,
-                    "modified": item.stat().st_mtime,
+                    "modified": modified,
+                    "validation": {
+                        "valid": validation.get("valid"),
+                        "message": validation.get("message", ""),
+                    } if validation else None,
                 }
             )
 
@@ -891,11 +902,25 @@ def api_archive_validate():
         try:
             if archive_path.exists() and archive_path.suffix.lower() in ARCHIVE_EXTENSIONS:
                 outcome = _validate_archive(archive_path)
+                archive_validation_cache[name] = {
+                    "valid": bool(outcome.get("valid")),
+                    "message": str(outcome.get("message", "")),
+                    "modified": archive_path.stat().st_mtime,
+                }
                 results.append({"archive": name, **outcome})
             else:
                 errors.append(f"Archive introuvable: {name}")
         except Exception as exc:  # noqa: BLE001
-            errors.append(f"{name}: {exc}")
+            if archive_path.exists() and archive_path.suffix.lower() in ARCHIVE_EXTENSIONS:
+                message = str(exc)
+                archive_validation_cache[name] = {
+                    "valid": False,
+                    "message": message,
+                    "modified": archive_path.stat().st_mtime,
+                }
+                results.append({"archive": name, "valid": False, "message": message})
+            else:
+                errors.append(f"{name}: {exc}")
 
     return jsonify({"results": results, "errors": errors})
 
@@ -968,6 +993,26 @@ def api_ignore_folder():
     config["ignored_folders"] = sorted(ignored)
     _save_config(config)
     return jsonify({"ignored_folders": config["ignored_folders"]})
+
+
+@app.route("/api/archive/delete", methods=["POST"])
+def api_delete_archive():
+    payload = request.get_json(silent=True) or {}
+    archive = (payload.get("archive") or "").strip()
+    if not archive:
+        return jsonify({"error": "archive requis"}), 400
+
+    normalized = Path(archive).name
+    if normalized != archive:
+        return jsonify({"error": "nom d'archive invalide"}), 400
+
+    target = MEDIA_DIR / normalized
+    if not target.exists() or not target.is_file() or target.suffix.lower() not in ARCHIVE_EXTENSIONS:
+        return jsonify({"error": "archive introuvable"}), 404
+
+    target.unlink()
+    archive_validation_cache.pop(normalized, None)
+    return jsonify({"deleted": normalized})
 
 
 @app.route("/api/folder/delete", methods=["POST"])

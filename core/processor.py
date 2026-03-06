@@ -24,7 +24,7 @@ import zipfile
 import rarfile
 import gc
 from pathlib import Path
-from typing import Callable, List, Dict, Optional, Tuple
+from typing import Callable, List, Dict, Optional, Tuple, Set
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from urllib.parse import quote
@@ -240,6 +240,133 @@ class AudiobookProcessor:
     def has_subdirectories(self, directory: Path) -> bool:
         """Vérifie si un dossier contient des sous-dossiers immédiats."""
         return any(item.is_dir() for item in directory.iterdir())
+
+    def _is_clearly_named_book_folder(self, folder_name: str) -> bool:
+        """Détecte un nom de dossier au format auteur/livre attendu."""
+        parts = [part.strip() for part in folder_name.split(' - ')]
+        if len(parts) == 2 and all(parts):
+            return True
+        if len(parts) == 3 and all(parts):
+            return bool(re.search(r'\d+', parts[1]))
+        return False
+
+    def _prepare_directory_audio_files(self, directory: Path) -> List[Path]:
+        """Valide et prépare un dossier livre avant traitement."""
+        audio_extensions = {'.mp3', '.m4a', '.wav', '.flac', '.aac'}
+        root_files = [item for item in directory.iterdir() if item.is_file()]
+        root_audio_files = [item for item in root_files if item.suffix.lower() in audio_extensions]
+        subdirectories = [item for item in directory.iterdir() if item.is_dir()]
+
+        m4b_files = list(directory.rglob('*.m4b'))
+        if m4b_files:
+            raise ValueError(
+                f"Le dossier '{directory.name}' contient des fichiers M4B ({len(m4b_files)} trouvé(s)). "
+                "Les M4B ne sont pas acceptés comme source de conversion."
+            )
+
+        if not subdirectories and not root_audio_files:
+            raise ValueError(
+                f"Le dossier '{directory.name}' ne contient aucun fichier audio exploitable (.mp3/.m4a/.wav/.flac/.aac)."
+            )
+
+        if subdirectories:
+            nested_subdirs = [nested for child in subdirectories for nested in child.iterdir() if nested.is_dir()]
+            if nested_subdirs:
+                raise ValueError(
+                    f"Le dossier '{directory.name}' contient des sous-dossiers imbriqués, ce cas n'est pas supporté."
+                )
+
+            if len(subdirectories) == 1 and not root_audio_files:
+                child_dir = subdirectories[0]
+                child_audio_files = [
+                    item for item in child_dir.iterdir()
+                    if item.is_file() and item.suffix.lower() in audio_extensions
+                ]
+                if not child_audio_files:
+                    raise ValueError(
+                        f"Le dossier '{directory.name}' contient un sous-dossier unique ('{child_dir.name}') "
+                        "sans fichiers audio exploitables."
+                    )
+
+                logger.warning(
+                    "⚠️ Sous-dossier unique détecté dans '%s': déplacement de %d fichier(s) audio à la racine.",
+                    directory.name,
+                    len(child_audio_files),
+                )
+                for audio_file in child_audio_files:
+                    destination = directory / audio_file.name
+                    if destination.exists():
+                        raise ValueError(
+                            f"Collision détectée pendant le déplacement: '{destination.name}' existe déjà dans '{directory.name}'."
+                        )
+                    shutil.move(str(audio_file), str(destination))
+
+                shutil.rmtree(child_dir)
+                root_audio_files = [item for item in directory.iterdir() if item.is_file() and item.suffix.lower() in audio_extensions]
+            else:
+                raise ValueError(
+                    f"Structure de dossier non supportée pour '{directory.name}': "
+                    "présence de sous-dossiers ne correspondant ni à un sous-dossier unique à aplatir, "
+                    "ni à un cas de bibliothèque regroupée traité au niveau de la source."
+                )
+
+        if not root_audio_files:
+            raise ValueError(f"Aucun fichier audio exploitable trouvé dans '{directory.name}' après préparation.")
+
+        root_audio_files.sort(key=lambda x: x.name)
+        return root_audio_files
+
+    def _promote_grouped_book_folders(self) -> Set[Path]:
+        """Copie les livres d'un dossier regroupé à la racine source."""
+        skipped_containers = set()
+
+        for container in [item for item in self.source_dir.iterdir() if item.is_dir()]:
+            subdirectories = [child for child in container.iterdir() if child.is_dir()]
+            if len(subdirectories) < 2:
+                continue
+
+            root_audio_files = [
+                child for child in container.iterdir()
+                if child.is_file() and child.suffix.lower() in {'.mp3', '.m4a', '.wav', '.flac', '.aac', '.m4b'}
+            ]
+            if root_audio_files:
+                continue
+
+            if not all(self._is_clearly_named_book_folder(child.name) for child in subdirectories):
+                continue
+
+            nested_subdirs = [nested for child in subdirectories for nested in child.iterdir() if nested.is_dir()]
+            if nested_subdirs:
+                raise ValueError(
+                    f"Le dossier regroupé '{container.name}' contient des sous-dossiers imbriqués, ce cas n'est pas supporté."
+                )
+
+            logger.warning(
+                "⚠️ Dossier regroupé détecté: '%s'. %d livre(s) vont être copiés à la racine source.",
+                container.name,
+                len(subdirectories),
+            )
+
+            for child in subdirectories:
+                destination = self.source_dir / child.name
+                if destination.exists():
+                    raise ValueError(
+                        f"Impossible de copier '{child.name}' depuis '{container.name}': '{destination.name}' existe déjà à la racine source."
+                    )
+                shutil.copytree(child, destination)
+                logger.warning(
+                    "⚠️ Nouveau livre transféré vers la source: '%s' -> '%s'.",
+                    child,
+                    destination,
+                )
+
+            logger.warning(
+                "⚠️ Des nouveaux livres ont été ajoutés à la bibliothèque après éclatement du dossier '%s'.",
+                container.name,
+            )
+            skipped_containers.add(container)
+
+        return skipped_containers
 
     def check_aac_support(self) -> bool:
         """Vérifie si le codec AAC est disponible"""
@@ -1681,10 +1808,7 @@ class AudiobookProcessor:
                     return False
                 audio_files = self.find_audio_files(work_dir)
             elif file_path.is_dir():
-                if self.has_subdirectories(file_path):
-                    logger.error("❌ Il existe des sous-dossiers dans le dossier. Traitement impossible.")
-                    return False
-                audio_files = self.find_audio_files(file_path)
+                audio_files = self._prepare_directory_audio_files(file_path)
             else:
                 audio_files = [file_path]
             
@@ -1748,18 +1872,23 @@ class AudiobookProcessor:
         results = {"success": 0, "failed": 0, "skipped": 0}
         self.output_dir.mkdir(exist_ok=True)
         
+        # Préparation de la source (gestion des dossiers regroupés)
+        skipped_containers = self._promote_grouped_book_folders()
+
         # Analyse
         all_items = list(self.source_dir.iterdir())
         files_to_process = []
         folders_to_process = []
         
         for item in all_items:
+            if item in skipped_containers:
+                logger.info("⏭️ Dossier regroupé ignoré après éclatement: %s", item.name)
+                continue
+
             if item.is_file() and item.suffix.lower() in ['.zip', '.rar', '.mp3', '.m4a', '.m4b']:
                 files_to_process.append(item)
             elif item.is_dir():
-                audio_count = len(self.find_audio_files(item))
-                if audio_count > 0:
-                    folders_to_process.append(item)
+                folders_to_process.append(item)
         
         total_to_process = len(files_to_process) + len(folders_to_process)
         logger.info(f"📋 Fichiers: {len(files_to_process)}, Dossiers: {len(folders_to_process)}, Total: {total_to_process}")

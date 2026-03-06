@@ -20,6 +20,17 @@ check_env() {
     export HOST=${HOST:-"0.0.0.0"}
     export PORT=${PORT:-"8080"}
     export APP_PORT=${APP_PORT:-"5001"}
+
+    # L'application stocke les jobs en mémoire locale : plusieurs workers Gunicorn
+    # cassent le suivi des IDs (404 intermittents sur /api/jobs/review).
+    export GUNICORN_WORKERS=${GUNICORN_WORKERS:-"1"}
+    export GUNICORN_THREADS=${GUNICORN_THREADS:-"8"}
+    export GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-"300"}
+
+    if [ "$GUNICORN_WORKERS" != "1" ]; then
+        log "⚠️ GUNICORN_WORKERS=$GUNICORN_WORKERS détecté, forçage à 1 (file de jobs en mémoire non partagée entre workers)."
+        export GUNICORN_WORKERS="1"
+    fi
     
     log "✅ Variables configurées:"
     log "   SOURCE_DIR: $SOURCE_DIR"
@@ -117,7 +128,7 @@ show_help() {
     log "  HOST            Hôte d'écoute (défaut: 0.0.0.0)"
     log "  PORT            Port Nginx (défaut: 8080)"
     log "  APP_PORT        Port interne Flask/Gunicorn (défaut: 5001)"
-    log "  GUNICORN_WORKERS Nombre de workers Gunicorn (défaut: 4)"
+    log "  GUNICORN_WORKERS Nombre de workers Gunicorn (défaut: 1, forcé à 1 pour cohérence des jobs)"
     log "  GUNICORN_THREADS  Nombre de threads par worker (défaut: 8)"
     log "  GUNICORN_TIMEOUT Timeout en secondes (défaut: 300)"
 }

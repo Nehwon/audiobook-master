@@ -58,7 +58,7 @@ OUTPUT_DIR=/app/data/output
 TEMP_DIR=/app/temp
 
 # 🚀 Performance (adapter selon votre système)
-GUNICORN_WORKERS=4
+GUNICORN_WORKERS=1
 GUNICORN_THREADS=8
 GUNICORN_TIMEOUT=300
 

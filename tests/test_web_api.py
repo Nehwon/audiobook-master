@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from web import app as web_app
 
@@ -103,6 +104,25 @@ class TestWebRenameApi(unittest.TestCase):
         resp = self.client.post('/api/folder/delete', json={'folder': 'Sain'})
         self.assertEqual(resp.status_code, 400)
         self.assertTrue(folder.exists())
+
+    @mock.patch('web.app._run_ollama_metadata_search')
+    def test_ollama_search_allowed_even_when_disabled(self, mocked_search):
+        web_app._save_config({**web_app._default_config(), 'ollama_enabled': False})
+        mocked_search.return_value = {'folder': 'Book', 'title': 'Titre'}
+
+        resp = self.client.post('/api/ollama/search', json={'folders': ['Book']})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['results'], [{'folder': 'Book', 'title': 'Titre'}])
+
+    @mock.patch('web.app._ollama_pull_model')
+    def test_ollama_pull_returns_503_on_backend_error(self, mocked_pull):
+        mocked_pull.side_effect = RuntimeError('Ollama indisponible')
+
+        resp = self.client.post('/api/ollama/pull', json={'model': 'qwen2.5:7b'})
+        self.assertEqual(resp.status_code, 503)
+        payload = resp.get_json()
+        self.assertIn('Ollama indisponible', payload['error'])
 
 
 if __name__ == '__main__':

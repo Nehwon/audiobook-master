@@ -31,7 +31,7 @@ MEDIA_DIR = Path(os.getenv("AUDIOBOOK_MEDIA_DIR", os.getenv("SOURCE_DIR", "/app/
 OUTPUT_DIR = Path(os.getenv("AUDIOBOOK_OUTPUT_DIR", os.getenv("OUTPUT_DIR", "/app/data/output")))
 TEMP_DIR = Path(os.getenv("AUDIOBOOK_TEMP_DIR", os.getenv("TEMP_DIR", "/tmp/audiobooks_web")))
 CONFIG_PATH = TEMP_DIR / "web_config.json"
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://ollama:11434")).rstrip("/")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}
 ARCHIVE_EXTENSIONS = {".zip", ".rar"}
@@ -794,7 +794,7 @@ def api_ollama_pull_model():
     try:
         output = _ollama_pull_model(model)
     except Exception as exc:  # noqa: BLE001
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": str(exc)}), 503
 
     return jsonify({"status": "ok", "model": model, "output": output})
 
@@ -822,9 +822,6 @@ def api_ollama_search_metadata():
         return jsonify({"error": "folders requis"}), 400
 
     config = _load_config()
-    if not config.get("ollama_enabled", False):
-        return jsonify({"error": "Ollama désactivé dans la configuration"}), 400
-
     results = [_run_ollama_metadata_search(folder, config) for folder in folders if isinstance(folder, str)]
     return jsonify({"results": results})
 

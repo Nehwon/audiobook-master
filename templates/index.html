@@ -844,13 +844,60 @@ async function clearReview(folder){
 
 async function refreshDashboardData({forceDoneRefresh=false} = {}){
     await Promise.all([
-        loadLibrary(),
         loadJobs({forceDoneRefresh}),
         loadSubmissionQueue(),
     ]);
 }
 
+function shouldRefreshLibrary(){
+    if (renameInProgress || manualRenameRow) return false;
+    const active = document.activeElement;
+    if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) return false;
+    return true;
+}
 
+
+
+
+const monitorState = {
+    sourceSig: '',
+    outputSig: '',
+    jobsSig: '',
+    inFlight: false,
+};
+
+async function monitorAndPatchDom(){
+    if (monitorState.inFlight) return;
+    monitorState.inFlight = true;
+    try {
+        const qs = new URLSearchParams({
+            source_sig: monitorState.sourceSig,
+            output_sig: monitorState.outputSig,
+            jobs_sig: monitorState.jobsSig,
+        });
+        const payload = await api(`/api/monitor?${qs.toString()}`);
+        const signs = payload?.signatures || {};
+        const changes = payload?.changes || {};
+
+        if (changes.jobs) {
+            await loadJobs({forceDoneRefresh: false});
+        }
+        if (changes.outputs) {
+            await loadSubmissionQueue();
+        }
+        if (changes.library && shouldRefreshLibrary()) {
+            await loadLibrary();
+        }
+
+        monitorState.sourceSig = signs.source_sig || monitorState.sourceSig;
+        monitorState.outputSig = signs.output_sig || monitorState.outputSig;
+        monitorState.jobsSig = signs.jobs_sig || monitorState.jobsSig;
+    } catch (err) {
+        // On garde l'UI interactive; les actions utilisateur déclenchent déjà les updates AJAX directes.
+    } finally {
+        monitorState.inFlight = false;
+    }
+}
 
 function renderLlmResults(items){
     const c = document.getElementById('llmResults');
@@ -1021,11 +1068,14 @@ loadJobs();
 loadConfig();
 loadSubmissionQueue();
 loadOllamaStatus();
-setInterval(() => refreshDashboardData({forceDoneRefresh: false}), 5000);
+monitorAndPatchDom();
+
+// Monitoring AJAX précis (sans rechargement de page):
+// - vérifie régulièrement les changements dossiers/jobs côté backend
+// - applique uniquement les patchs DOM nécessaires.
 setInterval(() => {
-    const card = document.getElementById('debugLogsCard');
-    if (card && card.style.display !== 'none') loadDebugLogs();
-}, 8000);
+    monitorAndPatchDom();
+}, 1000);
 </script>
 </body>
 </html>

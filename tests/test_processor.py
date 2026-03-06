@@ -159,6 +159,23 @@ class TestAudiobookProcessor(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.processor.process_all()
 
+    def test_compute_cpu_parallel_tasks_under_8_cores_forces_single_task(self):
+        self.assertEqual(self.processor._compute_cpu_parallel_tasks(4), 1)
+        self.assertEqual(self.processor._compute_cpu_parallel_tasks(7), 1)
+
+    def test_compute_cpu_parallel_tasks_from_8_cores(self):
+        self.assertEqual(self.processor._compute_cpu_parallel_tasks(8), 2)
+        self.assertEqual(self.processor._compute_cpu_parallel_tasks(16), 6)
+
+    def test_compute_threads_per_cpu_task(self):
+        self.assertEqual(self.processor._compute_threads_per_cpu_task(1), 1)
+        self.assertEqual(self.processor._compute_threads_per_cpu_task(8), 2)
+
+    def test_compute_parallel_audiobooks(self):
+        self.assertEqual(self.processor._compute_parallel_audiobooks(3), 1)
+        self.assertEqual(self.processor._compute_parallel_audiobooks(8), 2)
+        self.assertEqual(self.processor._compute_parallel_audiobooks(32), 8)
+
 
 if __name__ == '__main__':
     unittest.main()

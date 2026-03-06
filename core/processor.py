@@ -176,6 +176,36 @@ class AudiobookProcessor:
         """Construit une ligne de filelist concat compatible avec les apostrophes."""
         escaped_path = str(file_path.absolute()).replace("'", r"'\''")
         return f"file '{escaped_path}'\n"
+
+    def _compute_cpu_parallel_tasks(self, total_cores: Optional[int] = None) -> int:
+        """Calcule le nombre de tâches CPU parallèles.
+
+        Règle:
+        - < 8 cœurs: exécution séquentielle (1 tâche)
+        - >= 8 cœurs: tâches = (cœurs // 2) - 2
+        """
+        cores = total_cores or os.cpu_count() or 1
+        if cores < 8:
+            return 1
+        return max(1, (cores // 2) - 2)
+
+    def _compute_threads_per_cpu_task(self, total_cores: Optional[int] = None) -> int:
+        """Définit le nombre de threads FFmpeg par tâche CPU.
+
+        Pour la stratégie multi-tâches CPU, on cible 2 threads/cœurs par tâche.
+        """
+        cores = total_cores or os.cpu_count() or 1
+        if cores < 2:
+            return 1
+        return 2
+
+    def _compute_parallel_audiobooks(self, total_cores: Optional[int] = None) -> int:
+        """Calcule le nombre d'audiobooks à traiter en parallèle.
+
+        Règle demandée: ThreadCPU / 4 audiobooks parallèles.
+        """
+        cores = total_cores or os.cpu_count() or 1
+        return max(1, cores // 4)
     
     def parse_filename(self, filename: str) -> AudiobookMetadata:
         """Extrait les métadonnées de base du nom de fichier"""
@@ -806,9 +836,10 @@ class AudiobookProcessor:
                 normalized_files.append(normalized_file)
             
             # Commande batch FFmpeg
-            cmd = [
-                'ffmpeg', '-y'
-            ]
+            cmd = ['ffmpeg', '-y']
+            if self.detect_cuda_support():
+                # Accélération GPU si supportée (decode), fallback auto en cas d'échec
+                cmd.extend(['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'])
             
             # Ajoute les fichiers d'entrée
             for aac_file in batch:
@@ -871,8 +902,8 @@ class AudiobookProcessor:
             # Paramètres optimaux
             optimal_params = self.get_optimal_encoding_params(quality)
             
-            # Configuration CPU optimisée pour double Xeon
-            cpu_threads = max(2, (os.cpu_count() or 8) // 2)  # Thread_max / 2
+            # Configuration CPU: 2 cœurs par tâche
+            cpu_threads = int(encoding_params.get('cpu_threads', self._compute_threads_per_cpu_task()))
             logger.info(f"   🔧 {input_file.name}: {optimal_params['reason']} ({cpu_threads} threads)")
             
             # Commande d'encodage CPU optimisée
@@ -901,7 +932,13 @@ class AudiobookProcessor:
             logger.error(f"💥 Erreur encodage {input_file.name}: {e}")
             return False, input_file.name, {'cpu_threads': 0}
     
-    def normalize_batch_cpu_optimized(self, aac_files: List[Path], aac_temp_dir: Path, config) -> List[Path]:
+    def normalize_batch_cpu_optimized(
+        self,
+        aac_files: List[Path],
+        aac_temp_dir: Path,
+        config,
+        total_cores_override: Optional[int] = None,
+    ) -> List[Path]:
         """Normalisation par lots optimisée pour CPU multi-cœurs"""
         logger.info("🔧 Normalisation batch CPU optimisée...")
         
@@ -909,7 +946,7 @@ class AudiobookProcessor:
         loudnorm_params = f"I={config.loudnorm_target}:LRA={config.loudnorm_range}:TP={config.loudnorm_true_peak}"
         
         # Configuration optimisée pour double Xeon 32 cœurs
-        total_cores = os.cpu_count() or 8
+        total_cores = total_cores_override or os.cpu_count() or 8
         batch_threads = max(4, total_cores // 4)  # Thread_max / 4 pour normalisation
         batch_size = min(8, total_cores // 8)  # Plus de fichiers par batch avec plus de cœurs
         
@@ -988,18 +1025,26 @@ class AudiobookProcessor:
         
         return normalized_files
     
-    def encode_cpu_optimized_phase2(self, audio_files: List[Path], output_path: Path, metadata: AudiobookMetadata) -> bool:
+    def encode_cpu_optimized_phase2(
+        self,
+        audio_files: List[Path],
+        output_path: Path,
+        metadata: AudiobookMetadata,
+        cpu_budget_cores: Optional[int] = None,
+    ) -> bool:
         """Phase 2: Encodage CPU multi-cœurs optimisé pour double Xeon"""
         try:
             logger.info(f"⚡ PHASE 2 CPU OPTIMISÉE: {len(audio_files)} fichiers")
             
-            # Configuration optimisée pour double Xeon 32 cœurs
-            total_cores = os.cpu_count() or 8
-            max_workers = max(4, total_cores // 2)  # Thread_max / 2
-            
-            logger.info(f"🖥️ Configuration CPU: {total_cores} cœurs disponibles")
+            # Configuration parallélisme CPU
+            detected_cores = os.cpu_count() or 8
+            total_cores = cpu_budget_cores or detected_cores
+            max_workers = self._compute_cpu_parallel_tasks(total_cores)
+            cpu_threads = self._compute_threads_per_cpu_task(total_cores)
+
+            logger.info(f"🖥️ Configuration CPU: {detected_cores} cœurs détectés, budget {total_cores}")
             logger.info(f"⚡ Multithreading: {max_workers} workers parallèles")
-            logger.info(f"🔧 Optimisé pour: Double Xeon 32 cœurs")
+            logger.info(f"🔧 Allocation: {cpu_threads} cœurs/tâche, 2 cœurs réservés système")
             
             # Analyse qualité rapide
             logger.info("🔍 Analyse qualité (échantillon 5 fichiers)...")
@@ -1024,7 +1069,7 @@ class AudiobookProcessor:
             for i, audio_file in enumerate(audio_files):
                 aac_filename = f"track_{i+1:04d}.aac"
                 aac_file = aac_temp_dir / aac_filename
-                tasks.append((audio_file, aac_file, {}, i+1))
+                tasks.append((audio_file, aac_file, {'cpu_threads': cpu_threads}, i+1))
             
             # Encodage parallèle CPU optimisé
             logger.info(f"🚀 Démarrage encodage CPU optimisé ({max_workers} workers)...")
@@ -1069,7 +1114,17 @@ class AudiobookProcessor:
             logger.info(f"🔧 Normalisation batch CPU optimisée: {loudnorm_params}")
             
             norm_start = time.time()
-            normalized_files = self.normalize_batch_cpu_optimized(aac_files, aac_temp_dir, config)
+            cuda_available = self.detect_cuda_support()
+            logger.info(f"🎯 CUDA disponible pour normalisation: {cuda_available}")
+            if cuda_available:
+                normalized_files = self.normalize_batch_gpu_optimized(aac_files, aac_temp_dir, config)
+            else:
+                normalized_files = self.normalize_batch_cpu_optimized(
+                    aac_files,
+                    aac_temp_dir,
+                    config,
+                    total_cores_override=total_cores,
+                )
             norm_time = time.time() - norm_start
             
             logger.info(f"🔧 Normalisation terminée en {norm_time//60:.0f}m{norm_time%60:.0f}s")
@@ -1166,7 +1221,7 @@ class AudiobookProcessor:
             for i, audio_file in enumerate(audio_files):
                 aac_filename = f"track_{i+1:04d}.aac"
                 aac_file = aac_temp_dir / aac_filename
-                tasks.append((audio_file, aac_file, {}, i+1))
+                tasks.append((audio_file, aac_file, {'cpu_threads': cpu_threads}, i+1))
             
             # Encodage parallèle GPU-hybrid
             logger.info(f"🚀 Démarrage encodage GPU-hybrid ({max_workers} workers)...")
@@ -1300,7 +1355,7 @@ class AudiobookProcessor:
             for i, audio_file in enumerate(audio_files):
                 aac_filename = f"track_{i+1:04d}.aac"
                 aac_file = aac_temp_dir / aac_filename
-                tasks.append((audio_file, aac_file, {}, i+1))
+                tasks.append((audio_file, aac_file, {'cpu_threads': cpu_threads}, i+1))
             
             # Encodage parallèle
             logger.info(f"🚀 Démarrage encodage parallèle ({max_workers} workers)...")
@@ -1785,7 +1840,7 @@ class AudiobookProcessor:
             if 'work_dir' in locals() and work_dir.exists():
                 shutil.rmtree(work_dir, ignore_errors=True)
     
-    def process_audiobook(self, file_path: Path) -> bool:
+    def process_audiobook(self, file_path: Path, cpu_budget_cores: Optional[int] = None) -> bool:
         """Traite un fichier audiobook complet"""
         try:
             logger.info(f"🚀 TRAITEMENT: {file_path.name}")
@@ -1837,7 +1892,12 @@ class AudiobookProcessor:
                 output_filename = f"{metadata.get_filename_format()}.m4b"
                 output_path = self.output_dir / output_filename
                 
-                success = self.encode_cpu_optimized_phase2(audio_files, output_path, metadata)
+                success = self.encode_cpu_optimized_phase2(
+                    audio_files,
+                    output_path,
+                    metadata,
+                    cpu_budget_cores=cpu_budget_cores,
+                )
                 
             else:
                 # Phase 3: M4B final (par défaut)
@@ -1893,20 +1953,45 @@ class AudiobookProcessor:
         total_to_process = len(files_to_process) + len(folders_to_process)
         logger.info(f"📋 Fichiers: {len(files_to_process)}, Dossiers: {len(folders_to_process)}, Total: {total_to_process}")
         
-        # Traitement
-        for i, folder_path in enumerate(folders_to_process, 1):
-            logger.info(f"\n📂 DOSSIER {i}/{len(folders_to_process)}: {folder_path.name}")
-            if self.process_audiobook(folder_path):
-                results["success"] += 1
-            else:
-                results["failed"] += 1
-        
-        for i, file_path in enumerate(files_to_process, 1):
-            logger.info(f"\n📃 FICHIER {i}/{len(files_to_process)}: {file_path.name}")
-            if self.process_audiobook(file_path):
-                results["success"] += 1
-            else:
-                results["failed"] += 1
+        # Traitement (ThreadCPU / 4 audiobooks en parallèle)
+        items_to_process: List[Path] = folders_to_process + files_to_process
+        total_cores = os.cpu_count() or 1
+        parallel_audiobooks = min(len(items_to_process), self._compute_parallel_audiobooks(total_cores)) if items_to_process else 1
+        cpu_budget_per_book = max(1, total_cores // parallel_audiobooks)
+
+        logger.info(
+            "⚙️ Parallélisme audiobooks: %s workers (ThreadCPU/4), budget %s cœurs par audiobook",
+            parallel_audiobooks,
+            cpu_budget_per_book,
+        )
+
+        if parallel_audiobooks <= 1:
+            for i, item_path in enumerate(items_to_process, 1):
+                item_kind = "DOSSIER" if item_path.is_dir() else "FICHIER"
+                logger.info(f"\n📦 {item_kind} {i}/{len(items_to_process)}: {item_path.name}")
+                if self.process_audiobook(item_path, cpu_budget_cores=cpu_budget_per_book):
+                    results["success"] += 1
+                else:
+                    results["failed"] += 1
+        else:
+            with ThreadPoolExecutor(max_workers=parallel_audiobooks) as executor:
+                future_to_item = {
+                    executor.submit(self.process_audiobook, item_path, cpu_budget_per_book): item_path
+                    for item_path in items_to_process
+                }
+
+                for future in as_completed(future_to_item):
+                    item_path = future_to_item[future]
+                    try:
+                        if future.result():
+                            results["success"] += 1
+                            logger.info("✅ Terminé: %s", item_path.name)
+                        else:
+                            results["failed"] += 1
+                            logger.error("❌ Échec: %s", item_path.name)
+                    except Exception as exc:  # noqa: BLE001
+                        results["failed"] += 1
+                        logger.error("💥 Exception sur %s: %s", item_path.name, exc)
         
         # Résultats
         logger.info("\n🏁 TRAITEMENT TERMINÉ")

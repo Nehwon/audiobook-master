@@ -1,352 +1,162 @@
-# 🎧 Audiobook Manager Pro
+# Audiobook Master
 
-Système professionnel de traitement d'audiobooks avec multithreading CPU optimisé, interface graphique desktop et synchronisation Audiobookshelf.
+Audiobook Master est un projet Python qui convertit des dossiers de pistes audio (`.mp3`, `.m4a`, `.flac`, etc.) en fichiers `.m4b`, avec une interface web Flask, une CLI, et une intégration optionnelle avec Audiobookshelf.
 
-## 🚀 **Version 2.1.0 - Dockerisation & Interface Graphique & Synchronisation**
+> ⚠️ **État du dépôt** : le projet contient des composants historiques (`run.py`, `start_web.py`) et des composants actifs (`core/`, `web/`, `integrations/`). Cette documentation décrit explicitement le chemin recommandé aujourd’hui.
 
-### ✅ **Nouvelles Fonctionnalités Majeures**
+## 1) Fonctionnalités actuelles
 
-#### 🐳 **Dockerisation Complète**
-- **Dockerfile** : Configuration complète avec FFmpeg 7.1.3 et dépendances
-- **Docker Compose** : Services (app, Ollama, monitoring, BDD, Redis) avec paramètres `.env`
-- **Multi-plateforme** : Support Linux/Windows/macOS
-- **Health checks** : Endpoints `/health` et `/api/status`
-- **Installation one-click** : Script automatisé multi-OS
-- **Interface web simple** : `simple_web.py` pour monitoring basique
-- **Registry GHCR** : Images GitHub Container Registry intégrées
-- **Workflow GitHub Actions** : Build Docker automatisé
+### Conversion audio
+- Traitement d’un dossier livre vers un fichier `.m4b`.
+- Gestion de plusieurs extensions audio (définies dans `core/config.py`).
+- Paramètres audio configurables (bitrate, sample rate, normalisation loudnorm, compresseur, chapitres).
+- Détection de structures de dossiers invalides (par ex. sous-dossiers imbriqués non attendus).
 
-#### 🖥️ **Interface Web Avancée**
-- **Application Flask moderne** : Interface responsive avec SocketIO
-- **Progression dynamique** : Barres de progression temps réel par job
-- **Notifications système** : Remplacement des popups par notifications élégantes
-- **Renommage intelligent** : Édition manuelle des titres avec assistance Ollama
-- **Logs détaillés** : Tracking live des traitements avec debug complet
-- **Indicateur busy global** : État de l'application visible en permanence
-- **Recherche IA intégrée** : Ollama pour analyse et suggestions de métadonnées
+### Interface web (`web/app.py`)
+- Exploration de la bibliothèque source.
+- Validation/extraction d’archives.
+- Renommage de dossiers (avec overrides manuels).
+- Mise en file de jobs, suivi des jobs et consultation des logs.
+- Configuration web persistée dans un JSON local.
+- Endpoints dédiés à Ollama (statut/pull/delete/search) pour l’assistance IA.
+- Endpoints de santé et de monitoring (`/health`, `/api/monitor`).
 
-#### 🖥️ **Interface Graphique Desktop**
-- **Application Tkinter** : Interface moderne et intuitive (`gui/desktop_app.py`)
-- **Progression temps réel** : Barres, logs, status détaillés
-- **Configuration avancée** : Bitrate, sample rate, GPU, loudnorm
-- **Gestion erreurs** : Messages clairs et actions automatiques
-- **Packaging multi-OS** : Exécutables autonomes
+### Intégration Audiobookshelf
+- Authentification (token direct ou login/password).
+- Upload d’un `.m4b` vers une bibliothèque.
+- Déclenchement d’un scan de bibliothèque après upload.
 
-#### 🔗 **Intégration Audiobookshelf**
-- **Client API complet** : Authentification, upload, recherche (`integrations/audiobookshelf_client.py`)
-- **Synchronisation automatique** : Métadonnées + fichiers (`integrations/sync_manager.py`)
-- **Configuration flexible** : Fichier JSON + variables d'environnement (`integrations/config.py`)
-- **Gestion des conflits** : Skip/overwrite/merge
-- **Support multi-bibliothèques** : CRUD complet
+## 2) Architecture du dépôt
 
-#### 🔄 **CI/CD Intégral**
-- **Workflows Gitea** : Build Docker automatique (`.gitea/workflows/`)
-- **Workflows GitHub** : Build Docker automatisé avec GitHub Actions
-- **Tests complets** : Unitaires, intégration, performance (`tests/`)
-- **Sécurité intégrée** : Trivy, Bandit, Safety, SBOM
-- **Déploiement automatisé** : Staging/production
-- **Releases GitHub** : Assets multi-plateformes
-- **Smart folder renaming** : Renommage intelligent avec apostrophes normalisées
-- **Validation robuste** : Rejet des dossiers contenant des sous-dossiers
-- **Diagnostics avancés** : Logs persistants dans `/app/logs` avec analyse d'échecs
+- `core/` : logique de traitement audio, config, métadonnées, CLI principale.
+- `web/` + `templates/` : application Flask et UI.
+- `integrations/` : client Audiobookshelf et synchronisation.
+- `tests/` : suite de tests Python (volumineuse, hétérogène).
+- `docs/` : documentation technique complémentaire (installation, docker, CI/CD, dev).
+- `docker-compose.yml` + `Dockerfile` : exécution conteneurisée.
 
----
+## 3) Prérequis
 
-## 🎯 **Performance Exceptionnelle**
+### Runtime
+- Python 3.10+ recommandé.
+- `ffmpeg` installé et disponible dans le `PATH`.
+- Dépendances Python de `requirements.txt`.
 
-### ⚡ **Multithreading CPU Optimisé**
-- **Double Xeon 32 cœurs** : 32 workers parallèles
-- **Performance mesurée** : 3.5x plus rapide que séquentiel
-- **81 fichiers** : 634.7MB → 652.3MB en 25min15s
-- **CPU optimisé** : 100% utilisation double Xeon
+### Dépendances système utiles
+- `ffprobe` (souvent fourni avec ffmpeg).
+- Outils d’archives selon l’usage (`unzip`, support `rarfile` côté Python).
 
-### 🎵 **Standards Audio Professionnels**
-- **EBU R128** : -18 LUFS / 11 LU LRA / TP -1.5
-- **AAC 128k** : Haute qualité optimisée
-- **48kHz** : Sample rate standard audiobooks
-- **5 stratégies adaptatives** : codec_only, reduce_bitrate, etc.
+## 4) Installation locale (recommandée)
 
----
-
-## 🛠️ **Installation Rapide**
-
-### 🚀 **Installation One-Click**
 ```bash
-# Installation automatique multi-plateforme
-curl -fsSL https://raw.githubusercontent.com/Nehwon/audiobook-master/main/scripts/install.sh | bash
-```
-
-### 🐳 **Installation Docker**
-```bash
-# Clone et démarrage
-git clone https://github.com/Nehwon/audiobook-master.git
-cd audiobook-master
-docker build -t audiobook-manager-pro:v2.1.0 .
-docker run -d --name audiobook-manager -p 5000:5000 \
-  -v $(pwd)/data/source:/app/data/source \
-  -v $(pwd)/data/output:/app/data/output \
-  audiobook-manager-pro:v2.1.0
-
-# Avec Docker Compose
-docker-compose up -d
-
-# Avec monitoring inclus
-docker-compose --profile monitoring up -d
-
-# Stack all-in-one (app + Ollama)
-docker-compose up -d
-```
-
-### 📦 **Installation Manuelle**
-```bash
-# Dépendances Python
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-# Interface desktop
-python3 -m gui.desktop_app
-
-# Interface web simple
-python3 simple_web.py
-
-# Interface web complète
-python3 -m web.app
 ```
 
----
-
-## 🌐 **Interface Utilisateur**
-
-### 🖥️ **Interface Desktop**
-- **Configuration répertoires** : Source et sortie
-- **Paramètres audio** : Bitrate, sample rate, VBR, loudnorm
-- **Modes de traitement** : Phase 1/2/3
-- **Progression détaillée** : Fichier actuel, pourcentage, logs
-- **Actions rapides** : Lancer, pause, arrêter, ouvrir sortie
-
-### 🌐 **Interface Web**
-- **Onglets avancés** : Options de base + paramètres avancés
-- **Sliders interactifs** : VBR qualité 1-9, loudnorm complet
-- **Monitoring temps réel** : CPU, GPU, RAM, progression
-- **Historique** : Conversions précédentes avec détails
-- **Téléchargement** : Direct des résultats
-
----
-
-## 🔗 **Intégration Audiobookshelf**
-
-### ⚙️ **Configuration**
-```json
-{
-  "host": "localhost",
-  "port": 13378,
-  "username": "votre-username",
-  "password": "votre-password",
-  "enabled": true,
-  "auto_sync": true,
-  "library_id": "votre-library-id"
-}
-```
-
-### 🔄 **Fonctionnalités**
-- **Upload CLI `--upload`** : envoie automatiquement chaque fichier `.m4b` du dossier de sortie via l'API Audiobookshelf (`/api/libraries/{id}/upload`) puis déclenche un scan de bibliothèque.
-- **Upload automatique** : Métadonnées + fichiers après conversion
-- **Synchronisation bidirectionnelle** : Local ↔ distant
-- **Gestion des conflits** : Stratégies de résolution
-- **Support multi-bibliothèques** : Organisation avancée
-- **Retry automatique** : Gestion des erreurs réseau
-
----
-
-## 🐳 **Docker & Déploiement**
-
-### 📋 **Services Disponibles**
-- **Application** : Service principal avec health checks
-- **Monitoring** : Prometheus + Grafana (optionnel)
-- **Base de données** : PostgreSQL (optionnel)
-- **Cache** : Redis pour performances (optionnel)
-- **LLM local** : Ollama embarqué pour le scraping/extraction métadonnées
-
-### 🔧 **Configuration**
-```yaml
-# docker-compose.yml
-services:
-  audiobook-manager:
-    image: gitea.lamachere.fr/audiobook-manager-pro:latest
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./data/source:/app/data/source
-      - ./data/output:/app/data/output
-    environment:
-      - MAX_WORKERS=32
-      - CPU_THREADS=16
-```
-
----
-
-## 🧪 **Tests et Qualité**
-
-### 📊 **Suite de Tests**
-- **Tests unitaires** : 100% modules core, web, integrations
-- **Tests d'intégration** : Audiobookshelf + Docker
-- **Tests performance** : Benchmarks et mémoire
-- **Tests sécurité** : Scans automatiques
-
-### 🛡️ **Sécurité**
-- **Scans automatiques** : Trivy, Bandit, Safety
-- **SBOM generation** : Software Bill of Materials
-- **Vulnerability detection** : Dépendances et images
-- **Code quality** : Flake8, Black, MyPy
-
----
-
-## Documentation
-
-### Documentation Complète
-- Guide installation : [Installation One-Click, Docker, manuel](docs/INSTALLATION.md)
-- Configuration CI/CD : Workflows Gitea complets
-- API documentation : Endpoints et exemples
-- Guide développeur : [Architecture et contribution](docs/DEVELOPER.md)
-- Dépannage avancé : Problèmes communs et solutions
-- GitHub Repository : https://github.com/Nehwon/audiobook-master
-- Issues : https://github.com/Nehwon/audiobook-master/issues
-
-### Liens Utiles
-- Documentation : https://docs.audiobook-manager.pro
-- GitHub Repository : https://github.com/Nehwon/audiobook-master
-- Issues : https://github.com/Nehwon/audiobook-master/issues
-
----
-
-## Cas d'Usage
-## 🎯 **Cas d'Usage**
-
-### 🎧 **Pour les Utilisateurs**
-- **Conversion rapide** : Phase 1 pour concaténation 1:1
-- **Qualité optimale** : Phase 2 pour encodage AAC adaptatif
-- **Traitement batch** : Gestion de dossiers complexes
-- **Synchronisation** : Upload automatique vers Audiobookshelf
-
-### 🏢 **Pour les Professionnels**
-- **Traitement industriel** : Double Xeon 32 cœurs optimisé
-- **Déploiement Docker** : Production et staging
-- **Monitoring avancé** : Métriques et alertes
-- **Intégration continue** : CI/CD complet
-
----
-
-## 📈 **Roadmap Future**
-
-### 🚀 **Version 2.2 (En cours)**
-- [ ] **Auto-update intégré** : Mises à jour automatiques
-- [ ] **Notifications avancées** : Slack/Discord/Email
-- [ ] **Performance monitoring** : Métriques production
-- [ ] **Rollback avancé** : Gestion des versions
-
-### 🔮 **Vision Long Terme**
-- **Interface Electron** : Version desktop moderne
-- **Plugin architecture** : Extensibilité maximale
-- **Cloud services** : SaaS multi-tenant
-- **Mobile apps** : iOS/Android natifs
-
----
-
-## 🏆 **Réalisations Exceptionnelles**
-
-### ✅ **Version 2.0 - Multithreading CPU Optimisé**
-- Performance 3.5x plus rapide que séquentiel
-- Double Xeon 32 cœurs : 32 workers parallèles
-- Analyse qualité adaptative fichier par fichier
-- Interface web avancée avec onglets et sliders
-
-### ✅ **Version 2.1 - Dockerisation & Interface Graphique**
-- Dockerisation complète multi-plateforme
-- Interface desktop Tkinter moderne
-- Intégration Audiobookshelf complète
-- CI/CD complet avec build Docker auto
-- Installation one-click automatisée
-
----
-
-## 🎧 **Communauté et Support**
-
-### 💬 **Aide et Support**
-- **Documentation complète** : Guides et tutoriels
-- **Issues GitHub** : Rapport de bugs et demandes
-- **Discord communautaire** : Aide entre utilisateurs
-- **Examples et templates** : Cas d'usage courants
-
-### 🤝 **Contribution**
-- **Code source ouvert** : MIT License
-- **Développement collaboratif** : Pull requests bienvenues
-- **Documentation contributive** : Améliorations continues
-- **Tests et qualité** : Standards élevés
-
----
-
-## 📄 **Licence**
-
-**MIT License** - Utilisation libre et open source
-
----
-
-**Pour commencer rapidement :**
+Vérification rapide :
 
 ```bash
-# Installation one-click
-curl -fsSL https://raw.githubusercontent.com/Nehwon/audiobook-master/main/scripts/install.sh | bash
-
-# Ou avec Docker
-git clone https://github.com/Nehwon/audiobook-master.git
-cd audiobook-master
-docker-compose up -d
+python -c "import flask, requests, mutagen; print('ok')"
+ffmpeg -version
 ```
 
-**Profitez dès maintenant du traitement d'audiobooks le plus avancé !** 🎧🚀
+## 5) Utilisation CLI (chemin recommandé)
 
----
+L’entrée CLI moderne est `core/main.py`.
 
-## 📊 **Tableau de Suivi des Commits**
+### Exemple minimal
 
-### 🔄 **Règle de Mise à Jour Obligatoire**
+```bash
+python -m core.main --source /chemin/source --output /chemin/output
+```
 
-**⚠️ IMPORTANT** : Ce tableau doit être mis à jour **À CHAQUE FOIS** que le README.md est modifié ou demandé en mise à jour. C'est une règle non négociable pour assurer la traçabilité complète des modifications.
+### Options principales
 
-### 📋 **Historique des Commits Récents**
+```text
+--source / -s          Dossier source
+--output / -o          Dossier de sortie
+--single / -f          Traiter un fichier spécifique
+--dry-run / -n         Simulation sans conversion
+--upload / -u          Upload vers Audiobookshelf après traitement
+--no-scraping          Désactive le scraping de métadonnées
+--no-synopsis|--no-ai  Désactive la génération IA
+--bitrate / -b         Bitrate (ex: 64k, 128k, 192k)
+--samplerate           Fréquence d'échantillonnage
+--no-chapters          Désactive le chapitrage
+--no-normalization     Désactive loudnorm
+--no-compression       Désactive compresseur
+--no-gpu               Désactive accélération GPU
+--aac-coder            twolo|fast
+--verbose / -v         Logs détaillés
+```
 
-| Date | Description du Commit | Commit GitHub | Commit Gitea |
-|------|----------------------|---------------|--------------|
-| 2026-03-06 | Remove audiobook buttons during conversion + dynamic job bars | `9c8ec77` | `9c8ec77` |
-| 2026-03-06 | Expose conversion progress to API and render dynamic job bars | `8f9aca2` | `8f9aca2` |
-| 2026-03-06 | Fix FFmpeg error on audio processing + reject subdirectories | `53267b3` | `53267b3` |
-| 2026-03-06 | Reject audiobook folders that contain subdirectories | `841dc6f` | `841dc6f` |
-| 2026-03-06 | Fix log file not found error + persist processor logs | `4d5d9a2` | `4d5d9a2` |
-| 2026-03-06 | Persist processor logs in /app/logs and improve failure diagnostics | `6b3dac7` | `6b3dac7` |
-| 2026-03-06 | Fix web debug log location to use /app/logs | `3ce04b6` | `3ce04b6` |
-| 2026-03-06 | Fix backend logs API error 504 + jobs lock deadlock | `bd3929b` | `bd3929b` |
-| 2026-03-06 | Fix web jobs lock deadlock blocking logs and status APIs | `c95cbbe` | `c95cbbe` |
-| 2026-03-06 | Add detailed web processing logs and live tracking UI | `d8f922b` | `d8f922b` |
-| 2026-03-06 | Refactor rename functionality and replace popups by notifications | `1eabcff` | `1eabcff` |
-| 2026-03-06 | Améliore le renommage manuel et remplace les popups par notifications | `d473558` | `d473558` |
-| 2026-03-06 | Allow user to edit title manually + Ollama assisted renaming | `80ee814` | `80ee814` |
-| 2026-03-06 | Ajouter bouton titre manuel et renommage assisté par Ollama | `42072d8` | `42072d8` |
-| 2026-03-06 | Fix failed API calls in GUI for Ollama search and model pull | `a66bf0e` | `a66bf0e` |
-| 2026-03-06 | Fix Ollama UI failures for search and model pull | `1475f40` | `1475f40` |
-| 2026-03-06 | Add global busy indicator and model pull progress bar | `aecb0fd` | `aecb0fd` |
+## 6) Utilisation Web
 
-### 📈 **Statistiques de Synchronisation**
+### Lancer l’application
 
-- **Total commits synchronisés** : 17
-- **Dernière synchronisation** : 6 Mars 2026
-- **Statut** : ✅ GitHub et Gitea parfaitement synchronisés
-- **Prochaine mise à jour requise** : À chaque modification du README.md
+```bash
+python -m web.app
+```
 
-### 🔗 **Liens Directs**
+Par défaut, l’application lit des variables d’environnement pour ses dossiers de travail :
+- `AUDIOBOOK_MEDIA_DIR` (fallback `SOURCE_DIR`, puis `/app/data/source`)
+- `AUDIOBOOK_OUTPUT_DIR` (fallback `OUTPUT_DIR`, puis `/app/data/output`)
 
-- **GitHub Repository** : https://github.com/Nehwon/audiobook-master
-- **Gitea Repository** : https://gitea.lamachere.fr/fabrice/audiobooks-master
-- **GitHub Actions** : https://github.com/Nehwon/audiobook-master/actions
+### Endpoints principaux
 
----
+- `GET /` : interface HTML.
+- `GET /api/library` : inventaire des dossiers source.
+- `POST /api/archive/validate` : validation d’archive.
+- `POST /api/extract` : extraction d’archive.
+- `POST /api/rename` : renommage de dossiers.
+- `POST /api/jobs/enqueue` : création de jobs.
+- `GET /api/jobs` : état des jobs.
+- `GET /api/logs` : logs applicatifs.
+- `GET /api/config` / `POST /api/config` : lecture/écriture config web.
+- `GET /api/ollama/status` : état du service Ollama.
+- `GET /health` : endpoint santé.
 
-*Dernière mise à jour du tableau : 6 Mars 2026* 📊✨
+## 7) Exécution Docker
+
+### Démarrage rapide
+
+```bash
+docker compose up -d
+```
+
+Services déclarés dans le compose :
+- `audiobook-manager` (app principale)
+- `ollama` (LLM local)
+- `prometheus` (profil `monitoring`)
+- `grafana` (profil `monitoring`)
+- `postgres` (profil `database`)
+- `redis` (profil `cache`)
+
+### Avec monitoring
+
+```bash
+docker compose --profile monitoring up -d
+```
+
+## 8) Tests
+
+Lancer toute la suite :
+
+```bash
+pytest -q
+```
+
+> Remarque : la suite actuelle est importante et certaines classes de tests peuvent être instables selon l’environnement/localisation du code. Utiliser des sous-ensembles (`pytest tests/test_web_api.py -q`) pour des validations ciblées.
+
+## 9) Limites / points d’attention connus
+
+- Le dépôt contient des chemins “legacy” (`run.py`, `start_web.py`) qui ne reflètent pas toujours la structure active.
+- La documentation historique mentionnait des promesses non vérifiables (couverture 100%, production-ready universel). Elles ont été retirées ici au profit d’un état factuel.
+- Certaines fonctionnalités IA dépendent d’Ollama et d’un modèle disponible localement.
+
+## 10) Références internes
+
+- Documentation d’installation détaillée : `docs/INSTALLATION.md`
+- Mise en place Docker : `docs/docker-setup.md`
+- Guide développeur : `docs/DEVELOPER.md`

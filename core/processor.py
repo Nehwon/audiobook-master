@@ -146,6 +146,11 @@ class AudiobookProcessor:
         filename = re.sub(r'[^\w\s\-_.]', '', filename)
         filename = re.sub(r'\s+', ' ', filename).strip()
         return filename
+
+    def _ffmpeg_concat_file_entry(self, file_path: Path) -> str:
+        """Construit une ligne de filelist concat compatible avec les apostrophes."""
+        escaped_path = str(file_path.absolute()).replace("'", r"'\''")
+        return f"file '{escaped_path}'\n"
     
     def parse_filename(self, filename: str) -> AudiobookMetadata:
         """Extrait les métadonnées de base du nom de fichier"""
@@ -207,6 +212,10 @@ class AudiobookProcessor:
         
         return audio_files
     
+    def has_subdirectories(self, directory: Path) -> bool:
+        """Vérifie si un dossier contient des sous-dossiers immédiats."""
+        return any(item.is_dir() for item in directory.iterdir())
+
     def check_aac_support(self) -> bool:
         """Vérifie si le codec AAC est disponible"""
         try:
@@ -386,7 +395,7 @@ class AudiobookProcessor:
             file_list = self.temp_dir / "filelist.txt"
             with open(file_list, 'w') as f:
                 for audio_file in audio_files:
-                    f.write(f"file '{audio_file.absolute()}'\n")
+                    f.write(self._ffmpeg_concat_file_entry(audio_file))
             
             # Configuration
             config = getattr(self, 'config', ProcessingConfig())
@@ -916,7 +925,7 @@ class AudiobookProcessor:
             file_list = aac_temp_dir / "aac_filelist.txt"
             with open(file_list, 'w') as f:
                 for aac_file in normalized_files:
-                    f.write(f"file '{aac_file.absolute()}'\n")
+                    f.write(self._ffmpeg_concat_file_entry(aac_file))
             
             # Métadonnées
             metadata_dict = metadata.get_metadata_dict()
@@ -1060,7 +1069,7 @@ class AudiobookProcessor:
             file_list = aac_temp_dir / "aac_filelist.txt"
             with open(file_list, 'w') as f:
                 for aac_file in normalized_files:
-                    f.write(f"file '{aac_file.absolute()}'\n")
+                    f.write(self._ffmpeg_concat_file_entry(aac_file))
             
             # Métadonnées
             metadata_dict = metadata.get_metadata_dict()
@@ -1215,7 +1224,7 @@ class AudiobookProcessor:
             file_list = aac_temp_dir / "aac_filelist.txt"
             with open(file_list, 'w') as f:
                 for aac_file in normalized_files:
-                    f.write(f"file '{aac_file.absolute()}'\n")
+                    f.write(self._ffmpeg_concat_file_entry(aac_file))
             
             # Métadonnées
             metadata_dict = metadata.get_metadata_dict()
@@ -1357,7 +1366,7 @@ class AudiobookProcessor:
             file_list = aac_temp_dir / "aac_filelist.txt"
             with open(file_list, 'w') as f:
                 for aac_file in normalized_files:
-                    f.write(f"file '{aac_file.absolute()}'\n")
+                    f.write(self._ffmpeg_concat_file_entry(aac_file))
             
             # Métadonnées
             metadata_dict = metadata.get_metadata_dict()
@@ -1422,7 +1431,7 @@ class AudiobookProcessor:
             file_list = self.temp_dir / "filelist.txt"
             with open(file_list, 'w') as f:
                 for audio_file in audio_files:
-                    f.write(f"file '{audio_file.absolute()}'\n")
+                    f.write(self._ffmpeg_concat_file_entry(audio_file))
             
             # Configuration
             config = getattr(self, 'config', ProcessingConfig())
@@ -1677,6 +1686,9 @@ class AudiobookProcessor:
                     return False
                 audio_files = self.find_audio_files(work_dir)
             elif file_path.is_dir():
+                if self.has_subdirectories(file_path):
+                    logger.error("❌ Il existe des sous-dossiers dans le dossier. Traitement impossible.")
+                    return False
                 audio_files = self.find_audio_files(file_path)
             else:
                 audio_files = [file_path]

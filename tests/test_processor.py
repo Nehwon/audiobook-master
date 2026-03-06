@@ -106,6 +106,30 @@ class TestAudiobookProcessor(unittest.TestCase):
             # Vérifie que la conversion échoue
             self.assertFalse(result)
 
+    def test_ffmpeg_concat_file_entry_escapes_single_quotes(self):
+        """Teste l'échappement des apostrophes dans la filelist concat FFmpeg."""
+        audio_file = self.source_dir / "d'ouverture" / "01 Credits d'ouverture.mp3"
+        audio_file.parent.mkdir(parents=True, exist_ok=True)
+        audio_file.write_bytes(b"FAKE_AUDIO_DATA")
+
+        entry = self.processor._ffmpeg_concat_file_entry(audio_file)
+
+        self.assertTrue(entry.startswith("file '"))
+        self.assertTrue(entry.endswith("'\n"))
+        self.assertIn(r"d'\''ouverture", entry)
+
+
+    def test_process_audiobook_fails_when_subdirectories_exist(self):
+        """Teste l'échec si le dossier contient des sous-dossiers."""
+        book_dir = self.source_dir / "MonLivre"
+        nested_dir = book_dir / "SousDossier"
+        nested_dir.mkdir(parents=True)
+        (nested_dir / "chapitre1.mp3").write_bytes(b"FAKE_AUDIO_DATA")
+
+        result = self.processor.process_audiobook(book_dir)
+
+        self.assertFalse(result)
+
 
 if __name__ == '__main__':
     unittest.main()

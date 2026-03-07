@@ -29,6 +29,8 @@ class TestMain(unittest.TestCase):
         self.assertTrue(parser.has_option('--single'))
         self.assertTrue(parser.has_option('--dry-run'))
         self.assertTrue(parser.has_option('--upload'))
+        self.assertTrue(parser.has_option('--abs-token'))
+        self.assertTrue(parser.has_option('--abs-library-id'))
         self.assertTrue(parser.has_option('--bitrate'))
         self.assertTrue(parser.has_option('--verbose'))
         
@@ -44,6 +46,8 @@ class TestMain(unittest.TestCase):
         self.assertIsNone(args.single)
         self.assertFalse(args.dry_run)
         self.assertFalse(args.upload)
+        self.assertIsNone(args.abs_token)
+        self.assertIsNone(args.abs_library_id)
         self.assertIsNone(args.bitrate)
         self.assertFalse(args.verbose)
         
@@ -58,6 +62,8 @@ class TestMain(unittest.TestCase):
             '--single', 'test.mp3',
             '--dry-run',
             '--upload',
+            '--abs-token', 'token-123',
+            '--abs-library-id', 'lib-main',
             '--bitrate', '128k',
             '--verbose'
         ])
@@ -67,6 +73,8 @@ class TestMain(unittest.TestCase):
         self.assertEqual(args.single, 'test.mp3')
         self.assertTrue(args.dry_run)
         self.assertTrue(args.upload)
+        self.assertEqual(args.abs_token, 'token-123')
+        self.assertEqual(args.abs_library_id, 'lib-main')
         self.assertEqual(args.bitrate, '128k')
         self.assertTrue(args.verbose)
         
@@ -178,9 +186,16 @@ class TestMain(unittest.TestCase):
         
         with patch.object(sys, 'argv', test_args):
             with patch('core.main.logger') as mock_logger:
-                # Mock ImportError pour les dépendances
-                with patch('builtins.__import__', side_effect=ImportError('No module')):
-                    with patch('sys.exit') as mock_exit:
+                with patch('core.main.sys.exit') as mock_exit:
+                    # Mock ImportError pour les dépendances
+                    real_import = __import__
+
+                    def selective_import(name, globals=None, locals=None, fromlist=(), level=0):
+                        if name in {'requests', 'bs4', 'PIL', 'mutagen'}:
+                            raise ImportError('No module')
+                        return real_import(name, globals, locals, fromlist, level)
+
+                    with patch('builtins.__import__', side_effect=selective_import):
                         main()
                         
                         # Vérifications

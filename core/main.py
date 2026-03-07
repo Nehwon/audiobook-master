@@ -72,6 +72,18 @@ Exemples d'utilisation:
         action='store_true',
         help='Upload vers Audiobookshelf après traitement'
     )
+
+    parser.add_argument(
+        '--abs-token',
+        type=str,
+        help='Token API Audiobookshelf (prioritaire sur username/password)'
+    )
+
+    parser.add_argument(
+        '--abs-library-id',
+        type=str,
+        help='Identifiant de la bibliothèque Audiobookshelf cible'
+    )
     
     parser.add_argument(
         '--no-scraping',
@@ -132,6 +144,10 @@ def main():
         config.enable_synopsis_generation = False
     if args.upload:
         config.enable_upload = True
+    if args.abs_token:
+        config.audiobookshelf_token = args.abs_token
+    if args.abs_library_id:
+        config.audiobookshelf_library_id = args.abs_library_id
     
     # Configuration audio personnalisée
     if args.bitrate:
@@ -289,7 +305,8 @@ def main():
             host=config.audiobookshelf_host,
             port=config.audiobookshelf_port,
             username=config.audiobookshelf_username,
-            password=config.audiobookshelf_password
+            password=config.audiobookshelf_password,
+            token=config.audiobookshelf_token
         )
         client = AudiobookshelfClient(abs_config)
 
@@ -298,13 +315,15 @@ def main():
             sys.exit(1)
             return
 
-        libraries = client.get_libraries()
-        if not libraries:
-            logger.error("Aucune bibliothèque trouvée sur Audiobookshelf")
-            sys.exit(1)
-            return
+        library_id = (config.audiobookshelf_library_id or '').strip()
+        if not library_id:
+            libraries = client.get_libraries()
+            if not libraries:
+                logger.error("Aucune bibliothèque trouvée sur Audiobookshelf")
+                sys.exit(1)
+                return
 
-        library_id = str(libraries[0].get('id', ''))
+            library_id = str(libraries[0].get('id', ''))
         if not library_id:
             logger.error("Identifiant de bibliothèque Audiobookshelf invalide")
             sys.exit(1)

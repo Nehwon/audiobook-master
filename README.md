@@ -25,6 +25,7 @@ Audiobook Master est un projet Python qui convertit des dossiers de pistes audio
 - Authentification (token direct ou login/password).
 - Upload d’un `.m4b` vers une bibliothèque.
 - Déclenchement d’un scan de bibliothèque après upload.
+- Sélection explicite de bibliothèque via `AUDIOBOOKSHELF_LIBRARY_ID` ou `--abs-library-id`.
 
 ## 2) Architecture du dépôt
 
@@ -79,6 +80,8 @@ python -m core.main --source /chemin/source --output /chemin/output
 --single / -f          Traiter un fichier spécifique
 --dry-run / -n         Simulation sans conversion
 --upload / -u          Upload vers Audiobookshelf après traitement
+--abs-token            Token API Audiobookshelf (prioritaire)
+--abs-library-id       Bibliothèque Audiobookshelf cible
 --no-scraping          Désactive le scraping de métadonnées
 --no-synopsis|--no-ai  Désactive la génération IA
 --bitrate / -b         Bitrate (ex: 64k, 128k, 192k)
@@ -89,6 +92,17 @@ python -m core.main --source /chemin/source --output /chemin/output
 --no-gpu               Désactive accélération GPU
 --aac-coder            twolo|fast
 --verbose / -v         Logs détaillés
+```
+
+Variables d'environnement Audiobookshelf supportées par la CLI :
+
+```text
+AUDIOBOOKSHELF_HOST
+AUDIOBOOKSHELF_PORT
+AUDIOBOOKSHELF_USERNAME
+AUDIOBOOKSHELF_PASSWORD
+AUDIOBOOKSHELF_TOKEN
+AUDIOBOOKSHELF_LIBRARY_ID
 ```
 
 ## 6) Utilisation Web

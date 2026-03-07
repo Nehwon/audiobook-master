@@ -8,12 +8,14 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, List
 
+from .runtime_paths import resolve_runtime_paths
+
 @dataclass
 class ProcessingConfig:
     """Configuration principale du traitement"""
-    source_directory: str = "/home/fabrice/Documents/Audiobooks"
-    output_directory: str = "/home/fabrice/Documents/Projets/scripts_audiobooks/test_audio"
-    temp_directory: str = "/tmp/audiobooks"
+    source_directory: str = field(default_factory=lambda: str(resolve_runtime_paths(profile="core").source))
+    output_directory: str = field(default_factory=lambda: str(resolve_runtime_paths(profile="core").output))
+    temp_directory: str = field(default_factory=lambda: str(resolve_runtime_paths(profile="core").temp))
     
     # Phase 1: Concaténation 1:1 Rapide (sans réencodage)
     audio_bitrate: str = "192k"  # Valeur par défaut alignée avec les tests/UX
@@ -96,7 +98,7 @@ class ProcessingConfig:
         self.audiobookshelf_library_id = os.getenv("AUDIOBOOKSHELF_LIBRARY_ID", self.audiobookshelf_library_id)
 
         if self.scraping_sources is None:
-            self.scraping_sources = ["babelio", "fnac"]
+            self.scraping_sources = ["google_books", "audible", "babelio"]
         # Crée les répertoires nécessaires
         Path(self.source_directory).mkdir(parents=True, exist_ok=True)
         Path(self.output_directory).mkdir(parents=True, exist_ok=True)

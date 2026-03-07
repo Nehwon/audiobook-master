@@ -1273,6 +1273,9 @@ def _worker_loop() -> None:
                 message = str(payload.get("message") or "Mise à jour conversion")
                 progress_value = payload.get("progress")
                 details = payload.get("details") if isinstance(payload.get("details"), dict) else {}
+                event_level = str(details.get("level") or "info").lower()
+                if event_level not in {"info", "warning", "error", "debug"}:
+                    event_level = "info"
                 with jobs_lock:
                     current_job = jobs.get(job_id)
                     if not current_job:
@@ -1302,7 +1305,7 @@ def _worker_loop() -> None:
                             "total": total,
                         }
 
-                    _push_job_event(current_job.id, current_job.folder, stage, message, "info", details)
+                    _push_job_event(current_job.id, current_job.folder, stage, message, event_level, details)
 
             processor.progress_callback = _on_processor_progress
 
@@ -1324,13 +1327,14 @@ def _worker_loop() -> None:
                 else:
                     job.status = "failed"
                     job.stage = "Erreur"
-                    job.error = "Échec conversion"
+                    processor_error = getattr(processor, "last_error", None)
+                    job.error = str(processor_error) if processor_error else "Échec conversion"
                     job.progress = 100
                     _push_job_event(
                         job.id,
                         job.folder,
                         job.stage,
-                        f"Le processeur a renvoyé False sans exception (web: {WEB_DEBUG_LOG_PATH}, processor: {PROCESSOR_LOG_PATH}).",
+                        f"{job.error} (web: {WEB_DEBUG_LOG_PATH}, processor: {PROCESSOR_LOG_PATH}).",
                         "error",
                     )
                 job.ended_at = time.time()

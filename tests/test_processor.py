@@ -63,6 +63,28 @@ class TestAudiobookProcessor(unittest.TestCase):
         self.assertNotIn('-progress', flattened)
         self.assertNotIn('pipe:1', flattened)
 
+    def test_convert_to_m4b_uses_lossy_utf8_decode_for_subprocess_output(self):
+        test_audio = self.source_dir / "accented.mp3"
+        test_audio.write_bytes(b"FAKE_AUDIO_DATA")
+        output_path = self.output_dir / "accented.m4b"
+
+        def fake_run(cmd, **kwargs):
+            if kwargs.get('text') and kwargs.get('errors') != 'replace':
+                raise UnicodeDecodeError('utf-8', b'\xc3', 0, 1, 'invalid continuation byte')
+
+            if cmd and cmd[0] == 'ffprobe':
+                return self._mock_run_result(0, stdout='1.0\n')
+
+            return self._mock_run_result(0, stdout='', stderr='ok')
+
+        metadata = MagicMock()
+        metadata.get_metadata_dict.return_value = {}
+
+        with patch('subprocess.run', side_effect=fake_run):
+            result = self.processor.convert_to_m4b([test_audio], output_path, metadata)
+
+        self.assertTrue(result)
+
     def test_ffmpeg_concat_file_entry_escapes_single_quotes(self):
         audio_file = self.source_dir / "d'ouverture" / "01 Credits d'ouverture.mp3"
         audio_file.parent.mkdir(parents=True, exist_ok=True)
@@ -96,6 +118,29 @@ class TestAudiobookProcessor(unittest.TestCase):
         self.assertTrue(result)
         self.assertFalse(child_dir.exists())
         self.assertTrue((book_dir / "chapitre1.mp3").exists())
+        mock_encode.assert_called_once()
+
+    @patch.object(AudiobookProcessor, 'encode_cpu_optimized_phase2', return_value=True)
+    def test_process_audiobook_emits_corrected_nested_folder_warning(self, mock_encode):
+        book_dir = self.source_dir / "Auteur - Livre"
+        child_dir = book_dir / "CD1"
+        child_dir.mkdir(parents=True)
+        (child_dir / "chapitre1.mp3").write_bytes(b"FAKE_AUDIO_DATA")
+
+        progress_events = []
+        self.processor.progress_callback = progress_events.append
+
+        result = self.processor.process_audiobook(book_dir)
+
+        self.assertTrue(result)
+        corrected_events = [
+            event for event in progress_events
+            if isinstance(event.get('details'), dict)
+            and event['details'].get('code') == 'nested_folder'
+            and event['details'].get('status') == 'corrected'
+        ]
+        self.assertTrue(corrected_events)
+        self.assertEqual(corrected_events[0]['details'].get('level'), 'warning')
         mock_encode.assert_called_once()
 
     def test_process_audiobook_fails_with_nested_subdirectories(self):

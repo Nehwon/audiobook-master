@@ -29,15 +29,17 @@ import rarfile
 from flask import Flask, jsonify, render_template, request, send_file
 
 from core.config import ProcessingConfig
+from core.runtime_paths import resolve_runtime_paths
 from core.processor import AudiobookProcessor, PROCESSOR_LOG_PATH
 
 app = Flask(__name__, template_folder="../templates")
 app.config["SECRET_KEY"] = "audiobook_manager_2024"
 
-MEDIA_DIR = Path(os.getenv("AUDIOBOOK_MEDIA_DIR", os.getenv("SOURCE_DIR", "/app/data/source")))
-OUTPUT_DIR = Path(os.getenv("AUDIOBOOK_OUTPUT_DIR", os.getenv("OUTPUT_DIR", "/app/data/output")))
-TEMP_DIR = Path(os.getenv("AUDIOBOOK_TEMP_DIR", os.getenv("TEMP_DIR", "/tmp/audiobooks_web")))
-LOG_DIR = Path(os.getenv("AUDIOBOOK_LOG_DIR", os.getenv("LOG_DIR", "/app/logs")))
+RUNTIME_PATHS = resolve_runtime_paths(profile="web")
+MEDIA_DIR = RUNTIME_PATHS.source
+OUTPUT_DIR = RUNTIME_PATHS.output
+TEMP_DIR = RUNTIME_PATHS.temp
+LOG_DIR = RUNTIME_PATHS.log
 WEB_DEBUG_LOG_PATH = LOG_DIR / "web_debug.log"
 DEFAULT_CONFIG_PATH = Path(os.getenv("AUDIOBOOK_CONFIG_PATH", "/app/data/config/web_config.json"))
 CONFIG_PATH = DEFAULT_CONFIG_PATH
@@ -340,6 +342,10 @@ def _default_config() -> Dict:
         "audiobookshelf_username": "",
         "audiobookshelf_password": "",
         "audiobookshelf_api_key": "",
+        "audiobookshelf_library_id": "",
+        "scraping_sources": ["google_books", "audible", "babelio"],
+        "cover_sources": ["existing_file", "url_download"],
+        "export_plugins": ["audiobookshelf"],
         "ollama_enabled": False,
         "ollama_model": "qwen2.5:7b",
         "ollama_extract_model": "nuextract",
@@ -1235,6 +1241,8 @@ def _build_processing_config() -> ProcessingConfig:
     cfg.enable_gpu_acceleration = bool(web_config["enable_gpu"])
     cfg.enable_loudnorm = bool(web_config["enable_loudnorm"])
     cfg.enable_compressor = bool(web_config["enable_compressor"])
+    cfg.scraping_sources = list(web_config.get("scraping_sources") or cfg.scraping_sources)
+    cfg.cover_sources = list(web_config.get("cover_sources") or cfg.cover_sources)
     return cfg
 
 

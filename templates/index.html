@@ -138,6 +138,7 @@
     <button class="tab" data-page="processing">Traitements</button>
     <button class="tab" data-page="submission">Soumission</button>
     <button class="tab config-tab" data-page="config">Configuration</button>
+    <button class="tab" data-page="plugins">Plugins</button>
 </div>
 <main>
     <section id="page-library" class="page active">
@@ -235,6 +236,7 @@
             </div>
             <div class="row" style="margin-top:8px">
                 <label>API Key <input id="cfgAbsApiKey" placeholder="clé API Audiobookshelf"></label>
+                <label>Library ID <input id="cfgAbsLibraryId" placeholder="ID bibliothèque"></label>
                 <button id="saveAbsConfigBtn" onclick="saveAudiobookshelfConfig({showNotification:true})">Sauvegarder connexion Audiobookshelf</button>
                 <button class="secondary" id="testAbsConfigBtn" onclick="testAudiobookshelfConnection()">Tester la connexion</button>
             </div>
@@ -281,6 +283,29 @@
             <div id="llmResults" class="muted">Aucun résultat pour l'instant.</div>
         </div>
     </section>
+
+    <section id="page-plugins" class="page">
+        <div class="card">
+            <h3>Onglet Plugins - Configuration</h3>
+            <p class="muted">Configure les plugins actifs pour les métadonnées, covers et exports.</p>
+            <table>
+                <thead><tr><th>Type</th><th>Plugin</th><th>Actif</th><th>Clé config</th></tr></thead>
+                <tbody>
+                    <tr><td>Metadata</td><td>google_books</td><td><input id="plgMetaGoogle" type="checkbox"></td><td><code>scraping_sources</code></td></tr>
+                    <tr><td>Metadata</td><td>audible</td><td><input id="plgMetaAudible" type="checkbox"></td><td><code>scraping_sources</code></td></tr>
+                    <tr><td>Metadata</td><td>babelio</td><td><input id="plgMetaBabelio" type="checkbox"></td><td><code>scraping_sources</code></td></tr>
+                    <tr><td>Cover</td><td>existing_file</td><td><input id="plgCoverExisting" type="checkbox"></td><td><code>cover_sources</code></td></tr>
+                    <tr><td>Cover</td><td>url_download</td><td><input id="plgCoverUrl" type="checkbox"></td><td><code>cover_sources</code></td></tr>
+                    <tr><td>Export</td><td>audiobookshelf</td><td><input id="plgExportAbs" type="checkbox"></td><td><code>export_plugins</code></td></tr>
+                </tbody>
+            </table>
+            <div class="row" style="margin-top:10px">
+                <button onclick="savePluginConfig()">Sauvegarder plugins</button>
+                <span id="pluginSaveStatus" class="muted">Aucune modification.</span>
+            </div>
+        </div>
+    </section>
+
 
 </main>
 <div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
@@ -1081,6 +1106,7 @@ async function loadConfig(){
     cfgAbsUsername.value = c.audiobookshelf_username || "";
     cfgAbsPassword.value = c.audiobookshelf_password || "";
     cfgAbsApiKey.value = c.audiobookshelf_api_key || "";
+    cfgAbsLibraryId.value = c.audiobookshelf_library_id || "";
     absSaveSignature = computeAudiobookshelfSignature(getAudiobookshelfConfigPayload());
     setAudiobookshelfSaveStatus('Les champs sont sauvegardés automatiquement à la perte de focus.');
     setAudiobookshelfTestStatus('Test de connexion non lancé.');
@@ -1090,6 +1116,7 @@ async function loadConfig(){
     ollamaExtractModel.value = c.ollama_extract_model || "";
     ollamaPrompt.value = c.ollama_default_prompt || "";
     ollamaTools.value = c.ollama_mcp_tools || "[]";
+    loadPluginConfigState(c);
     updateSubmissionWarning(c);
 }
 
@@ -1119,7 +1146,8 @@ async function saveConfig(){
         audiobookshelf_server_url: cfgAbsServerUrl.value.trim(),
         audiobookshelf_username: cfgAbsUsername.value.trim(),
         audiobookshelf_password: cfgAbsPassword.value,
-        audiobookshelf_api_key: cfgAbsApiKey.value.trim()
+        audiobookshelf_api_key: cfgAbsApiKey.value.trim(),
+        audiobookshelf_library_id: cfgAbsLibraryId.value.trim()
     };
     await api('/api/config',{method:'POST', body: JSON.stringify(configPayload)});
     absSaveSignature = computeAudiobookshelfSignature(getAudiobookshelfConfigPayload());
@@ -1141,6 +1169,7 @@ function getAudiobookshelfConfigPayload(){
         audiobookshelf_username: cfgAbsUsername.value.trim(),
         audiobookshelf_password: cfgAbsPassword.value,
         audiobookshelf_api_key: cfgAbsApiKey.value.trim(),
+        audiobookshelf_library_id: cfgAbsLibraryId.value.trim(),
     };
 }
 
@@ -1203,7 +1232,7 @@ async function saveAudiobookshelfConfig({showNotification=false, force=false} = 
 }
 
 function setupAudiobookshelfAutosave(){
-    const absFields = [cfgAbsServerUrl, cfgAbsUsername, cfgAbsPassword, cfgAbsApiKey].filter(Boolean);
+    const absFields = [cfgAbsServerUrl, cfgAbsUsername, cfgAbsPassword, cfgAbsApiKey, cfgAbsLibraryId].filter(Boolean);
     absFields.forEach((field) => {
         field.addEventListener('blur', () => saveAudiobookshelfConfig());
         field.addEventListener('keydown', (event) => {
@@ -1213,6 +1242,42 @@ function setupAudiobookshelfAutosave(){
             }
         });
     });
+}
+
+function loadPluginConfigState(config){
+    const scraping = new Set(config.scraping_sources || []);
+    const covers = new Set(config.cover_sources || []);
+    const exports = new Set(config.export_plugins || []);
+
+    document.getElementById('plgMetaGoogle').checked = scraping.has('google_books');
+    document.getElementById('plgMetaAudible').checked = scraping.has('audible');
+    document.getElementById('plgMetaBabelio').checked = scraping.has('babelio');
+    document.getElementById('plgCoverExisting').checked = covers.has('existing_file');
+    document.getElementById('plgCoverUrl').checked = covers.has('url_download');
+    document.getElementById('plgExportAbs').checked = exports.has('audiobookshelf');
+}
+
+function getPluginConfigPayload(){
+    const scraping_sources = [];
+    const cover_sources = [];
+    const export_plugins = [];
+
+    if (document.getElementById('plgMetaGoogle').checked) scraping_sources.push('google_books');
+    if (document.getElementById('plgMetaAudible').checked) scraping_sources.push('audible');
+    if (document.getElementById('plgMetaBabelio').checked) scraping_sources.push('babelio');
+    if (document.getElementById('plgCoverExisting').checked) cover_sources.push('existing_file');
+    if (document.getElementById('plgCoverUrl').checked) cover_sources.push('url_download');
+    if (document.getElementById('plgExportAbs').checked) export_plugins.push('audiobookshelf');
+
+    return { scraping_sources, cover_sources, export_plugins };
+}
+
+async function savePluginConfig(){
+    const payload = getPluginConfigPayload();
+    await api('/api/config', { method:'POST', body: JSON.stringify(payload) });
+    const status = document.getElementById('pluginSaveStatus');
+    if (status) status.textContent = 'Configuration plugins sauvegardée.';
+    notify('Configuration plugins sauvegardée.', 'success');
 }
 
 function setupTabs(){

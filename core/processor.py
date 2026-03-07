@@ -165,6 +165,7 @@ class AudiobookProcessor:
         self.temp_dir = Path(temp_dir)
         self.temp_dir.mkdir(exist_ok=True)
         self.progress_callback: Optional[Callable[[Dict[str, object]], None]] = None
+        self.last_error: Optional[str] = None
 
     def _emit_progress(
         self,
@@ -556,9 +557,22 @@ class AudiobookProcessor:
                     )
 
                 logger.warning(
-                    "⚠️ Sous-dossier unique détecté dans '%s': déplacement de %d fichier(s) audio à la racine.",
+                    "⚠️ Dossier imbriqué détecté dans '%s': correction automatique (%d fichier(s) audio déplacé(s) à la racine).",
                     directory.name,
                     len(child_audio_files),
+                )
+                self._emit_progress(
+                    "Préparation",
+                    f"Dossier imbriqué corrigé automatiquement ({child_dir.name})",
+                    15,
+                    {
+                        "level": "warning",
+                        "code": "nested_folder",
+                        "status": "corrected",
+                        "folder": directory.name,
+                        "child_folder": child_dir.name,
+                        "moved_audio_files": len(child_audio_files),
+                    },
                 )
                 for audio_file in child_audio_files:
                     destination = directory / audio_file.name
@@ -2079,6 +2093,7 @@ class AudiobookProcessor:
     
     def process_audiobook(self, file_path: Path, cpu_budget_cores: Optional[int] = None) -> bool:
         """Traite un fichier audiobook complet"""
+        self.last_error = None
         try:
             logger.info(f"🚀 TRAITEMENT: {file_path.name}")
             self._emit_progress("Préparation", "Initialisation du traitement", 10)
@@ -2158,6 +2173,7 @@ class AudiobookProcessor:
                 return False
                 
         except Exception as e:
+            self.last_error = str(e)
             logger.error(f"💥 ERREUR: {e}")
             self._emit_progress("Erreur", f"Exception: {e}", 100)
             return False

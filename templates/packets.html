@@ -68,12 +68,14 @@
         <label>Titre <input id="mdTitle" /></label>
         <label>Auteur <input id="mdAuthor" /></label>
         <label>Série <input id="mdSeries" /></label>
+        <label>Volume <input id="mdVolume" /></label>
         <label>Narrateur <input id="mdNarrator" /></label>
         <label>Langue <input id="mdLanguage" /></label>
         <label>Tags (virgules) <input id="mdTags" /></label>
         <label>Synopsis <textarea id="mdSynopsis" rows="4"></textarea></label>
         <div class="row">
           <button onclick="saveMetadata()">Sauvegarder métadonnées fichier</button>
+          <button class="secondary" onclick="scrapeMetadata()">Scraper métadonnées</button>
           <button onclick="submitPacket()">Publier</button>
         </div>
 
@@ -99,22 +101,35 @@
         <div id="changelogEdited" class="wysiwyg" contenteditable="true"></div>
         <p id="changelogSource" class="muted"></p>
 
-        <h4>Vecteurs de publication (plugins messages)</h4>
+        <h4>Messagers</h4>
         <div class="row">
-          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="discord" checked>Discord</label>
-          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="telegram" checked>Telegram</label>
-          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="whatsapp" checked>WhatsApp</label>
-          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="email" checked>Email</label>
+          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="discord">Discord</label>
+          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="telegram">Telegram</label>
+          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="whatsapp">WhatsApp</label>
+          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="email">Email</label>
         </div>
-        <label>Config plugin Discord (API/Webhook)
-          <input id="cfgDiscord" placeholder="https://discord.com/api/webhooks/..." />
-        </label>
-        <label>Config plugin Telegram (Bot/Channel)
-          <input id="cfgTelegram" placeholder="bot_token|chat_id" />
-        </label>
-        <label>Config plugin Email (SMTP)
-          <input id="cfgSmtp" placeholder="smtp.example.com:587|sender@example.com" />
-        </label>
+
+        <details style="margin-top:8px;">
+          <summary><strong>Plugins</strong></summary>
+          <details style="margin:6px 0 0 14px;">
+            <summary>Discord</summary>
+            <label>Configuration plugin Discord (API/Webhook)
+              <input id="cfgDiscord" placeholder="https://discord.com/api/webhooks/..." />
+            </label>
+          </details>
+          <details style="margin:6px 0 0 14px;">
+            <summary>Telegram</summary>
+            <label>Configuration plugin Telegram (Bot/Channel)
+              <input id="cfgTelegram" placeholder="bot_token|chat_id" />
+            </label>
+          </details>
+          <details style="margin:6px 0 0 14px;">
+            <summary>Email</summary>
+            <label>Configuration plugin Email (SMTP)
+              <input id="cfgSmtp" placeholder="smtp.example.com:587|sender@example.com" />
+            </label>
+          </details>
+        </details>
         <label style="display:flex;align-items:center;gap:6px;margin:0 0 8px 0"><input id="payloadDebug" type="checkbox"> Payload debug (désactivé par défaut)</label>
 
         <p id="scheduleInfo" class="muted"></p>
@@ -183,6 +198,7 @@
       document.getElementById('mdTitle').value = md.title || '';
       document.getElementById('mdAuthor').value = md.author || '';
       document.getElementById('mdSeries').value = md.series || '';
+      document.getElementById('mdVolume').value = md.volume || '';
       document.getElementById('mdNarrator').value = md.narrator || '';
       document.getElementById('mdLanguage').value = md.language || 'fr';
       document.getElementById('mdTags').value = md.tags || '';
@@ -232,9 +248,23 @@
       await loadPackets(); await openPacket(packetId);
     }
 
+
+    async function scrapeMetadata() {
+      if (!selectedId) return;
+      const filename = metadataFile.value;
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/metadata/scrape`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
+      const data = await resp.json();
+      if (!resp.ok) return alert(data.error || 'Impossible de scraper les métadonnées');
+      currentPacket = data.packet;
+      loadSelectedFileMetadata();
+      validationMsg.textContent = data.packet.validation.ok ? 'Validation: OK — paquet prêt pour publication.' : `Champs manquants: ${(data.packet.validation.missing || []).join(', ')}`;
+      payloadPreview.textContent = JSON.stringify(data.payload_preview, null, 2);
+      await loadPackets();
+    }
+
     async function saveMetadata() {
       if (!selectedId) return;
-      const metadata = { title: mdTitle.value, author: mdAuthor.value, series: mdSeries.value, narrator: mdNarrator.value, language: mdLanguage.value, tags: mdTags.value, synopsis: mdSynopsis.value };
+      const metadata = { title: mdTitle.value, author: mdAuthor.value, series: mdSeries.value, volume: mdVolume.value, narrator: mdNarrator.value, language: mdLanguage.value, tags: mdTags.value, synopsis: mdSynopsis.value };
       const filename = metadataFile.value;
       const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/metadata`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename, metadata }) });
       const data = await resp.json();

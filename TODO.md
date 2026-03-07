@@ -18,10 +18,10 @@
 
 ## Priorité P2 — Maintenabilité
 
-- [ ] Éliminer/archiver progressivement les scripts legacy non alignés (`run.py`, `start_web.py`) ou les remettre en cohérence.
-- [ ] Factoriser la configuration partagée CLI/Web pour limiter la divergence des defaults.
-- [ ] Réduire la dette documentaire en gardant le README concis et les détails dans `docs/`.
-- [ ] Refactoriser la récupération de métadonnées externes en architecture de plugins (un plugin par source/site).
+- [x] Éliminer/archiver progressivement les scripts legacy non alignés (`run.py`, `start_web.py`) ou les remettre en cohérence.
+- [x] Factoriser la configuration partagée CLI/Web pour limiter la divergence des defaults.
+- [x] Réduire la dette documentaire en gardant le README concis et les détails dans `docs/`.
+- [x] Refactoriser la récupération de métadonnées externes en architecture de plugins (un plugin par source/site).
 - [ ] Refactoriser l'acquisition de covers en architecture de plugins (fournisseurs interchangeables).
 
 ## Priorité P3 — Observabilité & DX
@@ -32,6 +32,7 @@
 
 # TODO Features
 
+- [ ] Créer un marketplace pour l'acquisition automatique des plugins
 - [ ] Developper un frontend web pour la partie integration avec Audiobookshelf
     - [ ] Interface pour gérer les packets d'upload, leur statut et leur progression
           - Principe : Permettre à l'utilisateur de choisir un groupe de fichiers en attente pour les publier sur Audiobookshelf

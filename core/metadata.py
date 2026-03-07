@@ -1071,6 +1071,45 @@ class GoogleBooksScraper:
             logger.error(f"   ❌ Erreur téléchargement pochette: {e}")
             return False
 
+class MetadataSourcePlugin:
+    """Contrat minimal d'un plugin de récupération de métadonnées."""
+
+    name: str = ""
+
+    def search(self, author: str, title: str) -> Optional[BookInfo]:
+        raise NotImplementedError
+
+
+class GoogleBooksMetadataPlugin(MetadataSourcePlugin):
+    name = "google_books"
+
+    def __init__(self, scraper: GoogleBooksScraper):
+        self.scraper = scraper
+
+    def search(self, author: str, title: str) -> Optional[BookInfo]:
+        return self.scraper.search_google_books(author, title)
+
+
+class AudibleMetadataPlugin(MetadataSourcePlugin):
+    name = "audible"
+
+    def __init__(self, scraper: AudibleScraper):
+        self.scraper = scraper
+
+    def search(self, author: str, title: str) -> Optional[BookInfo]:
+        return self.scraper.search_audible(author, title)
+
+
+class BabelioMetadataPlugin(MetadataSourcePlugin):
+    name = "babelio"
+
+    def __init__(self, scraper: BabelioScraper):
+        self.scraper = scraper
+
+    def search(self, author: str, title: str) -> Optional[BookInfo]:
+        return self.scraper.search_babelio(author, title)
+
+
 class BookScraper:
     """Orchestrateur plugin-based pour les sources de métadonnées externes."""
 

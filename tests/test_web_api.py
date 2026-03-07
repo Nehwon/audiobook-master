@@ -47,12 +47,14 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         payload = resp.get_json()
         self.assertIn('folders', payload['error'])
+        self.assertEqual(payload['code'], 'invalid_folders')
 
     def test_rename_rejects_non_dict_overrides(self):
         resp = self.client.post('/api/rename', json={'folders': ['a'], 'overrides': []})
         self.assertEqual(resp.status_code, 400)
         payload = resp.get_json()
         self.assertIn('overrides', payload['error'])
+        self.assertEqual(payload['code'], 'invalid_overrides')
 
     def test_rename_handles_destination_conflict(self):
         src = self.media_dir / 'Author_Book'
@@ -105,6 +107,12 @@ class TestWebRenameApi(unittest.TestCase):
         names = [entry['name'] for entry in listing['folders']]
         self.assertIn('A_Garder', names)
         self.assertNotIn('A_Ignorer', names)
+
+    def test_ignore_rejects_path_traversal(self):
+        resp = self.client.post('/api/ignore', json={'folder': '../secret'})
+        self.assertEqual(resp.status_code, 400)
+        payload = resp.get_json()
+        self.assertEqual(payload['code'], 'invalid_folder_name')
 
     def test_library_flags_suspicious_folder(self):
         folder = self.media_dir / 'Star Wars - La Tentation de la Force.part3'
@@ -332,6 +340,42 @@ class TestWebRenameApi(unittest.TestCase):
         payload = resp.get_json()
         self.assertIn('lines', payload)
         self.assertIn('path', payload)
+
+    def test_download_rejects_path_escape(self):
+        resp = self.client.get('/api/download/../../etc/passwd')
+        self.assertEqual(resp.status_code, 404)
+        payload = resp.get_json()
+        self.assertEqual(payload['code'], 'file_not_found')
+
+    @mock.patch('web.app._ensure_worker')
+    def test_pipeline_archive_extract_rename_enqueue(self, mocked_worker):
+        import zipfile
+
+        archive = self.media_dir / 'Auteur_Livre.zip'
+        with zipfile.ZipFile(archive, 'w') as zf:
+            zf.writestr('01-track.mp3', b'audio-bytes')
+
+        extract_resp = self.client.post('/api/extract', json={'archives': ['Auteur_Livre.zip']})
+        self.assertEqual(extract_resp.status_code, 200)
+        extract_payload = extract_resp.get_json()
+        self.assertEqual(extract_payload['errors'], [])
+        extracted_folder = extract_payload['results'][0]['folder']
+
+        rename_resp = self.client.post(
+            '/api/rename',
+            json={'folders': [extracted_folder], 'overrides': {extracted_folder: 'Auteur - Livre'}},
+        )
+        self.assertEqual(rename_resp.status_code, 200)
+        rename_payload = rename_resp.get_json()
+        self.assertEqual(rename_payload['renamed'][0]['new'], 'Auteur - Livre')
+
+        enqueue_resp = self.client.post('/api/jobs/enqueue', json={'folders': ['Auteur - Livre']})
+        self.assertEqual(enqueue_resp.status_code, 200)
+        enqueue_payload = enqueue_resp.get_json()
+        self.assertEqual(len(enqueue_payload['queued']), 1)
+        self.assertEqual(enqueue_payload['queued'][0]['folder'], 'Auteur - Livre')
+        mocked_worker.assert_called()
+
 
 if __name__ == '__main__':
     unittest.main()

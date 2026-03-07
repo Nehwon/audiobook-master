@@ -9,18 +9,20 @@
 
 ## Priorité P1 — Robustesse produit
 
-- [ ] Documenter précisément la matrice de formats audio réellement supportés (entrée/sortie + contraintes).
-- [ ] Normaliser les messages d’erreur API (structure JSON uniforme).
-- [ ] Renforcer la validation des chemins utilisateur (source/output/temp).
-- [ ] Ajouter des tests d’intégration ciblés pour :
-  - [ ] Upload Audiobookshelf (auth + upload + scan).
-  - [ ] Pipeline archive → extraction → renommage → job enqueue.
+- [x] Documenter précisément la matrice de formats audio réellement supportés (entrée/sortie + contraintes).
+- [x] Normaliser les messages d’erreur API (structure JSON uniforme).
+- [x] Renforcer la validation des chemins utilisateur (source/output/temp).
+- [x] Ajouter des tests d’intégration ciblés pour :
+  - [x] Upload Audiobookshelf (auth + upload + scan).
+  - [x] Pipeline archive → extraction → renommage → job enqueue.
 
 ## Priorité P2 — Maintenabilité
 
 - [ ] Éliminer/archiver progressivement les scripts legacy non alignés (`run.py`, `start_web.py`) ou les remettre en cohérence.
 - [ ] Factoriser la configuration partagée CLI/Web pour limiter la divergence des defaults.
 - [ ] Réduire la dette documentaire en gardant le README concis et les détails dans `docs/`.
+- [ ] Refactoriser la récupération de métadonnées externes en architecture de plugins (un plugin par source/site).
+- [ ] Refactoriser l'acquisition de covers en architecture de plugins (fournisseurs interchangeables).
 
 ## Priorité P3 — Observabilité & DX
 

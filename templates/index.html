@@ -33,10 +33,15 @@
         header { background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 20px; display:flex; justify-content:space-between; align-items:center; }
         .app-title { font-size: 26px; line-height: 1.1; }
         .tabs { display:flex; gap:8px; padding: 10px 20px; flex-wrap:wrap; justify-content:flex-start; }
+        .tabs-right { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
         .tab { border:1px solid var(--border); background:var(--card); color:var(--text); padding:8px 12px; border-radius:8px; cursor:pointer; }
         .tab.active { background:var(--primary); color:white; border-color:var(--primary); }
-        .tab.config-tab { background:#d100d1; border-color:#d100d1; color:white; }
-        .tab.config-tab.active { background:#a000a0; border-color:#a000a0; color:white; }
+        .tab.packet-tab { background:#16a34a; border-color:#16a34a; color:white; }
+        .tab.packet-tab.active { background:#15803d; border-color:#15803d; color:white; }
+        .tab.plugin-tab { background:#b45309; border-color:#b45309; color:white; }
+        .tab.plugin-tab.active { background:#92400e; border-color:#92400e; color:white; }
+        .tab.config-tab { background:#64748b; border-color:#64748b; color:white; }
+        .tab.config-tab.active { background:#475569; border-color:#475569; color:white; }
         main { padding: 0 20px 76px; }
         .page { display:none; }
         .page.active { display:block; }
@@ -136,9 +141,11 @@
 <div class="tabs">
     <button class="tab active" data-page="library">Bibliothèque</button>
     <button class="tab" data-page="processing">Traitements</button>
-    <button class="tab" data-page="submission">Soumission</button>
-    <button class="tab config-tab" data-page="config">Configuration</button>
-    <button class="tab" data-page="plugins">Plugins</button>
+    <div class="tabs-right">
+        <button class="tab packet-tab" data-page="submission">Paquets</button>
+        <button class="tab plugin-tab" data-page="plugins">Plugins</button>
+        <button class="tab config-tab" data-page="config">Configuration</button>
+    </div>
 </div>
 <main>
     <section id="page-library" class="page active">
@@ -197,7 +204,7 @@
             </div>
         </div>
         <div class="card">
-            <h3>Fichiers M4B en attente de migration vers Audiobookshelf</h3>
+            <h3>Paquets / Fichiers M4B en attente de migration vers Audiobookshelf</h3>
             <table>
                 <thead><tr><th>Fichier</th><th>Taille MB</th><th>Créé le</th><th>Actions</th></tr></thead>
                 <tbody id="submissionBody"></tbody>

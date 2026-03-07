@@ -93,6 +93,27 @@ Exemple de configuration (ordre = fallback) :
 
 Si un plugin est retiré de `scraping_sources`, il ne sera pas utilisé pendant l'enrichissement des métadonnées.
 
+
+### Structure du dossier `plugins/`
+
+```text
+plugins/
+  metadata/
+    base_scraper.py
+    scraper_google_books.py
+    scraper_audible.py
+    scraper_babelio.py
+  exports/
+    base_export.py
+    export_audiobookshelf.py
+```
+
+### Plugins d'export (tableau)
+
+| Plugin | Fichier | Configuration principale | Description |
+|---|---|---|---|
+| `audiobookshelf` | `plugins/exports/export_audiobookshelf.py` | `library_id` | Exporte un `.m4b` vers Audiobookshelf via le client configuré. |
+
 ## Docker
 
 Démarrage rapide :

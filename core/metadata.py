@@ -14,6 +14,13 @@ from pathlib import Path
 from typing import Optional, Dict, List
 from dataclasses import dataclass
 
+from plugins.metadata import (
+    AudibleMetadataPlugin,
+    BabelioMetadataPlugin,
+    GoogleBooksMetadataPlugin,
+    MetadataSourcePlugin,
+)
+
 logger = logging.getLogger(__name__)
 
 @dataclass

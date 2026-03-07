@@ -67,13 +67,16 @@ class Job:
 
 
 jobs_lock = threading.RLock()
+packets_lock = threading.RLock()
 job_queue: "queue.Queue[str]" = queue.Queue()
 jobs: Dict[str, Job] = {}
+upload_packets: Dict[str, Dict[str, object]] = {}
 review_bin: List[Dict] = []
 worker_started = False
 MAX_JOB_EVENTS = 500
 job_events: List[Dict] = []
 archive_validation_cache: Dict[str, Dict[str, object]] = {}
+PACKET_STATUSES = ["en_attente", "en_preparation", "pret", "planifie", "publie", "erreur"]
 
 
 def _api_error(message: str, status: int = 400, code: str = "bad_request", *, details: Optional[Dict] = None):
@@ -242,6 +245,56 @@ def _compute_monitor_signatures() -> Dict[str, str]:
         "source_sig": _path_entries_signature(MEDIA_DIR),
         "output_sig": _path_entries_signature(OUTPUT_DIR, allowed_suffixes={".m4b"}),
         "jobs_sig": _jobs_signature(),
+    }
+
+
+def _bootstrap_upload_packets() -> None:
+    with packets_lock:
+        if upload_packets:
+            return
+        folders = sorted((entry for entry in _safe_iterdir(MEDIA_DIR) if entry.is_dir()), key=lambda p: p.name.lower())
+        if not folders:
+            folders = [MEDIA_DIR / "Demo - Livre 01", MEDIA_DIR / "Demo - Livre 02"]
+
+        for index, folder in enumerate(folders):
+            packet_id = hashlib.sha1(str(folder.name).encode("utf-8")).hexdigest()[:10]
+            upload_packets[packet_id] = {
+                "id": packet_id,
+                "name": folder.name,
+                "status": PACKET_STATUSES[index % len(PACKET_STATUSES)],
+                "progress": 0 if index % 2 == 0 else 55,
+                "created_at": int(time.time()) - (index * 3600),
+                "file_count": len([item for item in _safe_iterdir(folder) if item.is_file()]) if folder.exists() else 0,
+                "size_mb": round(sum(item.stat().st_size for item in _safe_iterdir(folder) if item.is_file()) / (1024 * 1024), 2)
+                if folder.exists()
+                else 0,
+                "metadata": {
+                    "title": folder.name,
+                    "author": "",
+                    "series": "",
+                    "volume": "",
+                    "narrator": "",
+                    "language": "fr",
+                    "tags": "",
+                    "synopsis": "",
+                },
+                "validation": {"ok": False, "missing": ["author", "synopsis"]},
+            }
+
+
+def _packet_payload_preview(packet: Dict[str, object]) -> Dict[str, object]:
+    metadata = packet.get("metadata") if isinstance(packet.get("metadata"), dict) else {}
+    return {
+        "library_id": _load_config().get("audiobookshelf_library_id"),
+        "media": {
+            "title": metadata.get("title", ""),
+            "authorName": metadata.get("author", ""),
+            "series": metadata.get("series", ""),
+            "narratorName": metadata.get("narrator", ""),
+            "language": metadata.get("language", "fr"),
+            "description": metadata.get("synopsis", ""),
+            "tags": [tag.strip() for tag in str(metadata.get("tags", "")).split(",") if tag.strip()],
+        },
     }
 
 def _save_archive_fingerprint_to_db(
@@ -1416,6 +1469,89 @@ def _ensure_worker() -> None:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/integrations/audiobookshelf/packets")
+def integration_packets_page():
+    return render_template("packets.html")
+
+
+@app.route("/api/integrations/audiobookshelf/packets")
+def api_integration_packets():
+    _bootstrap_upload_packets()
+    requested_status = (request.args.get("status") or "").strip()
+    with packets_lock:
+        payload = list(upload_packets.values())
+    if requested_status:
+        payload = [packet for packet in payload if packet.get("status") == requested_status]
+    payload.sort(key=lambda packet: str(packet.get("created_at", 0)), reverse=True)
+    return jsonify({"packets": payload, "statuses": PACKET_STATUSES})
+
+
+@app.route("/api/integrations/audiobookshelf/packets/<packet_id>")
+def api_integration_packet_detail(packet_id: str):
+    _bootstrap_upload_packets()
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+    if not packet:
+        return _api_error("Paquet introuvable", 404, code="packet_not_found")
+    return jsonify({"packet": packet, "payload_preview": _packet_payload_preview(packet)})
+
+
+@app.route("/api/integrations/audiobookshelf/packets/<packet_id>/metadata", methods=["PUT"])
+def api_integration_packet_update_metadata(packet_id: str):
+    _bootstrap_upload_packets()
+    payload = request.get_json(silent=True) or {}
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, dict):
+        return _api_error("Le champ 'metadata' doit être un objet", code="invalid_metadata")
+
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+        if not packet:
+            return _api_error("Paquet introuvable", 404, code="packet_not_found")
+
+        current_metadata = packet.get("metadata") if isinstance(packet.get("metadata"), dict) else {}
+        merged = {**current_metadata, **{k: str(v) for k, v in metadata.items()}}
+        missing = [key for key in ("title", "author", "synopsis") if not str(merged.get(key, "")).strip()]
+        packet["metadata"] = merged
+        packet["validation"] = {"ok": len(missing) == 0, "missing": missing}
+        if len(missing) == 0:
+            packet["status"] = "pret"
+    return jsonify({"ok": True, "packet": packet, "payload_preview": _packet_payload_preview(packet)})
+
+
+@app.route("/api/integrations/audiobookshelf/packets/<packet_id>/submit", methods=["POST"])
+def api_integration_packet_submit(packet_id: str):
+    _bootstrap_upload_packets()
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+        if not packet:
+            return _api_error("Paquet introuvable", 404, code="packet_not_found")
+        validation = packet.get("validation") if isinstance(packet.get("validation"), dict) else {"ok": False}
+        if not validation.get("ok"):
+            return _api_error(
+                "Métadonnées incomplètes: complétez les champs obligatoires.",
+                400,
+                code="metadata_incomplete",
+                details={"missing": validation.get("missing", [])},
+            )
+        packet["status"] = "publie"
+        packet["progress"] = 100
+
+    return jsonify(
+        {
+            "ok": True,
+            "packet_id": packet_id,
+            "steps": [
+                {"key": "prepare", "status": "done", "label": "Préparation"},
+                {"key": "upload", "status": "done", "label": "Upload"},
+                {"key": "scan", "status": "done", "label": "Scan bibliothèque"},
+                {"key": "confirm", "status": "done", "label": "Confirmation finale"},
+            ],
+            "payload_preview": _packet_payload_preview(packet),
+        }
+    )
 
 
 @app.route("/api/library")

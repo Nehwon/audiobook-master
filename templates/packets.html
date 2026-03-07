@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sprint 2 — Paquets Audiobookshelf</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f4f6fb; color: #1f2937; }
+    header { background: #fff; border-bottom: 1px solid #d1d5db; padding: 14px 20px; }
+    main { padding: 20px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
+    .card { background: #fff; border: 1px solid #d1d5db; border-radius: 10px; padding: 14px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+    label { display: grid; gap: 4px; margin-bottom: 8px; font-size: 14px; }
+    input, textarea, select { padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; }
+    button { background: #4f46e5; color: #fff; border: none; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+    button.secondary { background: #fff; color: #1f2937; border: 1px solid #d1d5db; }
+    pre { white-space: pre-wrap; background: #f8fafc; border-radius: 8px; padding: 10px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .muted { color: #64748b; }
+  </style>
+</head>
+<body>
+  <header>
+    <h2 style="margin:0">Sprint 2 — Frontend d'intégration Audiobookshelf</h2>
+    <p class="muted" style="margin:6px 0 0">Gestion des paquets, correction des métadonnées et prévisualisation du payload.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+        <strong>Paquets d'upload</strong>
+        <div class="row">
+          <select id="statusFilter"></select>
+          <button class="secondary" onclick="loadPackets()">Rafraîchir</button>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>Nom</th><th>Statut</th><th>Progression</th><th>Action</th></tr></thead>
+        <tbody id="packetsBody"></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h3 style="margin-top:0">Détail paquet</h3>
+      <div id="emptyState" class="muted">Sélectionnez un paquet pour éditer ses métadonnées.</div>
+      <div id="details" style="display:none">
+        <label>Titre <input id="mdTitle" /></label>
+        <label>Auteur <input id="mdAuthor" /></label>
+        <label>Série <input id="mdSeries" /></label>
+        <label>Narrateur <input id="mdNarrator" /></label>
+        <label>Langue <input id="mdLanguage" /></label>
+        <label>Tags (virgules) <input id="mdTags" /></label>
+        <label>Synopsis <textarea id="mdSynopsis" rows="4"></textarea></label>
+        <div class="row">
+          <button onclick="saveMetadata()">Sauvegarder métadonnées</button>
+          <button onclick="submitPacket()">Publier</button>
+        </div>
+        <p id="validationMsg" class="muted"></p>
+        <h4>Payload Audiobookshelf</h4>
+        <pre id="payloadPreview">{}</pre>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let packets = [];
+    let selectedId = null;
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>\"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+    }
+
+    async function loadPackets() {
+      const status = document.getElementById('statusFilter').value || '';
+      const resp = await fetch('/api/integrations/audiobookshelf/packets' + (status ? ('?status=' + encodeURIComponent(status)) : ''));
+      const data = await resp.json();
+      packets = data.packets || [];
+
+      const filter = document.getElementById('statusFilter');
+      if (!filter.dataset.loaded) {
+        filter.innerHTML = '<option value="">Tous les statuts</option>' + (data.statuses || []).map(s => `<option value="${s}">${s}</option>`).join('');
+        filter.dataset.loaded = '1';
+        filter.onchange = loadPackets;
+      }
+
+      document.getElementById('packetsBody').innerHTML = packets.map(packet => `
+        <tr>
+          <td>${escapeHtml(packet.name)}</td>
+          <td>${escapeHtml(packet.status)}</td>
+          <td>${packet.progress || 0}%</td>
+          <td><button class="secondary" onclick="openPacket('${packet.id}')">Ouvrir</button></td>
+        </tr>
+      `).join('');
+    }
+
+    async function openPacket(packetId) {
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${packetId}`);
+      const data = await resp.json();
+      const packet = data.packet;
+      selectedId = packet.id;
+      const md = packet.metadata || {};
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('details').style.display = 'block';
+      document.getElementById('mdTitle').value = md.title || '';
+      document.getElementById('mdAuthor').value = md.author || '';
+      document.getElementById('mdSeries').value = md.series || '';
+      document.getElementById('mdNarrator').value = md.narrator || '';
+      document.getElementById('mdLanguage').value = md.language || 'fr';
+      document.getElementById('mdTags').value = md.tags || '';
+      document.getElementById('mdSynopsis').value = md.synopsis || '';
+      document.getElementById('validationMsg').textContent = packet.validation && packet.validation.ok
+        ? 'Validation: OK'
+        : `Champs manquants: ${(packet.validation && packet.validation.missing || []).join(', ')}`;
+      document.getElementById('payloadPreview').textContent = JSON.stringify(data.payload_preview, null, 2);
+    }
+
+    async function saveMetadata() {
+      if (!selectedId) return;
+      const metadata = {
+        title: document.getElementById('mdTitle').value,
+        author: document.getElementById('mdAuthor').value,
+        series: document.getElementById('mdSeries').value,
+        narrator: document.getElementById('mdNarrator').value,
+        language: document.getElementById('mdLanguage').value,
+        tags: document.getElementById('mdTags').value,
+        synopsis: document.getElementById('mdSynopsis').value,
+      };
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/metadata`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metadata })
+      });
+      const data = await resp.json();
+      if (data.packet) {
+        document.getElementById('validationMsg').textContent = data.packet.validation.ok
+          ? 'Validation: OK — paquet prêt pour publication.'
+          : `Champs manquants: ${(data.packet.validation.missing || []).join(', ')}`;
+        document.getElementById('payloadPreview').textContent = JSON.stringify(data.payload_preview, null, 2);
+      }
+      await loadPackets();
+    }
+
+    async function submitPacket() {
+      if (!selectedId) return;
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/submit`, { method: 'POST' });
+      const data = await resp.json();
+      if (!resp.ok) {
+        alert(data.error || 'Erreur de soumission');
+        return;
+      }
+      alert('Publication terminée: ' + data.steps.map(s => s.label).join(' → '));
+      document.getElementById('payloadPreview').textContent = JSON.stringify(data.payload_preview, null, 2);
+      await loadPackets();
+    }
+
+    loadPackets();
+  </script>
+</body>
+</html>

@@ -43,6 +43,8 @@ AUDIOBOOKSHELF_TOKEN
 AUDIOBOOKSHELF_LIBRARY_ID
 ```
 
+Dans l'UI web, la configuration Audiobookshelf inclut aussi `audiobookshelf_library_id` (préservé dans `/api/config`).
+
 ## Interface Web
 
 Lancement :
@@ -74,6 +76,8 @@ Variables d'environnement dossiers :
 
 
 ## Onglet Plugins
+
+Onglet `Plugins` (UI web) : permet d'activer/désactiver les plugins metadata/covers/exports et de sauvegarder leur configuration dans `web_config.json`.
 
 Configuration des plugins (source de métadonnées) sous forme de tableau :
 

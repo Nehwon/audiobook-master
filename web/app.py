@@ -342,6 +342,10 @@ def _default_config() -> Dict:
         "audiobookshelf_username": "",
         "audiobookshelf_password": "",
         "audiobookshelf_api_key": "",
+        "audiobookshelf_library_id": "",
+        "scraping_sources": ["google_books", "audible", "babelio"],
+        "cover_sources": ["existing_file", "url_download"],
+        "export_plugins": ["audiobookshelf"],
         "ollama_enabled": False,
         "ollama_model": "qwen2.5:7b",
         "ollama_extract_model": "nuextract",
@@ -1237,6 +1241,8 @@ def _build_processing_config() -> ProcessingConfig:
     cfg.enable_gpu_acceleration = bool(web_config["enable_gpu"])
     cfg.enable_loudnorm = bool(web_config["enable_loudnorm"])
     cfg.enable_compressor = bool(web_config["enable_compressor"])
+    cfg.scraping_sources = list(web_config.get("scraping_sources") or cfg.scraping_sources)
+    cfg.cover_sources = list(web_config.get("cover_sources") or cfg.cover_sources)
     return cfg
 
 

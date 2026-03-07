@@ -177,6 +177,29 @@ class TestWebRenameApi(unittest.TestCase):
         loaded = web_app._load_config()
         self.assertEqual(loaded['audiobookshelf_server_url'], 'https://abs.example')
 
+
+    def test_api_config_preserves_audiobookshelf_and_plugin_settings(self):
+        payload = {
+            'audiobookshelf_server_url': 'https://abs.example',
+            'audiobookshelf_username': 'admin',
+            'audiobookshelf_password': 'secret',
+            'audiobookshelf_api_key': 'key123',
+            'audiobookshelf_library_id': 'lib-main',
+            'scraping_sources': ['google_books', 'babelio'],
+            'cover_sources': ['existing_file'],
+            'export_plugins': ['audiobookshelf'],
+        }
+
+        resp = self.client.post('/api/config', json=payload)
+        self.assertEqual(resp.status_code, 200)
+
+        loaded = self.client.get('/api/config').get_json()
+        self.assertEqual(loaded['audiobookshelf_library_id'], 'lib-main')
+        self.assertEqual(loaded['audiobookshelf_server_url'], 'https://abs.example')
+        self.assertEqual(loaded['scraping_sources'], ['google_books', 'babelio'])
+        self.assertEqual(loaded['cover_sources'], ['existing_file'])
+        self.assertEqual(loaded['export_plugins'], ['audiobookshelf'])
+
     @mock.patch('urllib.request.urlopen')
     def test_audiobookshelf_test_connection_with_api_key(self, mocked_urlopen):
         response = mock.MagicMock()

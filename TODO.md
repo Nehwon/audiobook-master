@@ -2,7 +2,7 @@
 
 ## Priorité P0 — Fiabilité immédiate
 
-- [ ] Corriger les régressions majeures de la suite `pytest -q`.
+- [x] Corriger les régressions majeures de la suite `pytest -q`.
 - [x] Identifier les tests devenus incompatibles avec l’implémentation courante et décider : corriger le code ou adapter le test.
 - [x] Mettre en place une commande de validation minimale “toujours verte” (smoke suite).
 - [x] Vérifier la cohérence des imports entre modules `core`, `web`, `integrations`.

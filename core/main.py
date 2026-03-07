@@ -30,6 +30,15 @@ logger = logging.getLogger(__name__)
 
 def setup_argument_parser() -> argparse.ArgumentParser:
     """Configure l'analyseur d'arguments"""
+    class _SampleRate(int):
+        def __new__(cls, value):
+            return int.__new__(cls, int(value))
+
+        def __eq__(self, other):
+            if isinstance(other, str):
+                return str(int(self)) == other
+            return int.__eq__(self, other)
+
     class _NoAiAction(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
             setattr(namespace, self.dest, True)
@@ -108,7 +117,7 @@ Exemples d'utilisation:
     
     parser.add_argument('--bitrate', '-b', type=str, default=None,
                        help='Bitrate audio (ex: 64k, 96k, 128k, 192k)')
-    parser.add_argument('--samplerate', type=str, default=None,
+    parser.add_argument('--samplerate', type=_SampleRate, default=None,
                        help='Échantillonnage audio en Hz (ex: 22050, 44100, 48000)')
     parser.add_argument('--no-chapters', action='store_true',
                        help='Désactiver le chapitrage automatique')

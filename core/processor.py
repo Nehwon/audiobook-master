@@ -1885,12 +1885,22 @@ class AudiobookProcessor:
             normalized_files: List[Path] = []
             chapter_durations_ms: List[int] = []
 
+            def run_command(cmd: List[str], timeout: int) -> subprocess.CompletedProcess:
+                return subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    timeout=timeout,
+                )
+
             def get_duration_ms(audio_path: Path) -> int:
                 probe_cmd = [
                     'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
                     '-of', 'default=noprint_wrappers=1:nokey=1', str(audio_path)
                 ]
-                result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
+                result = run_command(probe_cmd, timeout=30)
                 if result.returncode != 0:
                     return 0
                 try:
@@ -1917,8 +1927,9 @@ class AudiobookProcessor:
                     str(encoded_file)
                 ])
 
-                process = subprocess.run(encode_cmd, capture_output=True, text=True, timeout=1800)
+                process = run_command(encode_cmd, timeout=1800)
                 if process.returncode != 0:
+                    self.last_error = f"Échec encodage AAC ({audio_file.name}): {(process.stderr or '').strip() or 'erreur inconnue'}"
                     logger.error("❌ Échec encodage AAC (%s): %s", audio_file.name, process.stderr)
                     return False
 
@@ -1961,8 +1972,9 @@ class AudiobookProcessor:
                     str(normalized_file),
                 ]
 
-                normalize_process = subprocess.run(normalize_cmd, capture_output=True, text=True, timeout=1800)
+                normalize_process = run_command(normalize_cmd, timeout=1800)
                 if normalize_process.returncode != 0:
+                    self.last_error = f"Échec normalisation LUFS ({encoded_file.name}): {(normalize_process.stderr or '').strip() or 'erreur inconnue'}"
                     logger.error("❌ Échec normalisation LUFS (%s): %s", encoded_file.name, normalize_process.stderr)
                     return False
 
@@ -2024,8 +2036,9 @@ class AudiobookProcessor:
                 '-c', 'copy',
                 str(temp_concat_file)
             ]
-            concat_process = subprocess.run(concat_cmd, capture_output=True, text=True, timeout=7200)
+            concat_process = run_command(concat_cmd, timeout=7200)
             if concat_process.returncode != 0:
+                self.last_error = f"Échec concaténation: {(concat_process.stderr or '').strip() or 'erreur inconnue'}"
                 logger.error("❌ Échec concaténation: %s", concat_process.stderr)
                 return False
             self._emit_progress(
@@ -2065,8 +2078,9 @@ class AudiobookProcessor:
                     str(output_path),
                 ]
 
-            finalize_process = subprocess.run(finalize_cmd, capture_output=True, text=True, timeout=7200)
+            finalize_process = run_command(finalize_cmd, timeout=7200)
             if finalize_process.returncode != 0:
+                self.last_error = f"Échec finalisation M4B: {(finalize_process.stderr or '').strip() or 'erreur inconnue'}"
                 logger.error("❌ Échec finalisation M4B: %s", finalize_process.stderr)
                 return False
 
@@ -2085,6 +2099,7 @@ class AudiobookProcessor:
             return True
 
         except Exception as e:
+            self.last_error = str(e)
             logger.error(f"💥 Erreur conversion M4B: {e}")
             return False
         finally:

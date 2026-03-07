@@ -63,6 +63,28 @@ class TestAudiobookProcessor(unittest.TestCase):
         self.assertNotIn('-progress', flattened)
         self.assertNotIn('pipe:1', flattened)
 
+    def test_convert_to_m4b_uses_lossy_utf8_decode_for_subprocess_output(self):
+        test_audio = self.source_dir / "accented.mp3"
+        test_audio.write_bytes(b"FAKE_AUDIO_DATA")
+        output_path = self.output_dir / "accented.m4b"
+
+        def fake_run(cmd, **kwargs):
+            if kwargs.get('text') and kwargs.get('errors') != 'replace':
+                raise UnicodeDecodeError('utf-8', b'\xc3', 0, 1, 'invalid continuation byte')
+
+            if cmd and cmd[0] == 'ffprobe':
+                return self._mock_run_result(0, stdout='1.0\n')
+
+            return self._mock_run_result(0, stdout='', stderr='ok')
+
+        metadata = MagicMock()
+        metadata.get_metadata_dict.return_value = {}
+
+        with patch('subprocess.run', side_effect=fake_run):
+            result = self.processor.convert_to_m4b([test_audio], output_path, metadata)
+
+        self.assertTrue(result)
+
     def test_ffmpeg_concat_file_entry_escapes_single_quotes(self):
         audio_file = self.source_dir / "d'ouverture" / "01 Credits d'ouverture.mp3"
         audio_file.parent.mkdir(parents=True, exist_ok=True)

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sprint 2 — Paquets Audiobookshelf</title>
+  <title>Sprint 3 — Planification & diffusion</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; background: #f4f6fb; color: #1f2937; }
     header { background: #fff; border-bottom: 1px solid #d1d5db; padding: 14px 20px; }
@@ -25,8 +25,8 @@
 </head>
 <body>
   <header>
-    <h2 style="margin:0">Sprint 2 — Frontend d'intégration Audiobookshelf</h2>
-    <p class="muted" style="margin:6px 0 0">Gestion des paquets, correction des métadonnées, retrait de fichiers et prévisualisation du payload.</p>
+    <h2 style="margin:0">Sprint 3 — Planification & diffusion Audiobookshelf</h2>
+    <p class="muted" style="margin:6px 0 0">Gestion des paquets avec planification différée, diffusion du changelog et nettoyage post-publication.</p>
   </header>
 
   <main>
@@ -72,14 +72,22 @@
           <button onclick="saveMetadata()">Sauvegarder métadonnées</button>
           <button onclick="submitPacket()">Publier</button>
         </div>
+        <div class="row" style="margin-top:8px">
+          <input id="scheduleTs" type="number" placeholder="Timestamp publication (unix)" />
+          <button class="secondary" onclick="schedulePacket()">Planifier</button>
+          <button class="secondary" onclick="runNextScheduledJob()">Exécuter job planifié</button>
+        </div>
         <p id="validationMsg" class="muted"></p>
         <h4>Changelog (assisté IA + édition manuelle)</h4>
         <div class="row" style="margin-bottom:8px">
           <button class="secondary" onclick="generateChangelogDraft()">Générer brouillon IA</button>
           <button class="secondary" onclick="saveEditedChangelog()">Sauvegarder version éditée</button>
+          <button class="secondary" onclick="broadcastChangelog()">Diffuser changelog</button>
+          <button class="danger" onclick="cleanupPacket()">Nettoyer paquet</button>
         </div>
         <textarea id="changelogEdited" rows="7" placeholder="Rédigez/éditez ici le message de changelog avant publication."></textarea>
         <p id="changelogSource" class="muted"></p>
+        <p id="scheduleInfo" class="muted"></p>
         <h4>Payload Audiobookshelf</h4>
         <pre id="payloadPreview">{}</pre>
       </div>
@@ -264,6 +272,77 @@
         document.getElementById('payloadPreview').textContent = JSON.stringify(data.payload_preview, null, 2);
       }
       await loadPackets();
+    }
+
+
+    async function schedulePacket() {
+      if (!selectedId) return;
+      const rawTs = document.getElementById('scheduleTs').value;
+      const publishAt = Number(rawTs || 0);
+      if (!publishAt) {
+        alert('Renseignez un timestamp unix de publication.');
+        return;
+      }
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/schedule`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ publish_at: publishAt, channels: ['discord', 'telegram', 'whatsapp', 'email'] })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        alert(data.error || 'Impossible de planifier la publication');
+        return;
+      }
+      document.getElementById('scheduleInfo').textContent = `Job planifié: ${data.job.id} (publication: ${data.job.publish_at})`;
+      await loadPackets();
+    }
+
+    async function runNextScheduledJob() {
+      const jobsResp = await fetch('/api/integrations/audiobookshelf/scheduler/jobs');
+      const jobsData = await jobsResp.json();
+      const nextJob = (jobsData.jobs || []).find(j => j.status === 'scheduled');
+      if (!nextJob) {
+        alert('Aucun job planifié à exécuter.');
+        return;
+      }
+      const runResp = await fetch(`/api/integrations/audiobookshelf/scheduler/jobs/${nextJob.id}/run`, { method: 'POST' });
+      const runData = await runResp.json();
+      if (!runResp.ok) {
+        alert(runData.error || "Impossible d'exécuter le job planifié");
+        return;
+      }
+      document.getElementById('scheduleInfo').textContent = `Job ${nextJob.id} exécuté (${runData.job.status}).`;
+      await loadPackets();
+      await openPacket(selectedId);
+    }
+
+    async function broadcastChangelog() {
+      if (!selectedId) return;
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/broadcast`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ channels: ['discord', 'telegram', 'whatsapp', 'email'] })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        alert(data.error || 'Impossible de diffuser le changelog');
+        return;
+      }
+      const statuses = (data.deliveries || []).map(d => `${d.channel}:${d.status}`).join(', ');
+      document.getElementById('changelogSource').textContent = `Diffusion changelog: ${statuses}`;
+    }
+
+    async function cleanupPacket() {
+      if (!selectedId) return;
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/cleanup`, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ delete_output_files: true })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        alert(data.error || 'Impossible de nettoyer le paquet');
+        return;
+      }
+      await loadOutputs();
+      await loadPackets();
+      await openPacket(selectedId);
     }
 
     async function submitPacket() {

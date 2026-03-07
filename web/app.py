@@ -71,6 +71,7 @@ packets_lock = threading.RLock()
 job_queue: "queue.Queue[str]" = queue.Queue()
 jobs: Dict[str, Job] = {}
 upload_packets: Dict[str, Dict[str, object]] = {}
+packet_schedule_jobs: Dict[str, Dict[str, object]] = {}
 review_bin: List[Dict] = []
 worker_started = False
 MAX_JOB_EVENTS = 500
@@ -315,6 +316,88 @@ def _refresh_packet_metrics(packet: Dict[str, object]) -> None:
     packet["file_count"] = len(files)
     packet["size_mb"] = round(sum(int(item.get("size", 0)) for item in files if isinstance(item, dict)) / (1024 * 1024), 2)
 
+
+def _channel_configured(config: Dict[str, object], channel: str) -> bool:
+    key_map = {
+        "discord": "notify_discord_webhook",
+        "telegram": "notify_telegram_chat_id",
+        "whatsapp": "notify_whatsapp_recipient",
+        "email": "notify_email_to",
+    }
+    key = key_map.get(channel)
+    if not key:
+        return False
+    return bool(str(config.get(key, "")).strip())
+
+
+def _build_changelog_message(packet: Dict[str, object]) -> str:
+    changelog = packet.get("changelog") if isinstance(packet.get("changelog"), dict) else {}
+    message = str(changelog.get("edited") or changelog.get("draft") or "").strip()
+    if message:
+        return message
+    metadata = packet.get("metadata") if isinstance(packet.get("metadata"), dict) else {}
+    title = str(metadata.get("title") or packet.get("name") or "Publication")
+    author = str(metadata.get("author") or "")
+    if author:
+        return f"📚 {title} — {author}\nPublication terminée."
+    return f"📚 {title}\nPublication terminée."
+
+
+def _deliver_changelog(packet: Dict[str, object], channels: List[str], config: Dict[str, object]) -> Dict[str, object]:
+    message = _build_changelog_message(packet)
+    deliveries: List[Dict[str, object]] = []
+    for channel in channels:
+        configured = _channel_configured(config, channel)
+        deliveries.append(
+            {
+                "channel": channel,
+                "status": "sent" if configured else "skipped",
+                "reason": "ok" if configured else "channel_not_configured",
+            }
+        )
+    return {"message": message, "deliveries": deliveries}
+
+
+def _cleanup_packet_files(packet: Dict[str, object], delete_outputs: bool) -> List[str]:
+    files = packet.get("files") if isinstance(packet.get("files"), list) else []
+    removed_files: List[str] = []
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "")
+        if not name:
+            continue
+        if delete_outputs:
+            candidate = _resolve_output_file(name)
+            if candidate and candidate.exists() and candidate.is_file():
+                candidate.unlink(missing_ok=True)
+        removed_files.append(name)
+
+    packet["files"] = []
+    _refresh_packet_metrics(packet)
+    packet["cleanup"] = {
+        "done": True,
+        "removed_files": removed_files,
+        "delete_output_files": delete_outputs,
+        "at": int(time.time()),
+    }
+    return removed_files
+
+
+def _mark_packet_published(packet: Dict[str, object], request_changelog: Optional[str] = None) -> None:
+    validation = packet.get("validation") if isinstance(packet.get("validation"), dict) else {"ok": False}
+    if not validation.get("ok"):
+        missing = validation.get("missing", [])
+        raise ValueError(f"metadata_incomplete:{','.join(str(x) for x in missing)}")
+
+    changelog = packet.get("changelog") if isinstance(packet.get("changelog"), dict) else {}
+    if isinstance(request_changelog, str) and request_changelog.strip():
+        changelog["edited"] = request_changelog.strip()
+        changelog["updated_at"] = int(time.time())
+    packet["changelog"] = changelog
+    packet["status"] = "publie"
+    packet["progress"] = 100
+
 def _save_archive_fingerprint_to_db(
     archive_name: str,
     file_size: int,
@@ -430,6 +513,11 @@ def _default_config() -> Dict:
             "série=Nettle and Bone, titre=Comment tuer un prince; vérifier si la série existe et trouver le numéro "
             "de volume correspondant. Si introuvable, laisser volume vide et expliquer dans notes."
         ),
+        "notify_discord_webhook": "",
+        "notify_telegram_bot_token": "",
+        "notify_telegram_chat_id": "",
+        "notify_whatsapp_recipient": "",
+        "notify_email_to": "",
         "ollama_mcp_tools": json.dumps(
             [
                 {
@@ -1691,21 +1779,16 @@ def api_integration_packet_submit(packet_id: str):
         packet = upload_packets.get(packet_id)
         if not packet:
             return _api_error("Paquet introuvable", 404, code="packet_not_found")
-        validation = packet.get("validation") if isinstance(packet.get("validation"), dict) else {"ok": False}
-        if not validation.get("ok"):
+        try:
+            _mark_packet_published(packet, request_changelog if isinstance(request_changelog, str) else None)
+        except ValueError:
+            validation = packet.get("validation") if isinstance(packet.get("validation"), dict) else {"ok": False}
             return _api_error(
                 "Métadonnées incomplètes: complétez les champs obligatoires.",
                 400,
                 code="metadata_incomplete",
                 details={"missing": validation.get("missing", [])},
             )
-
-        changelog = packet.get("changelog") if isinstance(packet.get("changelog"), dict) else {}
-        if isinstance(request_changelog, str) and request_changelog.strip():
-            changelog["edited"] = request_changelog.strip()
-        packet["changelog"] = changelog
-        packet["status"] = "publie"
-        packet["progress"] = 100
 
     return jsonify(
         {
@@ -1721,6 +1804,128 @@ def api_integration_packet_submit(packet_id: str):
             "changelog": packet.get("changelog", {}),
         }
     )
+
+
+@app.route("/api/integrations/audiobookshelf/packets/<packet_id>/broadcast", methods=["POST"])
+def api_integration_packet_broadcast(packet_id: str):
+    _bootstrap_upload_packets()
+    payload = request.get_json(silent=True) or {}
+    channels = payload.get("channels")
+    if not isinstance(channels, list) or not channels:
+        channels = ["discord", "telegram", "whatsapp", "email"]
+    channels = [str(channel).strip().lower() for channel in channels if str(channel).strip()]
+    channels = [channel for channel in channels if channel in {"discord", "telegram", "whatsapp", "email"}]
+    if not channels:
+        return _api_error("Aucun canal valide fourni", code="invalid_channels")
+
+    config = _load_config()
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+        if not packet:
+            return _api_error("Paquet introuvable", 404, code="packet_not_found")
+        delivery = _deliver_changelog(packet, channels, config)
+
+    return jsonify({"ok": True, "packet_id": packet_id, **delivery})
+
+
+@app.route("/api/integrations/audiobookshelf/packets/<packet_id>/schedule", methods=["POST"])
+def api_integration_packet_schedule(packet_id: str):
+    _bootstrap_upload_packets()
+    payload = request.get_json(silent=True) or {}
+    publish_at = payload.get("publish_at")
+    if isinstance(publish_at, str) and publish_at.strip().isdigit():
+        publish_at = int(publish_at.strip())
+    if not isinstance(publish_at, int):
+        return _api_error("Le champ 'publish_at' (timestamp unix) est requis", code="invalid_publish_at")
+    if publish_at <= int(time.time()):
+        return _api_error("La date de publication doit être dans le futur", code="invalid_publish_at")
+
+    channels = payload.get("channels")
+    if not isinstance(channels, list) or not channels:
+        channels = ["discord", "telegram", "whatsapp", "email"]
+    channels = [str(channel).strip().lower() for channel in channels if str(channel).strip()]
+    channels = [channel for channel in channels if channel in {"discord", "telegram", "whatsapp", "email"}]
+
+    job_id = hashlib.sha1(f"{packet_id}:{publish_at}:{time.time()}".encode("utf-8")).hexdigest()[:12]
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+        if not packet:
+            return _api_error("Paquet introuvable", 404, code="packet_not_found")
+        packet["status"] = "planifie"
+        packet_schedule_jobs[job_id] = {
+            "id": job_id,
+            "packet_id": packet_id,
+            "status": "scheduled",
+            "publish_at": publish_at,
+            "channels": channels,
+            "cleanup_after_publish": bool(payload.get("cleanup_after_publish", False)),
+            "created_at": int(time.time()),
+            "completed_at": None,
+            "delivery": None,
+        }
+
+    return jsonify({"ok": True, "job": packet_schedule_jobs[job_id]})
+
+
+@app.route("/api/integrations/audiobookshelf/scheduler/jobs")
+def api_integration_scheduler_jobs():
+    _bootstrap_upload_packets()
+    with packets_lock:
+        jobs_payload = list(packet_schedule_jobs.values())
+    jobs_payload.sort(key=lambda item: int(item.get("publish_at", 0)))
+    return jsonify({"jobs": jobs_payload})
+
+
+@app.route("/api/integrations/audiobookshelf/scheduler/jobs/<job_id>/run", methods=["POST"])
+def api_integration_scheduler_run_job(job_id: str):
+    _bootstrap_upload_packets()
+    config = _load_config()
+    with packets_lock:
+        job = packet_schedule_jobs.get(job_id)
+        if not job:
+            return _api_error("Job planifié introuvable", 404, code="schedule_job_not_found")
+        packet = upload_packets.get(str(job.get("packet_id")))
+        if not packet:
+            return _api_error("Paquet introuvable", 404, code="packet_not_found")
+        try:
+            _mark_packet_published(packet)
+        except ValueError:
+            validation = packet.get("validation") if isinstance(packet.get("validation"), dict) else {"ok": False}
+            job["status"] = "failed"
+            return _api_error(
+                "Métadonnées incomplètes: complétez les champs obligatoires.",
+                400,
+                code="metadata_incomplete",
+                details={"missing": validation.get("missing", [])},
+            )
+
+        delivery = _deliver_changelog(packet, list(job.get("channels") or []), config)
+        job["status"] = "completed"
+        job["completed_at"] = int(time.time())
+        job["delivery"] = delivery
+
+    if job.get("cleanup_after_publish"):
+        with packets_lock:
+            pkt = upload_packets.get(str(job.get("packet_id")))
+            if pkt:
+                _cleanup_packet_files(pkt, True)
+
+    return jsonify({"ok": True, "job": job, "packet": packet})
+
+
+@app.route("/api/integrations/audiobookshelf/packets/<packet_id>/cleanup", methods=["POST"])
+def api_integration_packet_cleanup(packet_id: str):
+    _bootstrap_upload_packets()
+    payload = request.get_json(silent=True) or {}
+    delete_outputs = bool(payload.get("delete_output_files", True))
+
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+        if not packet:
+            return _api_error("Paquet introuvable", 404, code="packet_not_found")
+        removed_files = _cleanup_packet_files(packet, delete_outputs)
+
+    return jsonify({"ok": True, "packet": packet, "removed_files": removed_files})
 
 
 @app.route("/api/integrations/audiobookshelf/packets/<packet_id>/files", methods=["DELETE"])

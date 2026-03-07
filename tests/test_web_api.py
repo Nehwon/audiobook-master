@@ -482,6 +482,7 @@ class TestSprint2PacketsApi(unittest.TestCase):
         web_app.CONFIG_PATH = web_app.TEMP_DIR / "web_config.json"
         with web_app.packets_lock:
             web_app.upload_packets.clear()
+            web_app.packet_schedule_jobs.clear()
         self.client = web_app.app.test_client()
 
     def tearDown(self):
@@ -491,6 +492,7 @@ class TestSprint2PacketsApi(unittest.TestCase):
         web_app.CONFIG_PATH = self.old_config_path
         with web_app.packets_lock:
             web_app.upload_packets.clear()
+            web_app.packet_schedule_jobs.clear()
         self.tmp.cleanup()
 
     def test_packets_list_and_detail(self):
@@ -582,6 +584,99 @@ class TestSprint2PacketsApi(unittest.TestCase):
         self.assertEqual(edited.status_code, 200)
         edited_payload = edited.get_json()
         self.assertEqual(edited_payload['packet']['changelog']['edited'], 'Message édité manuellement')
+
+
+class TestSprint3PlanningAndBroadcastApi(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.media_dir = Path(self.tmp.name) / "_media"
+        self.output_dir = Path(self.tmp.name) / "_output"
+        self.temp_dir = Path(self.tmp.name) / "_tmp"
+        self.old_media_dir = web_app.MEDIA_DIR
+        self.old_output_dir = web_app.OUTPUT_DIR
+        self.old_temp_dir = web_app.TEMP_DIR
+        self.old_config_path = web_app.CONFIG_PATH
+        web_app.MEDIA_DIR = self.media_dir
+        web_app.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+        web_app.OUTPUT_DIR = self.output_dir
+        web_app.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        web_app.TEMP_DIR = self.temp_dir
+        web_app.CONFIG_PATH = web_app.TEMP_DIR / "web_config.json"
+        with web_app.packets_lock:
+            web_app.upload_packets.clear()
+            web_app.packet_schedule_jobs.clear()
+        self.client = web_app.app.test_client()
+
+    def tearDown(self):
+        web_app.MEDIA_DIR = self.old_media_dir
+        web_app.OUTPUT_DIR = self.old_output_dir
+        web_app.TEMP_DIR = self.old_temp_dir
+        web_app.CONFIG_PATH = self.old_config_path
+        with web_app.packets_lock:
+            web_app.upload_packets.clear()
+            web_app.packet_schedule_jobs.clear()
+        self.tmp.cleanup()
+
+    def _prepare_ready_packet(self):
+        (self.media_dir / "Livre Sprint3").mkdir(parents=True)
+        packet_id = self.client.get('/api/integrations/audiobookshelf/packets').get_json()['packets'][0]['id']
+        self.client.put(
+            f'/api/integrations/audiobookshelf/packets/{packet_id}/metadata',
+            json={'metadata': {'title': 'Titre Sprint3', 'author': 'Auteur Sprint3', 'synopsis': 'Résumé sprint3'}}
+        )
+        self.client.put(
+            f'/api/integrations/audiobookshelf/packets/{packet_id}/changelog',
+            json={'edited': 'Changelog sprint 3'}
+        )
+        return packet_id
+
+    def test_schedule_job_and_run_updates_status(self):
+        packet_id = self._prepare_ready_packet()
+        publish_at = int(web_app.time.time()) + 3600
+        scheduled = self.client.post(
+            f'/api/integrations/audiobookshelf/packets/{packet_id}/schedule',
+            json={'publish_at': publish_at, 'channels': ['discord']}
+        )
+        self.assertEqual(scheduled.status_code, 200)
+        job_id = scheduled.get_json()['job']['id']
+
+        jobs = self.client.get('/api/integrations/audiobookshelf/scheduler/jobs')
+        self.assertEqual(jobs.status_code, 200)
+        self.assertEqual(len(jobs.get_json()['jobs']), 1)
+
+        run = self.client.post(f'/api/integrations/audiobookshelf/scheduler/jobs/{job_id}/run')
+        self.assertEqual(run.status_code, 200)
+        run_payload = run.get_json()
+        self.assertEqual(run_payload['job']['status'], 'completed')
+        self.assertEqual(run_payload['packet']['status'], 'publie')
+
+    def test_broadcast_reports_unconfigured_channels(self):
+        packet_id = self._prepare_ready_packet()
+        resp = self.client.post(
+            f'/api/integrations/audiobookshelf/packets/{packet_id}/broadcast',
+            json={'channels': ['discord', 'email']}
+        )
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['deliveries'][0]['status'], 'skipped')
+        self.assertEqual(payload['deliveries'][1]['status'], 'skipped')
+
+    def test_cleanup_removes_packet_files_and_output_file(self):
+        out = self.output_dir / 'Nettoyage.m4b'
+        out.write_bytes(b'abc123')
+        packet = self.client.post(
+            '/api/integrations/audiobookshelf/packets',
+            json={'output_files': ['Nettoyage.m4b'], 'name': 'Paquet Nettoyage'}
+        ).get_json()['packet']
+
+        cleanup = self.client.post(
+            f"/api/integrations/audiobookshelf/packets/{packet['id']}/cleanup",
+            json={'delete_output_files': True}
+        )
+        self.assertEqual(cleanup.status_code, 200)
+        payload = cleanup.get_json()
+        self.assertEqual(payload['packet']['file_count'], 0)
+        self.assertFalse(out.exists())
 
 
 if __name__ == '__main__':

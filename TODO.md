@@ -28,13 +28,13 @@
 ## Sprint 3 — Planification & diffusion
 
 ### Objectifs
-- [ ] Programmer la publication différée des paquets (date/heure).
-- [ ] Diffuser un message de changelog vers canaux configurés (phase 1: Discord, Telegram, WhatsApp, email).
-- [ ] Ajouter une action de nettoyage manuel post-publication.
+- [x] Programmer la publication différée des paquets (date/heure).
+- [x] Diffuser un message de changelog vers canaux configurés (phase 1: Discord, Telegram, WhatsApp, email).
+- [x] Ajouter une action de nettoyage manuel post-publication.
 
 ### Livrables attendus
-- [ ] Scheduler fiable avec état de jobs.
-- [ ] Connecteurs de diffusion initiale.
+- [x] Scheduler fiable avec état de jobs.
+- [x] Connecteurs de diffusion initiale.
 
 ## Sprint 4 — Écosystème plugins
 

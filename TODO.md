@@ -40,6 +40,11 @@
           - Une soumission est ensuite composée pour être présenté à l'API Audiobookshelf,
           - Lorsque le packet est complet, un bouton propose de le soumettre,
           - Dans le même temps, une demande de composition d'un message du type "Changelog" est demandée à l'ollama, l'utilisateur peut le modifier avant de le soumettre, et choisir le vecteur de soumission. Pour la phase 1 de développement, nous ciblerons discord, Telegram, whatsapp et email.
-    - [ ] Interface pour programmer la publication effective vers audiobookshelf
-          - Principe : Permettre à l'utilisateur de programmer la publication effective vers audiobookshelf
-          - Logique : L'utilisateur peut choisir une date et une heure pour la publication effective vers audiobookshelf
+          - Une fois le paquet soumis, il est temporairement marqué comme effectué. Avec un bouton "Nettoyer" qui aura pour objectif de supprimer le packet, les dossiers sources et les fichiers m4b d'output.
+    - [ ] Interface pour programmer la publication effective d'un packet
+          - Principe : Permettre à l'utilisateur de programmer la publication effective d'un packet vers les intégrations configurées,
+          - Logique : L'utilisateur peut choisir une date et une heure pour la publication effective, ainsi qu'un message de changelog à poster sur les canaux configurés;
+          - Une fois la date et l'heure atteintes, le packet est publié vers les intégrations configurées et le message de changelog est posté sur les canaux configurés;
+          - Une fois le packet publié, il est temporairement marqué comme effectué. Avec un bouton "Nettoyer" qui aura pour objectif de supprimer le packet, les dossiers sources et les fichiers m4b d'output. Le nettoyage ne doit pas être automatique.
+- [ ] Mettre à jour le plugin Audiobookshelf en priorité.
+- [ ] Créer un marketplace pour l'acquisition automatique des plugins

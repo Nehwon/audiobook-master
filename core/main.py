@@ -15,6 +15,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
 from .processor import AudiobookProcessor, AudiobookMetadata
 from .config import ProcessingConfig
+from .diagnostics import collect_diagnostics, print_diagnostics_report, diagnostics_to_json
 from integrations.audiobookshelf import AudiobookshelfClient, AudiobookshelfConfig
 
 # Configuration du logging
@@ -131,6 +132,10 @@ Exemples d'utilisation:
                        help='Encodeur AAC: twolo (meilleur qualité) ou fast (plus rapide)')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Affiche les informations détaillées')
+    parser.add_argument('--diagnostic', action='store_true',
+                       help="Affiche un diagnostic de l'environnement puis quitte")
+    parser.add_argument('--diagnostic-json', action='store_true',
+                       help='Affiche le diagnostic en JSON (implique --diagnostic)')
     
     # Compatibilité avec d'anciens tests basés sur optparse
     def has_option(option_name: str) -> bool:
@@ -155,6 +160,15 @@ def main():
         logger.error(f"Erreur critique de configuration: {exc}")
         sys.exit(1)
         return
+
+    if args.diagnostic or args.diagnostic_json:
+        diagnostics = collect_diagnostics(config)
+        if args.diagnostic_json:
+            print(diagnostics_to_json(diagnostics))
+        else:
+            print_diagnostics_report(diagnostics)
+        return
+
     
     if args.source:
         config.source_directory = args.source

@@ -30,7 +30,18 @@ python -m core.main --source /chemin/source --output /chemin/output
 --no-gpu               Désactive accélération GPU
 --aac-coder            twolo|fast
 --verbose / -v         Logs détaillés
+--diagnostic           Diagnostic environnement (texte)
+--diagnostic-json      Diagnostic environnement (JSON)
 ```
+
+### Diagnostic rapide
+
+```bash
+python -m core.main --diagnostic
+python -m core.main --diagnostic-json
+```
+
+Le diagnostic vérifie les dépendances Python clés, la présence de `ffmpeg`/`ollama`, l'accessibilité des répertoires (source/output/temp) et l'état des variables d'environnement Audiobookshelf.
 
 ### Variables d'environnement Audiobookshelf (CLI)
 

@@ -98,7 +98,7 @@ class ProcessingConfig:
         self.audiobookshelf_library_id = os.getenv("AUDIOBOOKSHELF_LIBRARY_ID", self.audiobookshelf_library_id)
 
         if self.scraping_sources is None:
-            self.scraping_sources = ["babelio", "fnac"]
+            self.scraping_sources = ["google_books", "audible", "babelio"]
         # Crée les répertoires nécessaires
         Path(self.source_directory).mkdir(parents=True, exist_ok=True)
         Path(self.output_directory).mkdir(parents=True, exist_ok=True)

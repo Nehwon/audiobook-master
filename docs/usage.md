@@ -72,6 +72,27 @@ Variables d'environnement dossiers :
 - `GET /api/ollama/status` : état du service Ollama.
 - `GET /health` : endpoint santé.
 
+
+## Onglet Plugins
+
+Configuration des plugins (source de métadonnées) sous forme de tableau :
+
+| Plugin | Clé de configuration | Valeur par défaut | Description |
+|---|---|---|---|
+| `google_books` | `scraping_sources` (CLI/Web config) | activé | Recherche via API Google Books (priorité 1). |
+| `audible` | `scraping_sources` (CLI/Web config) | activé | Recherche spécialisée audiobook (priorité 2). |
+| `babelio` | `scraping_sources` (CLI/Web config) | activé | Fallback francophone (priorité 3). |
+
+Exemple de configuration (ordre = fallback) :
+
+```json
+{
+  "scraping_sources": ["google_books", "audible", "babelio"]
+}
+```
+
+Si un plugin est retiré de `scraping_sources`, il ne sera pas utilisé pendant l'enrichissement des métadonnées.
+
 ## Docker
 
 Démarrage rapide :

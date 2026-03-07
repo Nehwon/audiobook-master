@@ -68,8 +68,11 @@ class TestProcessingConfig(unittest.TestCase):
         config = ProcessingConfig()
         
         self.assertIsNotNone(config.scraping_sources)
+        self.assertIn("google_books", config.scraping_sources)
+        self.assertIn("audible", config.scraping_sources)
         self.assertIn("babelio", config.scraping_sources)
-        self.assertIn("fnac", config.scraping_sources)
+        self.assertIn("existing_file", config.cover_sources)
+        self.assertIn("url_download", config.cover_sources)
         
     def test_scraping_sources_custom(self):
         """Test les sources de scraping personnalisées"""

@@ -4,6 +4,15 @@ Ce dossier contient les fichiers archivés lors du nettoyage du projet.
 
 ## 📁 Archives du 2026-03-01
 
+## 📁 Archives du 2026-03-07
+
+### 🧭 `run.py/`
+Archive de l'implémentation legacy de `run.py` remplacée par un wrapper de compatibilité vers `core.main`.
+
+### 🌐 `start_web.py/`
+Archive de l'implémentation legacy de `start_web.py` remplacée par un wrapper de compatibilité vers `web.app`.
+
+
 ### 📋 2026-03-01_git-setup/
 Fichiers de configuration Git initiaux qui ont été remplacés par le système de règles IA :
 - `setup-git.sh` - Script de configuration Git (remplacé par .windsurf/rules/)
@@ -65,11 +74,11 @@ cp -r Archives/2026-03-01_test-files/ ./
 
 ## 📊 Statistiques
 
-- **Total dossiers archivés**: 3
-- **Total fichiers archivés**: ~15
+- **Total dossiers archivés**: 5
+- **Total fichiers archivés**: ~17
 - **Espace économisé**: ~50MB
-- **Date d'archivage**: 2026-03-01
+- **Date d'archivage**: 2026-03-07
 
 ---
 *Archives maintenues régulièrement*  
-*Dernière mise à jour: 2026-03-01*
+*Dernière mise à jour: 2026-03-07*

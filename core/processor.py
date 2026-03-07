@@ -36,6 +36,7 @@ from mutagen.mp4 import MP4, MP4Cover
 from mutagen.id3 import ID3, APIC, TPE1, TIT2, TALB
 from .config import ProcessingConfig
 from .metadata import BookScraper
+from plugins.covers import ExistingFileCoverProvider, UrlDownloadCoverProvider
 
 # Configuration
 LOG_DIR = Path(os.getenv("AUDIOBOOK_LOG_DIR", os.getenv("LOG_DIR", "/app/logs")))
@@ -431,7 +432,7 @@ class AudiobookProcessor:
     def scrap_book_info(self, metadata: AudiobookMetadata) -> AudiobookMetadata:
         """Compatibilité legacy: enrichit les métadonnées via scraping."""
         try:
-            scraper = BookScraper()
+            scraper = BookScraper(enabled_plugins=getattr(self.config, "scraping_sources", None))
             book_info = scraper.search_book(metadata.author or "", metadata.title or "")
             if not book_info:
                 return metadata
@@ -458,9 +459,24 @@ class AudiobookProcessor:
         return f"Synopsis indisponible pour {metadata.title} de {metadata.author}."
 
     def download_cover(self, metadata: AudiobookMetadata) -> Optional[str]:
-        """Compatibilité legacy: retourne le chemin de cover existant."""
-        if metadata.cover_path and Path(metadata.cover_path).exists():
-            return metadata.cover_path
+        """Récupère une cover via une chaîne de plugins configurée."""
+        all_providers = [
+            ExistingFileCoverProvider(),
+            UrlDownloadCoverProvider(),
+        ]
+        enabled = getattr(self.config, "cover_sources", None)
+        if enabled is not None:
+            enabled_set = {name.strip().lower() for name in enabled if isinstance(name, str)}
+            providers = [provider for provider in all_providers if provider.name in enabled_set]
+        else:
+            providers = all_providers
+
+        for provider in providers:
+            cover_path = provider.fetch(metadata, self)
+            if cover_path:
+                metadata.cover_path = cover_path
+                return cover_path
+
         return None
 
     def merge_metadata(self, base_metadata: AudiobookMetadata, new_metadata: AudiobookMetadata) -> AudiobookMetadata:

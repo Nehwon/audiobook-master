@@ -16,6 +16,7 @@ from integrations.audiobookshelf_client import (
     create_sync_manager
 )
 from core.processor import AudiobookMetadata
+from plugins.exports import AudiobookshelfExportPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -84,18 +85,15 @@ class AudiobookshelfIntegration:
             # Conversion des métadonnées pour Audiobookshelf
             abs_metadata = self._convert_metadata_for_abs(metadata)
             
-            # Upload
-            result = self.client.upload_audiobook(
-                audiobook_path, 
-                abs_metadata, 
-                self.sync_config.library_id
-            )
-            
-            if result:
-                logger.info(f"✅ Audiobook synchronisé: {result.get('id', 'unknown')}")
+            # Upload via plugin d'export
+            export_plugin = AudiobookshelfExportPlugin(self.client, self.sync_config.library_id)
+            success = export_plugin.export(audiobook_path, abs_metadata)
+
+            if success:
+                logger.info(f"✅ Audiobook synchronisé: {audiobook_path.name}")
                 return {
                     'success': True,
-                    'item_id': result.get('id'),
+                    'item_id': None,
                     'message': 'Upload réussi'
                 }
             else:

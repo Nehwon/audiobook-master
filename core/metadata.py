@@ -14,6 +14,13 @@ from pathlib import Path
 from typing import Optional, Dict, List
 from dataclasses import dataclass
 
+from plugins.metadata import (
+    AudibleMetadataPlugin,
+    BabelioMetadataPlugin,
+    GoogleBooksMetadataPlugin,
+    MetadataSourcePlugin,
+)
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -1065,55 +1072,41 @@ class GoogleBooksScraper:
             return False
 
 class BookScraper:
-    """Interface principale du scraper spécialisée audiobooks"""
-    
-    def __init__(self):
+    """Orchestrateur plugin-based pour les sources de métadonnées externes."""
+
+    def __init__(self, enabled_plugins: Optional[List[str]] = None):
+        # Compatibilité ascendante : attributs historiques conservés
         self.google_books = GoogleBooksScraper()
         self.audible = AudibleScraper()
         self.babelio = BabelioScraper()
-    
+
+        all_plugins: List[MetadataSourcePlugin] = [
+            GoogleBooksMetadataPlugin(self.google_books),
+            AudibleMetadataPlugin(self.audible),
+            BabelioMetadataPlugin(self.babelio),
+        ]
+
+        if enabled_plugins is None:
+            self.plugins = all_plugins
+            return
+
+        enabled = {name.strip().lower() for name in enabled_plugins if isinstance(name, str)}
+        self.plugins = [plugin for plugin in all_plugins if plugin.name in enabled]
+
+    def list_plugins(self) -> List[str]:
+        """Liste les plugins actifs dans l'ordre de fallback."""
+        return [plugin.name for plugin in self.plugins]
+
     def search_book(self, author: str, title: str) -> Optional[BookInfo]:
-        """Recherche un audiobook sur plusieurs sources spécialisées"""
+        """Recherche un audiobook via la chaîne de plugins configurée."""
         logger.info(f"🔍 Recherche audiobook: '{author} - {title}'")
-        
-        # 1. Google Books API (source la plus fiable)
-        book_info = self.google_books.search_google_books(author, title)
-        if book_info:
-            logger.info(f"   ✅ Livre trouvé sur Google Books")
-            return book_info
-        
-        # 2. Audible (source spécialisée audiobooks)
-        book_info = self.audible.search_audible(author, title)
-        if book_info:
-            logger.info(f"   ✅ Audiobook trouvé sur Audible")
-            return book_info
-        
-        # 3. Babelio (backup français)
-        book_info = self.babelio.search_babelio(author, title)
-        if book_info:
-            logger.info(f"   ✅ Livre trouvé sur Babelio (backup)")
-            return book_info
-        
-        logger.warning(f"   ❌ Audiobook non trouvé sur les sources disponibles")
+
+        for plugin in self.plugins:
+            book_info = plugin.search(author, title)
+            if book_info:
+                logger.info(f"   ✅ Livre trouvé via plugin: {plugin.name}")
+                return book_info
+
+        logger.warning("   ❌ Audiobook non trouvé sur les plugins configurés")
         return None
-        
-        # 1. Google Books API (source la plus fiable)
-        book_info = self.google_books.search_google_books(author, title)
-        if book_info:
-            logger.info(f"   ✅ Livre trouvé sur Google Books")
-            return book_info
-        
-        # 2. Audible (source spécialisée audiobooks)
-        book_info = self.audible.search_audible(author, title)
-        if book_info:
-            logger.info(f"   ✅ Audiobook trouvé sur Audible")
-            return book_info
-        
-        # 3. Babelio (backup français)
-        book_info = self.babelio.search_babelio(author, title)
-        if book_info:
-            logger.info(f"   ✅ Livre trouvé sur Babelio (backup)")
-            return book_info
-        
-        logger.warning(f"   ❌ Audiobook non trouvé sur les sources disponibles")
-        return None
+

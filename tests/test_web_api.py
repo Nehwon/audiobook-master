@@ -257,7 +257,6 @@ class TestWebRenameApi(unittest.TestCase):
         folder = self.media_dir / 'Suspect.part2'
         folder.mkdir()
         (folder / 'broken.part2').write_text('x')
-
         resp = self.client.post('/api/folder/delete', json={'folder': 'Suspect.part2'})
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(folder.exists())
@@ -463,6 +462,108 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(len(enqueue_payload['queued']), 1)
         self.assertEqual(enqueue_payload['queued'][0]['folder'], 'Auteur - Livre')
         mocked_worker.assert_called()
+
+
+class TestSprint2PacketsApi(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.media_dir = Path(self.tmp.name) / "_media"
+        self.output_dir = Path(self.tmp.name) / "_output"
+        self.temp_dir = Path(self.tmp.name) / "_tmp"
+        self.old_media_dir = web_app.MEDIA_DIR
+        self.old_output_dir = web_app.OUTPUT_DIR
+        self.old_temp_dir = web_app.TEMP_DIR
+        self.old_config_path = web_app.CONFIG_PATH
+        web_app.MEDIA_DIR = self.media_dir
+        web_app.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+        web_app.OUTPUT_DIR = self.output_dir
+        web_app.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        web_app.TEMP_DIR = self.temp_dir
+        web_app.CONFIG_PATH = web_app.TEMP_DIR / "web_config.json"
+        with web_app.packets_lock:
+            web_app.upload_packets.clear()
+        self.client = web_app.app.test_client()
+
+    def tearDown(self):
+        web_app.MEDIA_DIR = self.old_media_dir
+        web_app.OUTPUT_DIR = self.old_output_dir
+        web_app.TEMP_DIR = self.old_temp_dir
+        web_app.CONFIG_PATH = self.old_config_path
+        with web_app.packets_lock:
+            web_app.upload_packets.clear()
+        self.tmp.cleanup()
+
+    def test_packets_list_and_detail(self):
+        (self.media_dir / "Livre A").mkdir(parents=True)
+        response = self.client.get('/api/integrations/audiobookshelf/packets')
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['packets'])
+        packet_id = payload['packets'][0]['id']
+
+        detail = self.client.get(f'/api/integrations/audiobookshelf/packets/{packet_id}')
+        self.assertEqual(detail.status_code, 200)
+        detail_payload = detail.get_json()
+        self.assertIn('payload_preview', detail_payload)
+
+    def test_packets_metadata_update_marks_packet_ready(self):
+        (self.media_dir / "Livre B").mkdir(parents=True)
+        packet_id = self.client.get('/api/integrations/audiobookshelf/packets').get_json()['packets'][0]['id']
+
+        response = self.client.put(
+            f'/api/integrations/audiobookshelf/packets/{packet_id}/metadata',
+            json={'metadata': {'title': 'Titre', 'author': 'Auteur', 'synopsis': 'Résumé'}}
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['packet']['validation']['ok'])
+        self.assertEqual(payload['packet']['status'], 'pret')
+
+    def test_packets_submit_requires_complete_metadata(self):
+        (self.media_dir / "Livre C").mkdir(parents=True)
+        packet_id = self.client.get('/api/integrations/audiobookshelf/packets').get_json()['packets'][0]['id']
+
+        invalid_submit = self.client.post(f'/api/integrations/audiobookshelf/packets/{packet_id}/submit')
+        self.assertEqual(invalid_submit.status_code, 400)
+        self.assertEqual(invalid_submit.get_json()['code'], 'metadata_incomplete')
+
+        self.client.put(
+            f'/api/integrations/audiobookshelf/packets/{packet_id}/metadata',
+            json={'metadata': {'title': 'Titre', 'author': 'Auteur', 'synopsis': 'Résumé'}}
+        )
+        valid_submit = self.client.post(f'/api/integrations/audiobookshelf/packets/{packet_id}/submit')
+        self.assertEqual(valid_submit.status_code, 200)
+        self.assertTrue(valid_submit.get_json()['ok'])
+
+    def test_packets_create_from_outputs(self):
+        out = self.output_dir / 'Mon-Livre.m4b'
+        out.write_bytes(b'12345')
+
+        response = self.client.post(
+            '/api/integrations/audiobookshelf/packets',
+            json={'output_files': ['Mon-Livre.m4b'], 'name': 'Paquet Output'}
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['ok'])
+        self.assertEqual(payload['packet']['name'], 'Paquet Output')
+        self.assertEqual(payload['packet']['file_count'], 1)
+
+    def test_packets_remove_file(self):
+        out = self.output_dir / 'A.m4b'
+        out.write_bytes(b'aaa')
+        packet = self.client.post(
+            '/api/integrations/audiobookshelf/packets',
+            json={'output_files': ['A.m4b'], 'name': 'Paquet A'}
+        ).get_json()['packet']
+
+        response = self.client.delete(
+            f"/api/integrations/audiobookshelf/packets/{packet['id']}/files",
+            json={'filename': 'A.m4b'}
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload['packet']['file_count'], 0)
 
 
 if __name__ == '__main__':

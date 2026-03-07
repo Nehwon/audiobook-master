@@ -15,13 +15,15 @@
 ## Sprint 2 — Frontend d'intégration Audiobookshelf
 
 ### Objectifs
-- [ ] Interface pour gérer les paquets d'upload (statut, progression, validation métadonnées).
-- [ ] Parcours de correction/enrichissement des métadonnées avant soumission.
+- [x] Interface pour gérer les paquets d'upload (statut, progression, validation métadonnées).
+- [x] Parcours de correction/enrichissement des métadonnées avant soumission.
 - [ ] Préparation d'un brouillon de changelog assisté IA (édition manuelle avant envoi).
+- [x] Permettre la création d'un paquet à partir des fichiers `Output`.
+- [x] Permettre le retrait d'un fichier d'un paquet avant soumission.
 
 ### Livrables attendus
-- [ ] Écran "paquets" avec actions de publication.
-- [ ] Workflow de prévisualisation de payload Audiobookshelf.
+- [x] Écran "paquets" avec actions de publication.
+- [x] Workflow de prévisualisation de payload Audiobookshelf.
 
 ## Sprint 3 — Planification & diffusion
 

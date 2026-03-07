@@ -79,6 +79,7 @@ MAX_JOB_EVENTS = 500
 job_events: List[Dict] = []
 archive_validation_cache: Dict[str, Dict[str, object]] = {}
 PACKET_STATUSES = ["en_attente", "en_preparation", "pret", "planifie", "publie", "erreur"]
+PACKET_CHANNELS = {"discord", "telegram", "whatsapp", "email"}
 
 
 def _api_error(message: str, status: int = 400, code: str = "bad_request", *, details: Optional[Dict] = None):
@@ -260,64 +261,77 @@ def _compute_monitor_signatures() -> Dict[str, str]:
 
 
 def _bootstrap_upload_packets() -> None:
-    with packets_lock:
-        if upload_packets:
-            return
-        folders = sorted((entry for entry in _safe_iterdir(MEDIA_DIR) if entry.is_dir()), key=lambda p: p.name.lower())
-        if not folders:
-            folders = [MEDIA_DIR / "Demo - Livre 01", MEDIA_DIR / "Demo - Livre 02"]
+    # Les paquets sont explicitement créés depuis Output (.m4b) par l'utilisateur.
+    return
 
-        for index, folder in enumerate(folders):
-            packet_id = hashlib.sha1(str(folder.name).encode("utf-8")).hexdigest()[:10]
-            packet_files = []
-            if folder.exists():
-                packet_files = [
-                    {
-                        "name": item.name,
-                        "size": item.stat().st_size,
-                    }
-                    for item in _safe_iterdir(folder)
-                    if item.is_file() and item.suffix.lower() in AUDIO_EXTENSIONS
-                ]
 
-            upload_packets[packet_id] = {
-                "id": packet_id,
-                "name": folder.name,
-                "status": PACKET_STATUSES[index % len(PACKET_STATUSES)],
-                "progress": 0 if index % 2 == 0 else 55,
-                "created_at": int(time.time()) - (index * 3600),
-                "files": packet_files,
-                "file_count": len(packet_files),
-                "size_mb": round(sum(item["size"] for item in packet_files) / (1024 * 1024), 2),
-                "metadata": {
-                    "title": folder.name,
-                    "author": "",
-                    "series": "",
-                    "volume": "",
-                    "narrator": "",
-                    "language": "fr",
-                    "tags": "",
-                    "synopsis": "",
-                },
-                "validation": {"ok": False, "missing": ["author", "synopsis"]},
-                "changelog": {"draft": "", "edited": "", "source": "none", "updated_at": None},
-            }
+def _default_file_metadata(file_name: str) -> Dict[str, str]:
+    return {
+        "title": Path(file_name).stem,
+        "author": "",
+        "series": "",
+        "volume": "",
+        "narrator": "",
+        "language": "fr",
+        "tags": "",
+        "synopsis": "",
+    }
+
+
+def _sync_packet_file_metadata(packet: Dict[str, object]) -> None:
+    files = packet.get("files") if isinstance(packet.get("files"), list) else []
+    current = packet.get("file_metadata") if isinstance(packet.get("file_metadata"), dict) else {}
+    updated: Dict[str, Dict[str, str]] = {}
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "")
+        if not name:
+            continue
+        previous = current.get(name) if isinstance(current.get(name), dict) else {}
+        updated[name] = {**_default_file_metadata(name), **{k: str(v) for k, v in previous.items()}}
+    packet["file_metadata"] = updated
+
+
+def _packet_missing_metadata(packet: Dict[str, object]) -> List[str]:
+    required = ("title", "author", "synopsis")
+    missing: List[str] = []
+    file_metadata = packet.get("file_metadata") if isinstance(packet.get("file_metadata"), dict) else {}
+    if not file_metadata:
+        return ["files"]
+    for file_name, metadata in file_metadata.items():
+        if not isinstance(metadata, dict):
+            missing.append(f"{file_name}:metadata")
+            continue
+        for field in required:
+            if not str(metadata.get(field, "")).strip():
+                missing.append(f"{file_name}:{field}")
+    return missing
 
 
 def _packet_payload_preview(packet: Dict[str, object]) -> Dict[str, object]:
-    metadata = packet.get("metadata") if isinstance(packet.get("metadata"), dict) else {}
+    file_metadata = packet.get("file_metadata") if isinstance(packet.get("file_metadata"), dict) else {}
+    per_file_metadata = []
+    for file_name, metadata in file_metadata.items():
+        if not isinstance(metadata, dict):
+            continue
+        per_file_metadata.append(
+            {
+                "file": file_name,
+                "title": metadata.get("title", ""),
+                "authorName": metadata.get("author", ""),
+                "series": metadata.get("series", ""),
+                "narratorName": metadata.get("narrator", ""),
+                "language": metadata.get("language", "fr"),
+                "description": metadata.get("synopsis", ""),
+                "tags": [tag.strip() for tag in str(metadata.get("tags", "")).split(",") if tag.strip()],
+            }
+        )
     return {
         "library_id": _load_config().get("audiobookshelf_library_id"),
         "files": [item.get("name") for item in packet.get("files", []) if isinstance(item, dict) and item.get("name")],
-        "media": {
-            "title": metadata.get("title", ""),
-            "authorName": metadata.get("author", ""),
-            "series": metadata.get("series", ""),
-            "narratorName": metadata.get("narrator", ""),
-            "language": metadata.get("language", "fr"),
-            "description": metadata.get("synopsis", ""),
-            "tags": [tag.strip() for tag in str(metadata.get("tags", "")).split(",") if tag.strip()],
-        },
+        "per_file_media": per_file_metadata,
+        "debug_payload": bool(_load_config().get("payload_debug_enabled", False)),
     }
 
 
@@ -325,6 +339,15 @@ def _refresh_packet_metrics(packet: Dict[str, object]) -> None:
     files = packet.get("files") if isinstance(packet.get("files"), list) else []
     packet["file_count"] = len(files)
     packet["size_mb"] = round(sum(int(item.get("size", 0)) for item in files if isinstance(item, dict)) / (1024 * 1024), 2)
+    _sync_packet_file_metadata(packet)
+    missing = _packet_missing_metadata(packet)
+    packet["validation"] = {"ok": len(missing) == 0, "missing": missing}
+    if packet["file_count"] == 0:
+        packet["status"] = "en_preparation"
+    elif missing:
+        packet["status"] = "en_preparation"
+    elif str(packet.get("status")) in {"en_preparation", "en_attente"}:
+        packet["status"] = "pret"
 
 
 def _channel_configured(config: Dict[str, object], channel: str) -> bool:
@@ -345,9 +368,10 @@ def _build_changelog_message(packet: Dict[str, object]) -> str:
     message = str(changelog.get("edited") or changelog.get("draft") or "").strip()
     if message:
         return message
-    metadata = packet.get("metadata") if isinstance(packet.get("metadata"), dict) else {}
-    title = str(metadata.get("title") or packet.get("name") or "Publication")
-    author = str(metadata.get("author") or "")
+    file_metadata = packet.get("file_metadata") if isinstance(packet.get("file_metadata"), dict) else {}
+    first_metadata = next((m for m in file_metadata.values() if isinstance(m, dict)), {})
+    title = str(first_metadata.get("title") or packet.get("name") or "Publication")
+    author = str(first_metadata.get("author") or "")
     if author:
         return f"📚 {title} — {author}\nPublication terminée."
     return f"📚 {title}\nPublication terminée."
@@ -395,6 +419,7 @@ def _cleanup_packet_files(packet: Dict[str, object], delete_outputs: bool) -> Li
 
 
 def _mark_packet_published(packet: Dict[str, object], request_changelog: Optional[str] = None) -> None:
+    _refresh_packet_metrics(packet)
     validation = packet.get("validation") if isinstance(packet.get("validation"), dict) else {"ok": False}
     if not validation.get("ok"):
         missing = validation.get("missing", [])
@@ -528,6 +553,10 @@ def _default_config() -> Dict:
         "notify_telegram_chat_id": "",
         "notify_whatsapp_recipient": "",
         "notify_email_to": "",
+        "notify_email_smtp_host": "",
+        "notify_email_smtp_port": "",
+        "notify_plugin_config": {},
+        "payload_debug_enabled": False,
         "ollama_mcp_tools": json.dumps(
             [
                 {
@@ -736,18 +765,20 @@ def _run_ollama_metadata_search(folder_name: str, config: Dict) -> Dict:
 
 
 def _generate_packet_changelog_draft(packet: Dict[str, object], config: Dict) -> Dict[str, object]:
-    metadata = packet.get("metadata") if isinstance(packet.get("metadata"), dict) else {}
+    file_metadata = packet.get("file_metadata") if isinstance(packet.get("file_metadata"), dict) else {}
     files = packet.get("files") if isinstance(packet.get("files"), list) else []
     file_names = [str(item.get("name")) for item in files if isinstance(item, dict) and item.get("name")]
 
-    title = str(metadata.get("title") or packet.get("name") or "Titre inconnu")
-    author = str(metadata.get("author") or "Auteur inconnu")
-    synopsis = str(metadata.get("synopsis") or "")
-    tags = [tag.strip() for tag in str(metadata.get("tags", "")).split(",") if tag.strip()]
+    first_metadata = next((m for m in file_metadata.values() if isinstance(m, dict)), {})
+    title = str(first_metadata.get("title") or packet.get("name") or "Titre inconnu")
+    author = str(first_metadata.get("author") or "Auteur inconnu")
+    synopsis = str(first_metadata.get("synopsis") or "")
+    tags = [tag.strip() for tag in str(first_metadata.get("tags", "")).split(",") if tag.strip()]
 
     prompt = (
-        "Tu es un assistant qui rédige un brouillon de changelog de publication audiobook en français. "
-        "Réponds avec du texte brut, concis (4 à 8 lignes), lisible et éditable humainement.\n\n"
+        "Tu es un assistant de communication qui rédige un message de publication audiobook en français. "
+        "Le résultat doit être agréable à lire pour des lecteurs humains: ton chaleureux, structure claire, emojis modérés. "
+        "Réponds en texte brut éditorial, 6 à 12 lignes, avec un titre et une section points clés.\n\n"
         f"Titre: {title}\n"
         f"Auteur: {author}\n"
         f"Synopsis: {synopsis}\n"
@@ -770,12 +801,13 @@ def _generate_packet_changelog_draft(packet: Dict[str, object], config: Dict) ->
             logger.warning("Génération changelog via Ollama indisponible: %s", exc)
 
     fallback = (
-        f"📚 Nouvelle publication disponible\n"
+        f"📚 **Nouvelle publication disponible**\n"
         f"Titre : {title}\n"
-        f"Auteur : {author}\n"
-        f"Résumé : {synopsis or 'Résumé à compléter.'}\n"
-        f"Fichiers : {len(file_names)}\n"
-        "#audiobook #nouveaute"
+        f"Auteur : {author}\n\n"
+        "✨ Points clés\n"
+        f"• Résumé : {synopsis or 'Résumé à compléter.'}\n"
+        f"• Fichiers inclus : {len(file_names)}\n"
+        "Bonne écoute à toutes et à tous !"
     )
     return {"draft": fallback, "source": "fallback"}
 
@@ -1716,17 +1748,8 @@ def api_integration_packets_create():
         "progress": 0,
         "created_at": int(time.time()),
         "files": selected_files,
-        "metadata": {
-            "title": packet_name,
-            "author": "",
-            "series": "",
-            "volume": "",
-            "narrator": "",
-            "language": "fr",
-            "tags": "",
-            "synopsis": "",
-        },
-        "validation": {"ok": False, "missing": ["author", "synopsis"]},
+        "file_metadata": {},
+        "validation": {"ok": False, "missing": []},
         "changelog": {"draft": "", "edited": "", "source": "none", "updated_at": None},
     }
     _refresh_packet_metrics(packet)
@@ -1752,6 +1775,7 @@ def api_integration_packet_update_metadata(packet_id: str):
     _bootstrap_upload_packets()
     payload = request.get_json(silent=True) or {}
     metadata = payload.get("metadata")
+    target_file = str(payload.get("filename") or "").strip()
     if not isinstance(metadata, dict):
         return _api_error("Le champ 'metadata' doit être un objet", code="invalid_metadata")
 
@@ -1760,13 +1784,21 @@ def api_integration_packet_update_metadata(packet_id: str):
         if not packet:
             return _api_error("Paquet introuvable", 404, code="packet_not_found")
 
-        current_metadata = packet.get("metadata") if isinstance(packet.get("metadata"), dict) else {}
-        merged = {**current_metadata, **{k: str(v) for k, v in metadata.items()}}
-        missing = [key for key in ("title", "author", "synopsis") if not str(merged.get(key, "")).strip()]
-        packet["metadata"] = merged
-        packet["validation"] = {"ok": len(missing) == 0, "missing": missing}
-        if len(missing) == 0:
-            packet["status"] = "pret"
+        _sync_packet_file_metadata(packet)
+        file_metadata = packet.get("file_metadata") if isinstance(packet.get("file_metadata"), dict) else {}
+        if not file_metadata:
+            return _api_error("Le paquet ne contient aucun fichier", code="packet_empty")
+
+        if not target_file:
+            first_file = next(iter(file_metadata.keys()), "")
+            target_file = first_file
+        if target_file not in file_metadata:
+            return _api_error("Fichier de métadonnées introuvable", 404, code="packet_file_not_found")
+
+        merged = {**_default_file_metadata(target_file), **file_metadata[target_file], **{k: str(v) for k, v in metadata.items()}}
+        file_metadata[target_file] = merged
+        packet["file_metadata"] = file_metadata
+        _refresh_packet_metrics(packet)
     return jsonify({"ok": True, "packet": packet, "payload_preview": _packet_payload_preview(packet)})
 
 
@@ -1820,6 +1852,12 @@ def api_integration_packet_submit(packet_id: str):
     _bootstrap_upload_packets()
     payload = request.get_json(silent=True) or {}
     request_changelog = payload.get("changelog")
+    channels = payload.get("channels")
+    if not isinstance(channels, list) or not channels:
+        channels = ["discord", "telegram", "whatsapp", "email"]
+    channels = [str(channel).strip().lower() for channel in channels if str(channel).strip()]
+    channels = [channel for channel in channels if channel in PACKET_CHANNELS]
+    config = _load_config()
     with packets_lock:
         packet = upload_packets.get(packet_id)
         if not packet:
@@ -1834,6 +1872,7 @@ def api_integration_packet_submit(packet_id: str):
                 code="metadata_incomplete",
                 details={"missing": validation.get("missing", [])},
             )
+        delivery = _deliver_changelog(packet, channels, config)
 
     return jsonify(
         {
@@ -1847,6 +1886,8 @@ def api_integration_packet_submit(packet_id: str):
             ],
             "payload_preview": _packet_payload_preview(packet),
             "changelog": packet.get("changelog", {}),
+            "deliveries": delivery.get("deliveries", []),
+            "delivery_message": delivery.get("message", ""),
         }
     )
 
@@ -1859,15 +1900,18 @@ def api_integration_packet_broadcast(packet_id: str):
     if not isinstance(channels, list) or not channels:
         channels = ["discord", "telegram", "whatsapp", "email"]
     channels = [str(channel).strip().lower() for channel in channels if str(channel).strip()]
-    channels = [channel for channel in channels if channel in {"discord", "telegram", "whatsapp", "email"}]
+    channels = [channel for channel in channels if channel in PACKET_CHANNELS]
     if not channels:
         return _api_error("Aucun canal valide fourni", code="invalid_channels")
 
     config = _load_config()
+    plugin_config = payload.get("plugin_config") if isinstance(payload.get("plugin_config"), dict) else {}
     with packets_lock:
         packet = upload_packets.get(packet_id)
         if not packet:
             return _api_error("Paquet introuvable", 404, code="packet_not_found")
+        if plugin_config:
+            packet["plugin_config"] = plugin_config
         delivery = _deliver_changelog(packet, channels, config)
 
     return jsonify({"ok": True, "packet_id": packet_id, **delivery})
@@ -1889,7 +1933,7 @@ def api_integration_packet_schedule(packet_id: str):
     if not isinstance(channels, list) or not channels:
         channels = ["discord", "telegram", "whatsapp", "email"]
     channels = [str(channel).strip().lower() for channel in channels if str(channel).strip()]
-    channels = [channel for channel in channels if channel in {"discord", "telegram", "whatsapp", "email"}]
+    channels = [channel for channel in channels if channel in PACKET_CHANNELS]
 
     job_id = hashlib.sha1(f"{packet_id}:{publish_at}:{time.time()}".encode("utf-8")).hexdigest()[:12]
     with packets_lock:
@@ -1897,13 +1941,20 @@ def api_integration_packet_schedule(packet_id: str):
         if not packet:
             return _api_error("Paquet introuvable", 404, code="packet_not_found")
         packet["status"] = "planifie"
+        packet["schedule"] = {
+            "publish_at": publish_at,
+            "channels": channels,
+            "force_publish": bool(payload.get("force_publish", False)),
+        }
         packet_schedule_jobs[job_id] = {
             "id": job_id,
             "packet_id": packet_id,
             "status": "scheduled",
             "publish_at": publish_at,
             "channels": channels,
+            "plugin_config": payload.get("plugin_config") if isinstance(payload.get("plugin_config"), dict) else {},
             "cleanup_after_publish": bool(payload.get("cleanup_after_publish", False)),
+            "force_publish": bool(payload.get("force_publish", False)),
             "created_at": int(time.time()),
             "completed_at": None,
             "delivery": None,
@@ -1932,17 +1983,21 @@ def api_integration_scheduler_run_job(job_id: str):
         packet = upload_packets.get(str(job.get("packet_id")))
         if not packet:
             return _api_error("Paquet introuvable", 404, code="packet_not_found")
-        try:
-            _mark_packet_published(packet)
-        except ValueError:
-            validation = packet.get("validation") if isinstance(packet.get("validation"), dict) else {"ok": False}
-            job["status"] = "failed"
-            return _api_error(
-                "Métadonnées incomplètes: complétez les champs obligatoires.",
-                400,
-                code="metadata_incomplete",
-                details={"missing": validation.get("missing", [])},
-            )
+        if bool(job.get("force_publish", False)):
+            packet["status"] = "publie"
+            packet["progress"] = 100
+        else:
+            try:
+                _mark_packet_published(packet)
+            except ValueError:
+                validation = packet.get("validation") if isinstance(packet.get("validation"), dict) else {"ok": False}
+                job["status"] = "failed"
+                return _api_error(
+                    "Métadonnées incomplètes: complétez les champs obligatoires.",
+                    400,
+                    code="metadata_incomplete",
+                    details={"missing": validation.get("missing", [])},
+                )
 
         delivery = _deliver_changelog(packet, list(job.get("channels") or []), config)
         job["status"] = "completed"

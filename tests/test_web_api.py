@@ -553,7 +553,8 @@ class TestSprint2PacketsApi(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_packets_list_and_detail(self):
-        (self.media_dir / "Livre A").mkdir(parents=True)
+        (self.output_dir / "Livre-A.m4b").write_bytes(b"a")
+        self.client.post('/api/integrations/audiobookshelf/packets', json={'output_files': ['Livre-A.m4b']})
         response = self.client.get('/api/integrations/audiobookshelf/packets')
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
@@ -566,12 +567,13 @@ class TestSprint2PacketsApi(unittest.TestCase):
         self.assertIn('payload_preview', detail_payload)
 
     def test_packets_metadata_update_marks_packet_ready(self):
-        (self.media_dir / "Livre B").mkdir(parents=True)
+        (self.output_dir / "Livre-B.m4b").write_bytes(b"b")
+        self.client.post('/api/integrations/audiobookshelf/packets', json={'output_files': ['Livre-B.m4b']})
         packet_id = self.client.get('/api/integrations/audiobookshelf/packets').get_json()['packets'][0]['id']
 
         response = self.client.put(
             f'/api/integrations/audiobookshelf/packets/{packet_id}/metadata',
-            json={'metadata': {'title': 'Titre', 'author': 'Auteur', 'synopsis': 'Résumé'}}
+            json={'filename': 'Livre-B.m4b', 'metadata': {'title': 'Titre', 'author': 'Auteur', 'synopsis': 'Résumé'}}
         )
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
@@ -579,7 +581,8 @@ class TestSprint2PacketsApi(unittest.TestCase):
         self.assertEqual(payload['packet']['status'], 'pret')
 
     def test_packets_submit_requires_complete_metadata(self):
-        (self.media_dir / "Livre C").mkdir(parents=True)
+        (self.output_dir / "Livre-C.m4b").write_bytes(b"c")
+        self.client.post('/api/integrations/audiobookshelf/packets', json={'output_files': ['Livre-C.m4b']})
         packet_id = self.client.get('/api/integrations/audiobookshelf/packets').get_json()['packets'][0]['id']
 
         invalid_submit = self.client.post(f'/api/integrations/audiobookshelf/packets/{packet_id}/submit')
@@ -588,7 +591,7 @@ class TestSprint2PacketsApi(unittest.TestCase):
 
         self.client.put(
             f'/api/integrations/audiobookshelf/packets/{packet_id}/metadata',
-            json={'metadata': {'title': 'Titre', 'author': 'Auteur', 'synopsis': 'Résumé'}}
+            json={'filename': 'Livre-C.m4b', 'metadata': {'title': 'Titre', 'author': 'Auteur', 'synopsis': 'Résumé'}}
         )
         valid_submit = self.client.post(f'/api/integrations/audiobookshelf/packets/{packet_id}/submit')
         self.assertEqual(valid_submit.status_code, 200)
@@ -608,6 +611,11 @@ class TestSprint2PacketsApi(unittest.TestCase):
         self.assertEqual(payload['packet']['name'], 'Paquet Output')
         self.assertEqual(payload['packet']['file_count'], 1)
 
+    def test_packets_are_not_auto_bootstrapped(self):
+        response = self.client.get('/api/integrations/audiobookshelf/packets')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()['packets'], [])
+
     def test_packets_remove_file(self):
         out = self.output_dir / 'A.m4b'
         out.write_bytes(b'aaa')
@@ -625,7 +633,8 @@ class TestSprint2PacketsApi(unittest.TestCase):
         self.assertEqual(payload['packet']['file_count'], 0)
 
     def test_packets_changelog_draft_and_manual_update(self):
-        (self.media_dir / "Livre D").mkdir(parents=True)
+        (self.output_dir / "Livre-D.m4b").write_bytes(b"d")
+        self.client.post('/api/integrations/audiobookshelf/packets', json={'output_files': ['Livre-D.m4b']})
         packet_id = self.client.get('/api/integrations/audiobookshelf/packets').get_json()['packets'][0]['id']
 
         draft = self.client.post(f'/api/integrations/audiobookshelf/packets/{packet_id}/changelog/draft')
@@ -675,11 +684,12 @@ class TestSprint3PlanningAndBroadcastApi(unittest.TestCase):
         self.tmp.cleanup()
 
     def _prepare_ready_packet(self):
-        (self.media_dir / "Livre Sprint3").mkdir(parents=True)
+        (self.output_dir / "Livre-Sprint3.m4b").write_bytes(b"x")
+        self.client.post('/api/integrations/audiobookshelf/packets', json={'output_files': ['Livre-Sprint3.m4b']})
         packet_id = self.client.get('/api/integrations/audiobookshelf/packets').get_json()['packets'][0]['id']
         self.client.put(
             f'/api/integrations/audiobookshelf/packets/{packet_id}/metadata',
-            json={'metadata': {'title': 'Titre Sprint3', 'author': 'Auteur Sprint3', 'synopsis': 'Résumé sprint3'}}
+            json={'filename': 'Livre-Sprint3.m4b', 'metadata': {'title': 'Titre Sprint3', 'author': 'Auteur Sprint3', 'synopsis': 'Résumé sprint3'}}
         )
         self.client.put(
             f'/api/integrations/audiobookshelf/packets/{packet_id}/changelog',
@@ -706,6 +716,24 @@ class TestSprint3PlanningAndBroadcastApi(unittest.TestCase):
         run_payload = run.get_json()
         self.assertEqual(run_payload['job']['status'], 'completed')
         self.assertEqual(run_payload['packet']['status'], 'publie')
+
+    def test_schedule_force_publish_bypasses_metadata_validation(self):
+        out = self.output_dir / 'Force.m4b'
+        out.write_bytes(b'force')
+        packet = self.client.post(
+            '/api/integrations/audiobookshelf/packets',
+            json={'output_files': ['Force.m4b'], 'name': 'Paquet Force'}
+        ).get_json()['packet']
+        publish_at = int(web_app.time.time()) + 3600
+        scheduled = self.client.post(
+            f"/api/integrations/audiobookshelf/packets/{packet['id']}/schedule",
+            json={'publish_at': publish_at, 'channels': ['discord'], 'force_publish': True}
+        )
+        self.assertEqual(scheduled.status_code, 200)
+        job_id = scheduled.get_json()['job']['id']
+        run = self.client.post(f'/api/integrations/audiobookshelf/scheduler/jobs/{job_id}/run')
+        self.assertEqual(run.status_code, 200)
+        self.assertEqual(run.get_json()['packet']['status'], 'publie')
 
     def test_broadcast_reports_unconfigured_channels(self):
         packet_id = self._prepare_ready_packet()

@@ -535,6 +535,36 @@ class TestSprint2PacketsApi(unittest.TestCase):
         self.assertEqual(valid_submit.status_code, 200)
         self.assertTrue(valid_submit.get_json()['ok'])
 
+    def test_packets_create_from_outputs(self):
+        out = self.output_dir / 'Mon-Livre.m4b'
+        out.write_bytes(b'12345')
+
+        response = self.client.post(
+            '/api/integrations/audiobookshelf/packets',
+            json={'output_files': ['Mon-Livre.m4b'], 'name': 'Paquet Output'}
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['ok'])
+        self.assertEqual(payload['packet']['name'], 'Paquet Output')
+        self.assertEqual(payload['packet']['file_count'], 1)
+
+    def test_packets_remove_file(self):
+        out = self.output_dir / 'A.m4b'
+        out.write_bytes(b'aaa')
+        packet = self.client.post(
+            '/api/integrations/audiobookshelf/packets',
+            json={'output_files': ['A.m4b'], 'name': 'Paquet A'}
+        ).get_json()['packet']
+
+        response = self.client.delete(
+            f"/api/integrations/audiobookshelf/packets/{packet['id']}/files",
+            json={'filename': 'A.m4b'}
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload['packet']['file_count'], 0)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -258,16 +258,26 @@ def _bootstrap_upload_packets() -> None:
 
         for index, folder in enumerate(folders):
             packet_id = hashlib.sha1(str(folder.name).encode("utf-8")).hexdigest()[:10]
+            packet_files = []
+            if folder.exists():
+                packet_files = [
+                    {
+                        "name": item.name,
+                        "size": item.stat().st_size,
+                    }
+                    for item in _safe_iterdir(folder)
+                    if item.is_file() and item.suffix.lower() in AUDIO_EXTENSIONS
+                ]
+
             upload_packets[packet_id] = {
                 "id": packet_id,
                 "name": folder.name,
                 "status": PACKET_STATUSES[index % len(PACKET_STATUSES)],
                 "progress": 0 if index % 2 == 0 else 55,
                 "created_at": int(time.time()) - (index * 3600),
-                "file_count": len([item for item in _safe_iterdir(folder) if item.is_file()]) if folder.exists() else 0,
-                "size_mb": round(sum(item.stat().st_size for item in _safe_iterdir(folder) if item.is_file()) / (1024 * 1024), 2)
-                if folder.exists()
-                else 0,
+                "files": packet_files,
+                "file_count": len(packet_files),
+                "size_mb": round(sum(item["size"] for item in packet_files) / (1024 * 1024), 2),
                 "metadata": {
                     "title": folder.name,
                     "author": "",
@@ -286,6 +296,7 @@ def _packet_payload_preview(packet: Dict[str, object]) -> Dict[str, object]:
     metadata = packet.get("metadata") if isinstance(packet.get("metadata"), dict) else {}
     return {
         "library_id": _load_config().get("audiobookshelf_library_id"),
+        "files": [item.get("name") for item in packet.get("files", []) if isinstance(item, dict) and item.get("name")],
         "media": {
             "title": metadata.get("title", ""),
             "authorName": metadata.get("author", ""),
@@ -296,6 +307,12 @@ def _packet_payload_preview(packet: Dict[str, object]) -> Dict[str, object]:
             "tags": [tag.strip() for tag in str(metadata.get("tags", "")).split(",") if tag.strip()],
         },
     }
+
+
+def _refresh_packet_metrics(packet: Dict[str, object]) -> None:
+    files = packet.get("files") if isinstance(packet.get("files"), list) else []
+    packet["file_count"] = len(files)
+    packet["size_mb"] = round(sum(int(item.get("size", 0)) for item in files if isinstance(item, dict)) / (1024 * 1024), 2)
 
 def _save_archive_fingerprint_to_db(
     archive_name: str,
@@ -1488,6 +1505,58 @@ def api_integration_packets():
     return jsonify({"packets": payload, "statuses": PACKET_STATUSES})
 
 
+@app.route("/api/integrations/audiobookshelf/packets", methods=["POST"])
+def api_integration_packets_create():
+    _bootstrap_upload_packets()
+    payload = request.get_json(silent=True) or {}
+    output_files = payload.get("output_files")
+    packet_name = str(payload.get("name") or "").strip()
+    if not isinstance(output_files, list) or not output_files:
+        return _api_error("Le champ 'output_files' doit contenir au moins un fichier", code="invalid_output_files")
+
+    selected_files: List[Dict[str, object]] = []
+    for name in output_files:
+        if not isinstance(name, str) or not name.strip():
+            continue
+        output_file = _resolve_output_file(name)
+        if not output_file or not output_file.exists() or not output_file.is_file():
+            return _api_error(f"Fichier output introuvable: {name}", 404, code="output_file_not_found")
+        selected_files.append({"name": output_file.name, "size": output_file.stat().st_size})
+
+    if not selected_files:
+        return _api_error("Aucun fichier output valide fourni", code="invalid_output_files")
+
+    if not packet_name:
+        packet_name = Path(selected_files[0]["name"]).stem
+
+    packet_id = hashlib.sha1(f"{packet_name}:{time.time()}".encode("utf-8")).hexdigest()[:10]
+    packet = {
+        "id": packet_id,
+        "name": packet_name,
+        "status": "en_preparation",
+        "progress": 0,
+        "created_at": int(time.time()),
+        "files": selected_files,
+        "metadata": {
+            "title": packet_name,
+            "author": "",
+            "series": "",
+            "volume": "",
+            "narrator": "",
+            "language": "fr",
+            "tags": "",
+            "synopsis": "",
+        },
+        "validation": {"ok": False, "missing": ["author", "synopsis"]},
+    }
+    _refresh_packet_metrics(packet)
+
+    with packets_lock:
+        upload_packets[packet_id] = packet
+
+    return jsonify({"ok": True, "packet": packet, "payload_preview": _packet_payload_preview(packet)})
+
+
 @app.route("/api/integrations/audiobookshelf/packets/<packet_id>")
 def api_integration_packet_detail(packet_id: str):
     _bootstrap_upload_packets()
@@ -1552,6 +1621,29 @@ def api_integration_packet_submit(packet_id: str):
             "payload_preview": _packet_payload_preview(packet),
         }
     )
+
+
+@app.route("/api/integrations/audiobookshelf/packets/<packet_id>/files", methods=["DELETE"])
+def api_integration_packet_remove_file(packet_id: str):
+    _bootstrap_upload_packets()
+    payload = request.get_json(silent=True) or {}
+    filename = payload.get("filename")
+    if not isinstance(filename, str) or not filename.strip():
+        return _api_error("Le champ 'filename' est requis", code="invalid_filename")
+
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+        if not packet:
+            return _api_error("Paquet introuvable", 404, code="packet_not_found")
+
+        files = packet.get("files") if isinstance(packet.get("files"), list) else []
+        updated_files = [item for item in files if not (isinstance(item, dict) and item.get("name") == filename)]
+        if len(updated_files) == len(files):
+            return _api_error("Fichier introuvable dans ce paquet", 404, code="packet_file_not_found")
+        packet["files"] = updated_files
+        _refresh_packet_metrics(packet)
+
+    return jsonify({"ok": True, "packet": packet, "payload_preview": _packet_payload_preview(packet)})
 
 
 @app.route("/api/library")

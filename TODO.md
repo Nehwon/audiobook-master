@@ -1,6 +1,6 @@
 # TODO produit & technique (pilotage par sprints)
 
-## Sprint 1 — Socle d'exécution & visibilité (en cours)
+## Sprint 1 — Socle d'exécution & visibilité (terminé)
 
 ### Objectifs
 - [x] Préparer un plan de sprint exploitable depuis `TODO.md`.
@@ -36,16 +36,16 @@
 - [x] Scheduler fiable avec état de jobs.
 - [x] Connecteurs de diffusion initiale.
 
-## Sprint 4 — Écosystème plugins
+## Sprint 4 — Écosystème plugins (en cours)
 
 ### Objectifs
-- [ ] Mettre à niveau en priorité l'intégration/plugin Audiobookshelf.
+- [x] Mettre à niveau en priorité l'intégration/plugin Audiobookshelf.
 - [ ] Concevoir un marketplace de plugins (découverte + installation).
-- [ ] Définir un contrat de versionnement et de compatibilité des plugins.
+- [x] Définir un contrat de versionnement et de compatibilité des plugins.
 
 ### Livrables attendus
-- [ ] Spécification de registre plugins.
-- [ ] Prototype d'installation de plugin depuis source distante.
+- [x] Spécification de registre plugins.
+- [x] Prototype d'installation de plugin depuis source distante.
 
 ---
 

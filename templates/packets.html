@@ -21,12 +21,13 @@
     .muted { color: #64748b; }
     .files-list { display: grid; gap: 6px; margin-bottom: 8px; }
     .file-chip { border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 8px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .wysiwyg { min-height: 180px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #fff; overflow:auto; }
   </style>
 </head>
 <body>
   <header>
     <h2 style="margin:0">Sprint 3 — Planification & diffusion Audiobookshelf</h2>
-    <p class="muted" style="margin:6px 0 0">Gestion des paquets avec planification différée, diffusion du changelog et nettoyage post-publication.</p>
+    <p class="muted" style="margin:6px 0 0">Un paquet = groupe de fichiers .m4b depuis output, avec métadonnées gérées fichier par fichier.</p>
   </header>
 
   <main>
@@ -61,6 +62,9 @@
       <div id="details" style="display:none">
         <h4>Fichiers du paquet</h4>
         <div id="packetFiles" class="files-list"></div>
+        <label>Fichier à éditer
+          <select id="metadataFile" onchange="loadSelectedFileMetadata()"></select>
+        </label>
         <label>Titre <input id="mdTitle" /></label>
         <label>Auteur <input id="mdAuthor" /></label>
         <label>Série <input id="mdSeries" /></label>
@@ -69,24 +73,50 @@
         <label>Tags (virgules) <input id="mdTags" /></label>
         <label>Synopsis <textarea id="mdSynopsis" rows="4"></textarea></label>
         <div class="row">
-          <button onclick="saveMetadata()">Sauvegarder métadonnées</button>
+          <button onclick="saveMetadata()">Sauvegarder métadonnées fichier</button>
           <button onclick="submitPacket()">Publier</button>
         </div>
+
+        <h4>Programmation push</h4>
         <div class="row" style="margin-top:8px">
-          <input id="scheduleTs" type="number" placeholder="Timestamp publication (unix)" />
+          <input id="scheduleDateTime" type="datetime-local" />
+          <label style="display:flex;align-items:center;gap:6px;margin:0"><input id="forcePublish" type="checkbox"> Forcer la publication</label>
           <button class="secondary" onclick="schedulePacket()">Planifier</button>
           <button class="secondary" onclick="runNextScheduledJob()">Exécuter job planifié</button>
         </div>
         <p id="validationMsg" class="muted"></p>
-        <h4>Changelog (assisté IA + édition manuelle)</h4>
+
+        <h4>Changelog (éditeur WYSIWYG)</h4>
         <div class="row" style="margin-bottom:8px">
-          <button class="secondary" onclick="generateChangelogDraft()">Générer brouillon IA</button>
-          <button class="secondary" onclick="saveEditedChangelog()">Sauvegarder version éditée</button>
-          <button class="secondary" onclick="broadcastChangelog()">Diffuser changelog</button>
+          <button class="secondary" onclick="document.execCommand('bold',false,null)">Gras</button>
+          <button class="secondary" onclick="document.execCommand('italic',false,null)">Italique</button>
+          <button class="secondary" onclick="document.execCommand('insertUnorderedList',false,null)">Liste</button>
+          <button class="secondary" onclick="generateChangelogDraft()">Brouillon AI</button>
+          <button class="secondary" onclick="saveEditedChangelog()">Sauvegarder</button>
+          <button class="secondary" onclick="broadcastChangelog()">Diffuser</button>
           <button class="danger" onclick="cleanupPacket()">Nettoyer paquet</button>
         </div>
-        <textarea id="changelogEdited" rows="7" placeholder="Rédigez/éditez ici le message de changelog avant publication."></textarea>
+        <div id="changelogEdited" class="wysiwyg" contenteditable="true"></div>
         <p id="changelogSource" class="muted"></p>
+
+        <h4>Vecteurs de publication (plugins messages)</h4>
+        <div class="row">
+          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="discord" checked>Discord</label>
+          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="telegram" checked>Telegram</label>
+          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="whatsapp" checked>WhatsApp</label>
+          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="channel" value="email" checked>Email</label>
+        </div>
+        <label>Config plugin Discord (API/Webhook)
+          <input id="cfgDiscord" placeholder="https://discord.com/api/webhooks/..." />
+        </label>
+        <label>Config plugin Telegram (Bot/Channel)
+          <input id="cfgTelegram" placeholder="bot_token|chat_id" />
+        </label>
+        <label>Config plugin Email (SMTP)
+          <input id="cfgSmtp" placeholder="smtp.example.com:587|sender@example.com" />
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;margin:0 0 8px 0"><input id="payloadDebug" type="checkbox"> Payload debug (désactivé par défaut)</label>
+
         <p id="scheduleInfo" class="muted"></p>
         <h4>Payload Audiobookshelf</h4>
         <pre id="payloadPreview">{}</pre>
@@ -97,102 +127,59 @@
   <script>
     let packets = [];
     let selectedId = null;
+    let currentPacket = null;
 
-    function escapeHtml(value) {
-      return String(value || '').replace(/[&<>\"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
-    }
-
-    function fmtMb(bytes) {
-      return `${(Number(bytes || 0) / (1024 * 1024)).toFixed(2)} MB`;
-    }
+    function escapeHtml(value) { return String(value || '').replace(/[&<>\"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c])); }
+    function fmtMb(bytes) { return `${(Number(bytes || 0) / (1024 * 1024)).toFixed(2)} MB`; }
+    function toUnix(dateTimeValue) { return Math.floor(new Date(dateTimeValue).getTime() / 1000); }
+    function fromUnix(ts) { const d = new Date(Number(ts || 0) * 1000); return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0,16); }
+    function selectedChannels() { return Array.from(document.querySelectorAll('.channel:checked')).map(el => el.value); }
+    function pluginConfig() { return { discord: document.getElementById('cfgDiscord').value, telegram: document.getElementById('cfgTelegram').value, smtp: document.getElementById('cfgSmtp').value }; }
+    function getChangelogText() { return document.getElementById('changelogEdited').innerText.trim(); }
 
     async function loadOutputs() {
-      const resp = await fetch('/api/outputs');
-      const outputs = await resp.json();
+      const resp = await fetch('/api/outputs'); const outputs = await resp.json();
       const container = document.getElementById('outputsList');
-      if (!outputs.length) {
-        container.innerHTML = '<div class="muted">Aucun fichier .m4b dans Output.</div>';
-        return;
-      }
-      container.innerHTML = outputs.map(file => `
-        <label class="file-chip">
-          <span><input type="checkbox" class="output-file" value="${escapeHtml(file.name)}"> ${escapeHtml(file.name)} <span class="muted">(${fmtMb(file.size)})</span></span>
-        </label>
-      `).join('');
+      if (!outputs.length) { container.innerHTML = '<div class="muted">Aucun fichier .m4b dans Output.</div>'; return; }
+      container.innerHTML = outputs.map(file => `<label class="file-chip"><span><input type="checkbox" class="output-file" value="${escapeHtml(file.name)}"> ${escapeHtml(file.name)} <span class="muted">(${fmtMb(file.size)})</span></span></label>`).join('');
     }
 
     async function createPacketFromOutputs() {
-      const selected = [...document.querySelectorAll('.output-file:checked')].map(cb => cb.value);
-      if (!selected.length) {
-        alert('Sélectionnez au moins un fichier output.');
-        return;
-      }
-      const name = document.getElementById('newPacketName').value;
-      const resp = await fetch('/api/integrations/audiobookshelf/packets', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ output_files: selected, name })
-      });
+      const selected = Array.from(document.querySelectorAll('.output-file:checked')).map(i => i.value);
+      if (!selected.length) return alert('Sélectionnez au moins un fichier .m4b');
+      const name = document.getElementById('newPacketName').value.trim();
+      const resp = await fetch('/api/integrations/audiobookshelf/packets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ output_files: selected, name }) });
       const data = await resp.json();
-      if (!resp.ok) {
-        alert(data.error || 'Impossible de créer le paquet');
-        return;
-      }
+      if (!resp.ok) return alert(data.error || 'Impossible de créer le paquet');
       document.getElementById('newPacketName').value = '';
-      await loadPackets();
-      await openPacket(data.packet.id);
+      await loadPackets(); await openPacket(data.packet.id);
     }
 
     async function loadPackets() {
       const status = document.getElementById('statusFilter').value || '';
       const resp = await fetch('/api/integrations/audiobookshelf/packets' + (status ? ('?status=' + encodeURIComponent(status)) : ''));
-      const data = await resp.json();
-      packets = data.packets || [];
-
+      const data = await resp.json(); packets = data.packets || [];
       const filter = document.getElementById('statusFilter');
       if (!filter.dataset.loaded) {
         filter.innerHTML = '<option value="">Tous les statuts</option>' + (data.statuses || []).map(s => `<option value="${s}">${s}</option>`).join('');
-        filter.dataset.loaded = '1';
-        filter.onchange = loadPackets;
+        filter.dataset.loaded = '1'; filter.onchange = loadPackets;
       }
-
-      document.getElementById('packetsBody').innerHTML = packets.map(packet => `
-        <tr>
-          <td>${escapeHtml(packet.name)}</td>
-          <td>${escapeHtml(packet.status)}</td>
-          <td>${packet.file_count || 0}</td>
-          <td>${packet.progress || 0}%</td>
-          <td><button class="secondary" onclick="openPacket('${packet.id}')">Ouvrir</button></td>
-        </tr>
-      `).join('');
+      document.getElementById('packetsBody').innerHTML = packets.map(packet => `<tr><td>${escapeHtml(packet.name)}</td><td>${escapeHtml(packet.status)}</td><td>${packet.file_count || 0}</td><td>${packet.progress || 0}%</td><td><button class="secondary" onclick="openPacket('${packet.id}')">Ouvrir</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Aucun paquet. Créez-en depuis Output.</td></tr>';
     }
 
     function renderPacketFiles(packet) {
       const files = Array.isArray(packet.files) ? packet.files : [];
       const container = document.getElementById('packetFiles');
-      if (!files.length) {
-        container.innerHTML = '<div class="muted">Aucun fichier dans ce paquet.</div>';
-        return;
-      }
-      container.innerHTML = files.map(file => {
-        const encodedName = encodeURIComponent(String(file.name || ''));
-        return `
-        <div class="file-chip">
-          <span>${escapeHtml(file.name)} <span class="muted">(${fmtMb(file.size)})</span></span>
-          <button class="danger" onclick="removeFileFromPacket('${packet.id}', decodeURIComponent('${encodedName}'))">Retirer</button>
-        </div>
-      `;
-      }).join('');
+      if (!files.length) { container.innerHTML = '<div class="muted">Aucun fichier dans ce paquet.</div>'; return; }
+      container.innerHTML = files.map(file => `<div class="file-chip"><span>${escapeHtml(file.name)} <span class="muted">(${fmtMb(file.size)})</span></span><button class="danger" onclick="removeFileFromPacket('${packet.id}', '${encodeURIComponent(String(file.name || ''))}')">Retirer</button></div>`).join('');
+      const select = document.getElementById('metadataFile');
+      select.innerHTML = files.map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)}</option>`).join('');
     }
 
-    async function openPacket(packetId) {
-      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${packetId}`);
-      const data = await resp.json();
-      const packet = data.packet;
-      selectedId = packet.id;
-      const md = packet.metadata || {};
-      document.getElementById('emptyState').style.display = 'none';
-      document.getElementById('details').style.display = 'block';
-      renderPacketFiles(packet);
+    function loadSelectedFileMetadata() {
+      if (!currentPacket) return;
+      const filename = document.getElementById('metadataFile').value;
+      const md = (currentPacket.file_metadata || {})[filename] || {};
       document.getElementById('mdTitle').value = md.title || '';
       document.getElementById('mdAuthor').value = md.author || '';
       document.getElementById('mdSeries').value = md.series || '';
@@ -200,163 +187,121 @@
       document.getElementById('mdLanguage').value = md.language || 'fr';
       document.getElementById('mdTags').value = md.tags || '';
       document.getElementById('mdSynopsis').value = md.synopsis || '';
-      document.getElementById('validationMsg').textContent = packet.validation && packet.validation.ok
-        ? 'Validation: OK'
-        : `Champs manquants: ${(packet.validation && packet.validation.missing || []).join(', ')}`;
+    }
+
+    async function openPacket(packetId) {
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${packetId}`); const data = await resp.json();
+      const packet = data.packet; currentPacket = packet; selectedId = packet.id;
+      document.getElementById('emptyState').style.display = 'none'; document.getElementById('details').style.display = 'block';
+      renderPacketFiles(packet); loadSelectedFileMetadata();
+      document.getElementById('validationMsg').textContent = packet.validation && packet.validation.ok ? 'Validation: OK' : `Champs manquants: ${(packet.validation && packet.validation.missing || []).join(', ')}`;
       const changelog = packet.changelog || {};
-      document.getElementById('changelogEdited').value = changelog.edited || changelog.draft || '';
-      document.getElementById('changelogSource').textContent = changelog.source
-        ? `Source brouillon: ${changelog.source}`
-        : 'Aucun brouillon généré pour le moment.';
+      document.getElementById('changelogEdited').innerText = changelog.edited || changelog.draft || '';
+      document.getElementById('changelogSource').textContent = changelog.source ? `Source brouillon: ${changelog.source}` : 'Aucun brouillon généré pour le moment.';
       document.getElementById('payloadPreview').textContent = JSON.stringify(data.payload_preview, null, 2);
+      document.getElementById('payloadDebug').checked = !!data.payload_preview?.debug_payload;
+      const plg = packet.plugin_config || {};
+      document.getElementById('cfgDiscord').value = plg.discord || '';
+      document.getElementById('cfgTelegram').value = plg.telegram || '';
+      document.getElementById('cfgSmtp').value = plg.smtp || '';
+      const scheduled = (packet.schedule || {});
+      if (scheduled.publish_at) document.getElementById('scheduleDateTime').value = fromUnix(scheduled.publish_at);
     }
 
     async function generateChangelogDraft() {
       if (!selectedId) return;
-      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/changelog/draft`, { method: 'POST' });
-      const data = await resp.json();
-      if (!resp.ok) {
-        alert(data.error || 'Impossible de générer le changelog');
-        return;
-      }
-      document.getElementById('changelogEdited').value = data.packet?.changelog?.edited || data.draft || '';
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/changelog/draft`, { method: 'POST' }); const data = await resp.json();
+      if (!resp.ok) return alert(data.error || 'Impossible de générer le changelog');
+      document.getElementById('changelogEdited').innerText = data.packet?.changelog?.edited || data.draft || '';
       document.getElementById('changelogSource').textContent = `Source brouillon: ${data.source}`;
     }
 
     async function saveEditedChangelog() {
       if (!selectedId) return;
-      const edited = document.getElementById('changelogEdited').value;
-      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/changelog`, {
-        method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ edited })
-      });
+      const edited = getChangelogText();
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/changelog`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ edited }) });
       const data = await resp.json();
-      if (!resp.ok) {
-        alert(data.error || 'Impossible de sauvegarder le changelog');
-        return;
-      }
+      if (!resp.ok) return alert(data.error || 'Impossible de sauvegarder le changelog');
       document.getElementById('changelogSource').textContent = 'Changelog édité sauvegardé.';
     }
 
     async function removeFileFromPacket(packetId, filename) {
-      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${packetId}/files`, {
-        method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ filename })
-      });
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${packetId}/files`, { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ filename: decodeURIComponent(filename) }) });
       const data = await resp.json();
-      if (!resp.ok) {
-        alert(data.error || 'Impossible de retirer le fichier');
-        return;
-      }
-      await loadPackets();
-      await openPacket(packetId);
+      if (!resp.ok) return alert(data.error || 'Impossible de retirer le fichier');
+      await loadPackets(); await openPacket(packetId);
     }
 
     async function saveMetadata() {
       if (!selectedId) return;
-      const metadata = {
-        title: document.getElementById('mdTitle').value,
-        author: document.getElementById('mdAuthor').value,
-        series: document.getElementById('mdSeries').value,
-        narrator: document.getElementById('mdNarrator').value,
-        language: document.getElementById('mdLanguage').value,
-        tags: document.getElementById('mdTags').value,
-        synopsis: document.getElementById('mdSynopsis').value,
-      };
-      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/metadata`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metadata })
-      });
+      const metadata = { title: mdTitle.value, author: mdAuthor.value, series: mdSeries.value, narrator: mdNarrator.value, language: mdLanguage.value, tags: mdTags.value, synopsis: mdSynopsis.value };
+      const filename = metadataFile.value;
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/metadata`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename, metadata }) });
       const data = await resp.json();
-      if (data.packet) {
-        document.getElementById('validationMsg').textContent = data.packet.validation.ok
-          ? 'Validation: OK — paquet prêt pour publication.'
-          : `Champs manquants: ${(data.packet.validation.missing || []).join(', ')}`;
-        document.getElementById('payloadPreview').textContent = JSON.stringify(data.payload_preview, null, 2);
-      }
+      if (!resp.ok) return alert(data.error || 'Impossible de sauvegarder les métadonnées');
+      currentPacket = data.packet;
+      validationMsg.textContent = data.packet.validation.ok ? 'Validation: OK — paquet prêt pour publication.' : `Champs manquants: ${(data.packet.validation.missing || []).join(', ')}`;
+      payloadPreview.textContent = JSON.stringify(data.payload_preview, null, 2);
       await loadPackets();
     }
 
-
     async function schedulePacket() {
       if (!selectedId) return;
-      const rawTs = document.getElementById('scheduleTs').value;
-      const publishAt = Number(rawTs || 0);
-      if (!publishAt) {
-        alert('Renseignez un timestamp unix de publication.');
-        return;
-      }
+      const publishAt = toUnix(document.getElementById('scheduleDateTime').value);
+      if (!publishAt) return alert('Renseignez une date et heure de publication.');
+      const force_publish = document.getElementById('forcePublish').checked;
       const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/schedule`, {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ publish_at: publishAt, channels: ['discord', 'telegram', 'whatsapp', 'email'] })
+        body: JSON.stringify({ publish_at: publishAt, channels: selectedChannels(), force_publish, plugin_config: pluginConfig() })
       });
       const data = await resp.json();
-      if (!resp.ok) {
-        alert(data.error || 'Impossible de planifier la publication');
-        return;
-      }
+      if (!resp.ok) return alert(data.error || 'Impossible de planifier la publication');
       document.getElementById('scheduleInfo').textContent = `Job planifié: ${data.job.id} (publication: ${data.job.publish_at})`;
       await loadPackets();
     }
 
     async function runNextScheduledJob() {
-      const jobsResp = await fetch('/api/integrations/audiobookshelf/scheduler/jobs');
-      const jobsData = await jobsResp.json();
+      const jobsResp = await fetch('/api/integrations/audiobookshelf/scheduler/jobs'); const jobsData = await jobsResp.json();
       const nextJob = (jobsData.jobs || []).find(j => j.status === 'scheduled');
-      if (!nextJob) {
-        alert('Aucun job planifié à exécuter.');
-        return;
-      }
+      if (!nextJob) return alert('Aucun job planifié à exécuter.');
       const runResp = await fetch(`/api/integrations/audiobookshelf/scheduler/jobs/${nextJob.id}/run`, { method: 'POST' });
       const runData = await runResp.json();
-      if (!runResp.ok) {
-        alert(runData.error || "Impossible d'exécuter le job planifié");
-        return;
-      }
+      if (!runResp.ok) return alert(runData.error || "Impossible d'exécuter le job planifié");
       document.getElementById('scheduleInfo').textContent = `Job ${nextJob.id} exécuté (${runData.job.status}).`;
-      await loadPackets();
-      await openPacket(selectedId);
+      await loadPackets(); await openPacket(selectedId);
     }
 
     async function broadcastChangelog() {
       if (!selectedId) return;
       const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/broadcast`, {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ channels: ['discord', 'telegram', 'whatsapp', 'email'] })
+        body: JSON.stringify({ channels: selectedChannels(), plugin_config: pluginConfig() })
       });
       const data = await resp.json();
-      if (!resp.ok) {
-        alert(data.error || 'Impossible de diffuser le changelog');
-        return;
-      }
+      if (!resp.ok) return alert(data.error || 'Impossible de diffuser le changelog');
       const statuses = (data.deliveries || []).map(d => `${d.channel}:${d.status}`).join(', ');
       document.getElementById('changelogSource').textContent = `Diffusion changelog: ${statuses}`;
     }
 
     async function cleanupPacket() {
       if (!selectedId) return;
-      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/cleanup`, {
-        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ delete_output_files: true })
-      });
+      const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/cleanup`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ delete_output_files: true }) });
       const data = await resp.json();
-      if (!resp.ok) {
-        alert(data.error || 'Impossible de nettoyer le paquet');
-        return;
-      }
-      await loadOutputs();
-      await loadPackets();
-      await openPacket(selectedId);
+      if (!resp.ok) return alert(data.error || 'Impossible de nettoyer le paquet');
+      await loadOutputs(); await loadPackets(); await openPacket(selectedId);
     }
 
     async function submitPacket() {
       if (!selectedId) return;
-      const changelog = document.getElementById('changelogEdited').value;
+      const changelog = getChangelogText();
+      const respCfg = await fetch('/api/config', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ payload_debug_enabled: document.getElementById('payloadDebug').checked }) });
+      if (!respCfg.ok) console.warn('Impossible de sauvegarder payload_debug_enabled');
       const resp = await fetch(`/api/integrations/audiobookshelf/packets/${selectedId}/submit`, {
-        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ changelog })
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ changelog, channels: selectedChannels() })
       });
       const data = await resp.json();
-      if (!resp.ok) {
-        alert(data.error || 'Erreur de soumission');
-        return;
-      }
-      alert('Publication terminée: ' + data.steps.map(s => s.label).join(' → '));
+      if (!resp.ok) return alert(data.error || 'Erreur de soumission');
+      alert('Publication terminée + changelog diffusé: ' + data.steps.map(s => s.label).join(' → '));
       document.getElementById('payloadPreview').textContent = JSON.stringify(data.payload_preview, null, 2);
       await loadPackets();
     }

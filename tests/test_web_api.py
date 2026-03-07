@@ -165,6 +165,71 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(loaded['audiobookshelf_password'], 'MotDePasseUltraSecret')
         self.assertEqual(loaded['audiobookshelf_api_key'], 'api_key_123456')
 
+    def test_save_config_creates_parent_directory_when_missing(self):
+        nested_path = self.temp_dir / 'persist' / 'config' / 'web_config.json'
+        web_app.CONFIG_PATH = nested_path
+
+        cfg = web_app._default_config()
+        cfg['audiobookshelf_server_url'] = 'https://abs.example'
+        web_app._save_config(cfg)
+
+        self.assertTrue(nested_path.exists())
+        loaded = web_app._load_config()
+        self.assertEqual(loaded['audiobookshelf_server_url'], 'https://abs.example')
+
+    @mock.patch('urllib.request.urlopen')
+    def test_audiobookshelf_test_connection_with_api_key(self, mocked_urlopen):
+        response = mock.MagicMock()
+        response.status = 200
+        response.read.return_value = b'{"user": {"username": "fabrice"}}'
+        mocked_urlopen.return_value.__enter__.return_value = response
+
+        resp = self.client.post(
+            '/api/audiobookshelf/test-connection',
+            json={
+                'audiobookshelf_server_url': 'https://abs.example.com',
+                'audiobookshelf_api_key': 'secret-api-key',
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['auth_method'], 'api_key')
+        self.assertEqual(payload['username'], 'fabrice')
+
+    @mock.patch('urllib.request.urlopen')
+    def test_audiobookshelf_test_connection_with_login_password(self, mocked_urlopen):
+        response = mock.MagicMock()
+        response.status = 200
+        response.read.return_value = b'{"token": "abc-token"}'
+        mocked_urlopen.return_value.__enter__.return_value = response
+
+        resp = self.client.post(
+            '/api/audiobookshelf/test-connection',
+            json={
+                'audiobookshelf_server_url': 'https://abs.example.com',
+                'audiobookshelf_username': 'admin',
+                'audiobookshelf_password': 'password',
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['auth_method'], 'password')
+        self.assertEqual(payload['username'], 'admin')
+
+    def test_audiobookshelf_test_connection_rejects_missing_credentials(self):
+        resp = self.client.post(
+            '/api/audiobookshelf/test-connection',
+            json={
+                'audiobookshelf_server_url': 'https://abs.example.com',
+            },
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        payload = resp.get_json()
+        self.assertEqual(payload['code'], 'missing_credentials')
+
     def test_delete_suspect_folder(self):
         folder = self.media_dir / 'Suspect.part2'
         folder.mkdir()

@@ -39,7 +39,8 @@ OUTPUT_DIR = Path(os.getenv("AUDIOBOOK_OUTPUT_DIR", os.getenv("OUTPUT_DIR", "/ap
 TEMP_DIR = Path(os.getenv("AUDIOBOOK_TEMP_DIR", os.getenv("TEMP_DIR", "/tmp/audiobooks_web")))
 LOG_DIR = Path(os.getenv("AUDIOBOOK_LOG_DIR", os.getenv("LOG_DIR", "/app/logs")))
 WEB_DEBUG_LOG_PATH = LOG_DIR / "web_debug.log"
-CONFIG_PATH = TEMP_DIR / "web_config.json"
+DEFAULT_CONFIG_PATH = Path(os.getenv("AUDIOBOOK_CONFIG_PATH", "/app/data/config/web_config.json"))
+CONFIG_PATH = DEFAULT_CONFIG_PATH
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}
@@ -402,6 +403,48 @@ def _ollama_api_request(path: str, payload: Optional[Dict] = None, timeout: int 
     return json.loads(raw) if raw else {}
 
 
+def _normalize_audiobookshelf_server_url(raw_url: str) -> str:
+    server_url = (raw_url or "").strip().rstrip("/")
+    if not server_url:
+        return ""
+    if not re.match(r"^https?://", server_url, flags=re.IGNORECASE):
+        server_url = f"https://{server_url}"
+    return server_url
+
+
+def _audiobookshelf_api_request(
+    base_url: str,
+    path: str,
+    *,
+    method: str = "GET",
+    payload: Optional[Dict] = None,
+    token: Optional[str] = None,
+    timeout: int = 15,
+) -> tuple[int, Dict[str, object], str]:
+    target_url = f"{base_url}{path}"
+    body = None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        body = json.dumps(payload).encode("utf-8")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    req = urllib.request.Request(target_url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            parsed = json.loads(raw) if raw else {}
+            return int(getattr(resp, "status", 200) or 200), parsed, raw
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else ""
+        try:
+            parsed = json.loads(raw) if raw else {}
+        except Exception:
+            parsed = {}
+        return int(exc.code), parsed, raw
+
+
 def _list_ollama_models() -> List[Dict[str, str]]:
     try:
         data = _ollama_api_request("/api/tags", timeout=20)
@@ -549,7 +592,7 @@ def _fix_mojibake(text: str) -> str:
 
 
 def _load_config() -> Dict:
-    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     if CONFIG_PATH.exists():
         try:
             loaded = {**_default_config(), **json.loads(CONFIG_PATH.read_text(encoding="utf-8"))}
@@ -563,7 +606,7 @@ def _load_config() -> Dict:
 
 
 def _save_config(config: Dict) -> None:
-    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     serialized = {**config}
     for key in SENSITIVE_CONFIG_KEYS:
         value = serialized.get(key, "")
@@ -1273,6 +1316,9 @@ def _worker_loop() -> None:
                 message = str(payload.get("message") or "Mise à jour conversion")
                 progress_value = payload.get("progress")
                 details = payload.get("details") if isinstance(payload.get("details"), dict) else {}
+                event_level = str(details.get("level") or "info").lower()
+                if event_level not in {"info", "warning", "error", "debug"}:
+                    event_level = "info"
                 with jobs_lock:
                     current_job = jobs.get(job_id)
                     if not current_job:
@@ -1302,7 +1348,7 @@ def _worker_loop() -> None:
                             "total": total,
                         }
 
-                    _push_job_event(current_job.id, current_job.folder, stage, message, "info", details)
+                    _push_job_event(current_job.id, current_job.folder, stage, message, event_level, details)
 
             processor.progress_callback = _on_processor_progress
 
@@ -1324,13 +1370,14 @@ def _worker_loop() -> None:
                 else:
                     job.status = "failed"
                     job.stage = "Erreur"
-                    job.error = "Échec conversion"
+                    processor_error = getattr(processor, "last_error", None)
+                    job.error = str(processor_error) if processor_error else "Échec conversion"
                     job.progress = 100
                     _push_job_event(
                         job.id,
                         job.folder,
                         job.stage,
-                        f"Le processeur a renvoyé False sans exception (web: {WEB_DEBUG_LOG_PATH}, processor: {PROCESSOR_LOG_PATH}).",
+                        f"{job.error} (web: {WEB_DEBUG_LOG_PATH}, processor: {PROCESSOR_LOG_PATH}).",
                         "error",
                     )
                 job.ended_at = time.time()
@@ -1695,6 +1742,101 @@ def api_config():
                 continue
 
     return jsonify(config)
+
+
+@app.route("/api/audiobookshelf/test-connection", methods=["POST"])
+def api_test_audiobookshelf_connection():
+    payload = request.get_json(silent=True) or {}
+    saved_config = _load_config()
+
+    server_url = _normalize_audiobookshelf_server_url(
+        str(payload.get("audiobookshelf_server_url") or saved_config.get("audiobookshelf_server_url") or "")
+    )
+    username = str(payload.get("audiobookshelf_username") or saved_config.get("audiobookshelf_username") or "").strip()
+    password = str(payload.get("audiobookshelf_password") or saved_config.get("audiobookshelf_password") or "")
+    api_key = str(payload.get("audiobookshelf_api_key") or saved_config.get("audiobookshelf_api_key") or "").strip()
+
+    if not server_url:
+        return _api_error("URL serveur Audiobookshelf requise", code="missing_server_url")
+
+    try:
+        if api_key:
+            status_code, me_payload, _ = _audiobookshelf_api_request(
+                server_url,
+                "/api/me",
+                token=api_key,
+                timeout=15,
+            )
+            if status_code >= 400:
+                return _api_error(
+                    "Échec authentification API key",
+                    status=401,
+                    code="audiobookshelf_auth_failed",
+                    details={"status": status_code},
+                )
+            user_info = me_payload.get("user") if isinstance(me_payload, dict) else {}
+            username_value = user_info.get("username") if isinstance(user_info, dict) else None
+            return jsonify(
+                {
+                    "status": "ok",
+                    "server_url": server_url,
+                    "auth_method": "api_key",
+                    "username": username_value,
+                }
+            )
+
+        if not username or not password:
+            return _api_error(
+                "Renseignez une API key ou un couple login/mot de passe",
+                code="missing_credentials",
+            )
+
+        status_code, login_payload, _ = _audiobookshelf_api_request(
+            server_url,
+            "/api/login",
+            method="POST",
+            payload={"username": username, "password": password},
+            timeout=15,
+        )
+        if status_code >= 400:
+            return _api_error(
+                "Échec authentification login/mot de passe",
+                status=401,
+                code="audiobookshelf_auth_failed",
+                details={"status": status_code},
+            )
+
+        token = ""
+        if isinstance(login_payload, dict):
+            token = str(login_payload.get("token") or "").strip()
+            if not token:
+                user_info = login_payload.get("user")
+                if isinstance(user_info, dict):
+                    token = str(user_info.get("token") or "").strip()
+
+        if not token:
+            return _api_error(
+                "Réponse Audiobookshelf invalide (token manquant)",
+                status=502,
+                code="audiobookshelf_invalid_response",
+            )
+
+        return jsonify(
+            {
+                "status": "ok",
+                "server_url": server_url,
+                "auth_method": "password",
+                "username": username,
+            }
+        )
+    except urllib.error.URLError as exc:
+        return _api_error(
+            f"Connexion impossible au serveur Audiobookshelf: {exc}",
+            status=503,
+            code="audiobookshelf_unreachable",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _api_error(str(exc), status=500, code="audiobookshelf_test_failed")
 
 
 @app.route("/api/ollama/status")

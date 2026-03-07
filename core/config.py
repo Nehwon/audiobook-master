@@ -3,9 +3,9 @@
 Configuration du système de traitement d'audiobooks
 """
 
+import os
 from pathlib import Path
 from dataclasses import dataclass, field
-import os
 from typing import Optional, List
 
 @dataclass
@@ -76,8 +76,25 @@ class ProcessingConfig:
     audiobookshelf_port: int = 13378
     audiobookshelf_username: Optional[str] = None
     audiobookshelf_password: Optional[str] = None
+    audiobookshelf_token: Optional[str] = None
+    audiobookshelf_library_id: Optional[str] = None
     
     def __post_init__(self):
+        # Surcharge optionnelle via variables d'environnement
+        self.audiobookshelf_host = os.getenv("AUDIOBOOKSHELF_HOST", self.audiobookshelf_host)
+
+        port_value = os.getenv("AUDIOBOOKSHELF_PORT")
+        if port_value:
+            try:
+                self.audiobookshelf_port = int(port_value)
+            except ValueError:
+                pass
+
+        self.audiobookshelf_username = os.getenv("AUDIOBOOKSHELF_USERNAME", self.audiobookshelf_username)
+        self.audiobookshelf_password = os.getenv("AUDIOBOOKSHELF_PASSWORD", self.audiobookshelf_password)
+        self.audiobookshelf_token = os.getenv("AUDIOBOOKSHELF_TOKEN", self.audiobookshelf_token)
+        self.audiobookshelf_library_id = os.getenv("AUDIOBOOKSHELF_LIBRARY_ID", self.audiobookshelf_library_id)
+
         if self.scraping_sources is None:
             self.scraping_sources = ["babelio", "fnac"]
         # Crée les répertoires nécessaires

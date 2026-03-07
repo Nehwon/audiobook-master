@@ -78,6 +78,25 @@ class TestProcessingConfig(unittest.TestCase):
         
         self.assertEqual(config.scraping_sources, custom_sources)
 
+    @patch.dict('os.environ', {
+        'AUDIOBOOKSHELF_HOST': 'abs.local',
+        'AUDIOBOOKSHELF_PORT': '13379',
+        'AUDIOBOOKSHELF_USERNAME': 'user',
+        'AUDIOBOOKSHELF_PASSWORD': 'pass',
+        'AUDIOBOOKSHELF_TOKEN': 'token-123',
+        'AUDIOBOOKSHELF_LIBRARY_ID': 'library-1',
+    }, clear=False)
+    def test_audiobookshelf_env_overrides(self):
+        """Test la surcharge Audiobookshelf via variables d'environnement"""
+        config = ProcessingConfig()
+
+        self.assertEqual(config.audiobookshelf_host, 'abs.local')
+        self.assertEqual(config.audiobookshelf_port, 13379)
+        self.assertEqual(config.audiobookshelf_username, 'user')
+        self.assertEqual(config.audiobookshelf_password, 'pass')
+        self.assertEqual(config.audiobookshelf_token, 'token-123')
+        self.assertEqual(config.audiobookshelf_library_id, 'library-1')
+
 
 if __name__ == '__main__':
     unittest.main()

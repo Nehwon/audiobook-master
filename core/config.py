@@ -59,6 +59,9 @@ class ProcessingConfig:
     # Métadonnées
     cover_size: tuple = (600, 600)
     cover_quality: int = 85
+
+    # Plugins cover
+    cover_sources: list = None
     
     # Métadonnées
     default_language: str = "fr"
@@ -99,6 +102,8 @@ class ProcessingConfig:
 
         if self.scraping_sources is None:
             self.scraping_sources = ["google_books", "audible", "babelio"]
+        if self.cover_sources is None:
+            self.cover_sources = ["existing_file", "url_download"]
         # Crée les répertoires nécessaires
         Path(self.source_directory).mkdir(parents=True, exist_ok=True)
         Path(self.output_directory).mkdir(parents=True, exist_ok=True)

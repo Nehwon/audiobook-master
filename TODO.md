@@ -22,7 +22,7 @@
 - [x] Factoriser la configuration partagée CLI/Web pour limiter la divergence des defaults.
 - [x] Réduire la dette documentaire en gardant le README concis et les détails dans `docs/`.
 - [x] Refactoriser la récupération de métadonnées externes en architecture de plugins (un plugin par source/site).
-- [ ] Refactoriser l'acquisition de covers en architecture de plugins (fournisseurs interchangeables).
+- [x] Refactoriser l'acquisition de covers en architecture de plugins (fournisseurs interchangeables).
 
 ## Priorité P3 — Observabilité & DX
 
@@ -32,11 +32,12 @@
 
 # TODO Features
 
-- [ ] Developper un frontend web pour la partie integration
-    - [ ] Interface pour gérer les packets d'upload, leur statut et leur progression (génériques pour l'ensemble des intégrations)
-          - Principe : Permettre à l'utilisateur de choisir un groupe de fichiers en attente pour les publier dans une des intégrations (avec autant de boutons que d'intégrations configurées ainsi qu'un bouton "Tout" pour publier dans toutes les intégrations)
-          - Logique : Lors de la publication du packet, une lecture des métadonnées est effectuée. Celle-ci sont présenté à l'utilisateur pour qu'il les modifie, fasse un recherche sur un site externe (Ex: Babelio, Google books, ...). Les données récupérées sont ensuite proposées pour remplacer les données existantes dans les fichiers m4b en commençant par les manquantes. Une couverture est rechercher pour remplacer l'embeded si besoin. Les synopsis sont proposés à l'ollama pour un synthèse plus concise et sans spoiler.
-          - Une soumission est ensuite composée pour être présenté à l'API de l'intégration concernée,
+- [ ] Créer un marketplace pour l'acquisition automatique des plugins
+- [ ] Developper un frontend web pour la partie integration avec Audiobookshelf
+    - [ ] Interface pour gérer les packets d'upload, leur statut et leur progression
+          - Principe : Permettre à l'utilisateur de choisir un groupe de fichiers en attente pour les publier sur Audiobookshelf
+          - Logique : Lors de la publication du packet, une lecture des métadonnées est effectuée. Celle-ci sont présenté à l'utilisateur pour qu'il les modifie, fasse un recherche sur un site externe (Ex: Babelio, Google books, ...). Les données récupérées sont ensuite proposées pour remplacer les données existantes en commençant par le manquantes. Une couverture est rechercher pour remplacer l'embeded si besoin. Les synopsis sont proposés à l'ollama pour un synthèse plus concise.
+          - Une soumission est ensuite composée pour être présenté à l'API Audiobookshelf,
           - Lorsque le packet est complet, un bouton propose de le soumettre,
           - Dans le même temps, une demande de composition d'un message du type "Changelog" est demandée à l'ollama, l'utilisateur peut le modifier avant de le soumettre, et choisir le vecteur de soumission. Pour la phase 1 de développement, nous ciblerons discord, Telegram, whatsapp et email.
           - Une fois le paquet soumis, il est temporairement marqué comme effectué. Avec un bouton "Nettoyer" qui aura pour objectif de supprimer le packet, les dossiers sources et les fichiers m4b d'output.

@@ -103,10 +103,21 @@ plugins/
     scraper_google_books.py
     scraper_audible.py
     scraper_babelio.py
+  covers/
+    base_cover.py
+    provider_existing_file.py
+    provider_url_download.py
   exports/
     base_export.py
     export_audiobookshelf.py
 ```
+
+### Plugins covers (tableau)
+
+| Plugin | Fichier | Configuration principale | Description |
+|---|---|---|---|
+| `existing_file` | `plugins/covers/provider_existing_file.py` | `cover_sources` | Réutilise `metadata.cover_path` si le fichier existe. |
+| `url_download` | `plugins/covers/provider_url_download.py` | `cover_sources` | Télécharge la cover depuis `metadata.cover_url`. |
 
 ### Plugins d'export (tableau)
 

@@ -1,14 +1,61 @@
-# TODO technique
+# TODO produit & technique (pilotage par sprints)
 
-## Priorité P0 — Fiabilité immédiate
+## Sprint 1 — Socle d'exécution & visibilité (en cours)
 
+### Objectifs
+- [x] Préparer un plan de sprint exploitable depuis `TODO.md`.
+- [x] Ajouter une commande de diagnostic CLI unique (dépendances, binaires, répertoires, variables d'environnement).
+- [ ] Ajouter un profil de logs `debug conversion` activable sans modifier le code.
+- [ ] Documenter la boucle locale de dev (test, debug, release) avec une checklist courte.
+
+### Livrables attendus
+- [x] Nouveau module de diagnostic CLI et option `--diagnostic`.
+- [ ] Documentation utilisateur enrichie avec exemples de diagnostics et dépannage.
+
+## Sprint 2 — Frontend d'intégration Audiobookshelf
+
+### Objectifs
+- [ ] Interface pour gérer les paquets d'upload (statut, progression, validation métadonnées).
+- [ ] Parcours de correction/enrichissement des métadonnées avant soumission.
+- [ ] Préparation d'un brouillon de changelog assisté IA (édition manuelle avant envoi).
+
+### Livrables attendus
+- [ ] Écran "paquets" avec actions de publication.
+- [ ] Workflow de prévisualisation de payload Audiobookshelf.
+
+## Sprint 3 — Planification & diffusion
+
+### Objectifs
+- [ ] Programmer la publication différée des paquets (date/heure).
+- [ ] Diffuser un message de changelog vers canaux configurés (phase 1: Discord, Telegram, WhatsApp, email).
+- [ ] Ajouter une action de nettoyage manuel post-publication.
+
+### Livrables attendus
+- [ ] Scheduler fiable avec état de jobs.
+- [ ] Connecteurs de diffusion initiale.
+
+## Sprint 4 — Écosystème plugins
+
+### Objectifs
+- [ ] Mettre à niveau en priorité l'intégration/plugin Audiobookshelf.
+- [ ] Concevoir un marketplace de plugins (découverte + installation).
+- [ ] Définir un contrat de versionnement et de compatibilité des plugins.
+
+### Livrables attendus
+- [ ] Spécification de registre plugins.
+- [ ] Prototype d'installation de plugin depuis source distante.
+
+---
+
+## Historique (déjà réalisé)
+
+### Priorité P0 — Fiabilité immédiate
 - [x] Corriger les régressions majeures de la suite `pytest -q`.
 - [x] Identifier les tests devenus incompatibles avec l’implémentation courante et décider : corriger le code ou adapter le test.
 - [x] Mettre en place une commande de validation minimale “toujours verte” (smoke suite).
 - [x] Vérifier la cohérence des imports entre modules `core`, `web`, `integrations`.
 
-## Priorité P1 — Robustesse produit
-
+### Priorité P1 — Robustesse produit
 - [x] Documenter précisément la matrice de formats audio réellement supportés (entrée/sortie + contraintes).
 - [x] Normaliser les messages d’erreur API (structure JSON uniforme).
 - [x] Renforcer la validation des chemins utilisateur (source/output/temp).
@@ -16,36 +63,9 @@
   - [x] Upload Audiobookshelf (auth + upload + scan).
   - [x] Pipeline archive → extraction → renommage → job enqueue.
 
-## Priorité P2 — Maintenabilité
-
+### Priorité P2 — Maintenabilité
 - [x] Éliminer/archiver progressivement les scripts legacy non alignés (`run.py`, `start_web.py`) ou les remettre en cohérence.
 - [x] Factoriser la configuration partagée CLI/Web pour limiter la divergence des defaults.
 - [x] Réduire la dette documentaire en gardant le README concis et les détails dans `docs/`.
 - [x] Refactoriser la récupération de métadonnées externes en architecture de plugins (un plugin par source/site).
 - [x] Refactoriser l'acquisition de covers en architecture de plugins (fournisseurs interchangeables).
-
-## Priorité P3 — Observabilité & DX
-
-- [ ] Ajouter une commande de diagnostic unique (dépendances, ffmpeg, dossiers, variables env).
-- [ ] Proposer un profil de logs “debug conversion” activable sans modifier le code.
-- [ ] Améliorer la documentation développeur sur le cycle local (test, debug, release).
-
-# TODO Features
-
-- [ ] Créer un marketplace pour l'acquisition automatique des plugins
-- [ ] Developper un frontend web pour la partie integration avec Audiobookshelf
-    - [x] Rédiger un cadrage fonctionnel/technique initial (`docs/frontend-integration-concept.md`)
-    - [ ] Interface pour gérer les packets d'upload, leur statut et leur progression
-          - Principe : Permettre à l'utilisateur de choisir un groupe de fichiers en attente pour les publier sur Audiobookshelf
-          - Logique : Lors de la publication du packet, une lecture des métadonnées est effectuée. Celle-ci sont présenté à l'utilisateur pour qu'il les modifie, fasse un recherche sur un site externe (Ex: Babelio, Google books, ...). Les données récupérées sont ensuite proposées pour remplacer les données existantes en commençant par le manquantes. Une couverture est rechercher pour remplacer l'embeded si besoin. Les synopsis sont proposés à l'ollama pour un synthèse plus concise.
-          - Une soumission est ensuite composée pour être présenté à l'API Audiobookshelf,
-          - Lorsque le packet est complet, un bouton propose de le soumettre,
-          - Dans le même temps, une demande de composition d'un message du type "Changelog" est demandée à l'ollama, l'utilisateur peut le modifier avant de le soumettre, et choisir le vecteur de soumission. Pour la phase 1 de développement, nous ciblerons discord, Telegram, whatsapp et email.
-          - Une fois le paquet soumis, il est temporairement marqué comme effectué. Avec un bouton "Nettoyer" qui aura pour objectif de supprimer le packet, les dossiers sources et les fichiers m4b d'output.
-    - [ ] Interface pour programmer la publication effective d'un packet
-          - Principe : Permettre à l'utilisateur de programmer la publication effective d'un packet vers les intégrations configurées,
-          - Logique : L'utilisateur peut choisir une date et une heure pour la publication effective, ainsi qu'un message de changelog à poster sur les canaux configurés;
-          - Une fois la date et l'heure atteintes, le packet est publié vers les intégrations configurées et le message de changelog est posté sur les canaux configurés;
-          - Une fois le packet publié, il est temporairement marqué comme effectué. Avec un bouton "Nettoyer" qui aura pour objectif de supprimer le packet, les dossiers sources et les fichiers m4b d'output. Le nettoyage ne doit pas être automatique.
-- [ ] Mettre à jour le plugin Audiobookshelf en priorité.
-- [ ] Créer un marketplace pour l'acquisition automatique des plugins

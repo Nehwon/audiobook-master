@@ -72,6 +72,48 @@ Variables d'environnement dossiers :
 - `GET /api/ollama/status` : état du service Ollama.
 - `GET /health` : endpoint santé.
 
+
+## Onglet Plugins
+
+Configuration des plugins (source de métadonnées) sous forme de tableau :
+
+| Plugin | Clé de configuration | Valeur par défaut | Description |
+|---|---|---|---|
+| `google_books` | `scraping_sources` (CLI/Web config) | activé | Recherche via API Google Books (priorité 1). |
+| `audible` | `scraping_sources` (CLI/Web config) | activé | Recherche spécialisée audiobook (priorité 2). |
+| `babelio` | `scraping_sources` (CLI/Web config) | activé | Fallback francophone (priorité 3). |
+
+Exemple de configuration (ordre = fallback) :
+
+```json
+{
+  "scraping_sources": ["google_books", "audible", "babelio"]
+}
+```
+
+Si un plugin est retiré de `scraping_sources`, il ne sera pas utilisé pendant l'enrichissement des métadonnées.
+
+
+### Structure du dossier `plugins/`
+
+```text
+plugins/
+  metadata/
+    base_scraper.py
+    scraper_google_books.py
+    scraper_audible.py
+    scraper_babelio.py
+  exports/
+    base_export.py
+    export_audiobookshelf.py
+```
+
+### Plugins d'export (tableau)
+
+| Plugin | Fichier | Configuration principale | Description |
+|---|---|---|---|
+| `audiobookshelf` | `plugins/exports/export_audiobookshelf.py` | `library_id` | Exporte un `.m4b` vers Audiobookshelf via le client configuré. |
+
 ## Docker
 
 Démarrage rapide :

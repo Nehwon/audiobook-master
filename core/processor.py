@@ -431,7 +431,7 @@ class AudiobookProcessor:
     def scrap_book_info(self, metadata: AudiobookMetadata) -> AudiobookMetadata:
         """Compatibilité legacy: enrichit les métadonnées via scraping."""
         try:
-            scraper = BookScraper()
+            scraper = BookScraper(enabled_plugins=getattr(self.config, "scraping_sources", None))
             book_info = scraper.search_book(metadata.author or "", metadata.title or "")
             if not book_info:
                 return metadata

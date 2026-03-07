@@ -29,6 +29,7 @@ import rarfile
 from flask import Flask, jsonify, render_template, request, send_file
 
 from core.config import ProcessingConfig
+from core.metadata import BookScraper
 from core.runtime_paths import resolve_runtime_paths
 from core.processor import AudiobookProcessor, PROCESSOR_LOG_PATH
 
@@ -266,16 +267,43 @@ def _bootstrap_upload_packets() -> None:
 
 
 def _default_file_metadata(file_name: str) -> Dict[str, str]:
+    inferred = _infer_metadata_from_label(Path(file_name).stem)
     return {
-        "title": Path(file_name).stem,
-        "author": "",
-        "series": "",
-        "volume": "",
+        "title": inferred.get("title") or Path(file_name).stem,
+        "author": inferred.get("author") or "",
+        "series": inferred.get("series") or "",
+        "volume": inferred.get("volume") or "",
         "narrator": "",
         "language": "fr",
         "tags": "",
         "synopsis": "",
     }
+
+
+def _infer_metadata_from_label(label: str) -> Dict[str, str]:
+    cleaned = _clean_name(label)
+    parts = [part.strip() for part in re.split(r"\s+-\s+", cleaned) if part.strip()]
+    if len(parts) < 2:
+        return {"title": cleaned}
+
+    author = parts[0]
+    title = parts[-1]
+    series = ""
+    volume = ""
+
+    if len(parts) == 2:
+        return {"author": author, "title": title}
+
+    if len(parts) >= 4:
+        series = parts[1]
+        volume_candidate = parts[2]
+        volume_match = re.search(r"\d+", volume_candidate)
+        if volume_match:
+            volume = str(int(volume_match.group(0)))
+            title = " - ".join(parts[3:]).strip() or title
+            return {"author": author, "title": title, "series": series, "volume": volume}
+
+    return {"author": author, "title": title}
 
 
 def _sync_packet_file_metadata(packet: Dict[str, object]) -> None:
@@ -306,7 +334,45 @@ def _packet_missing_metadata(packet: Dict[str, object]) -> List[str]:
         for field in required:
             if not str(metadata.get(field, "")).strip():
                 missing.append(f"{file_name}:{field}")
+        if str(metadata.get("series", "")).strip() and not str(metadata.get("volume", "")).strip():
+            missing.append(f"{file_name}:volume")
     return missing
+
+
+def _summarize_synopsis_no_spoiler(text: str, config: Dict) -> str:
+    source = (text or "").strip()
+    if not source:
+        return ""
+    if not bool(config.get("ollama_enabled", False)):
+        return source
+
+    model = str(config.get("ollama_model") or "qwen2.5:7b")
+    prompt = (
+        "Résume le synopsis suivant en français, sans spoiler, en 4 phrases maximum. "
+        "Conserve uniquement les informations de contexte utiles pour décider de lire le livre.\n\n"
+        f"Synopsis source:\n{source}"
+    )
+
+    try:
+        data = _ollama_api_request(
+            "/api/generate",
+            {"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.2}},
+            timeout=60,
+        )
+        summary = str(data.get("response") or "").strip()
+        if summary:
+            return summary
+    except Exception:
+        pass
+
+    try:
+        result = _run_ollama_command(["run", model, prompt], timeout=60)
+        if result.returncode == 0 and (result.stdout or "").strip():
+            return result.stdout.strip()
+    except Exception:
+        pass
+
+    return source
 
 
 def _packet_payload_preview(packet: Dict[str, object]) -> Dict[str, object]:
@@ -321,6 +387,7 @@ def _packet_payload_preview(packet: Dict[str, object]) -> Dict[str, object]:
                 "title": metadata.get("title", ""),
                 "authorName": metadata.get("author", ""),
                 "series": metadata.get("series", ""),
+                "volume": metadata.get("volume", ""),
                 "narratorName": metadata.get("narrator", ""),
                 "language": metadata.get("language", "fr"),
                 "description": metadata.get("synopsis", ""),
@@ -335,6 +402,34 @@ def _packet_payload_preview(packet: Dict[str, object]) -> Dict[str, object]:
     }
 
 
+
+
+def _scrape_file_metadata(filename: str, current_metadata: Dict[str, str], config: Dict) -> Dict[str, str]:
+    inferred = _infer_metadata_from_label(Path(filename).stem)
+    author = str(current_metadata.get("author") or inferred.get("author") or "").strip()
+    title = str(current_metadata.get("title") or inferred.get("title") or Path(filename).stem).strip()
+
+    if not author or not title:
+        return {}
+
+    scraper = BookScraper(enabled_plugins=config.get("scraping_sources"))
+    book_info = scraper.search_book(author, title)
+    if not book_info:
+        return {}
+
+    series = str(getattr(book_info, "series", "") or "").strip()
+    volume = str(getattr(book_info, "series_number", "") or "").strip()
+    synopsis_raw = str(getattr(book_info, "description", "") or "").strip()
+    synopsis = _summarize_synopsis_no_spoiler(synopsis_raw, config) if synopsis_raw else ""
+
+    return {
+        "title": str(getattr(book_info, "title", "") or title).strip(),
+        "author": str(getattr(book_info, "author", "") or author).strip(),
+        "series": series,
+        "volume": volume,
+        "narrator": str(getattr(book_info, "narrator", "") or "").strip(),
+        "synopsis": synopsis,
+    }
 def _refresh_packet_metrics(packet: Dict[str, object]) -> None:
     files = packet.get("files") if isinstance(packet.get("files"), list) else []
     packet["file_count"] = len(files)
@@ -769,20 +864,40 @@ def _generate_packet_changelog_draft(packet: Dict[str, object], config: Dict) ->
     files = packet.get("files") if isinstance(packet.get("files"), list) else []
     file_names = [str(item.get("name")) for item in files if isinstance(item, dict) and item.get("name")]
 
-    first_metadata = next((m for m in file_metadata.values() if isinstance(m, dict)), {})
-    title = str(first_metadata.get("title") or packet.get("name") or "Titre inconnu")
-    author = str(first_metadata.get("author") or "Auteur inconnu")
-    synopsis = str(first_metadata.get("synopsis") or "")
-    tags = [tag.strip() for tag in str(first_metadata.get("tags", "")).split(",") if tag.strip()]
+    def _single_line(value: str) -> str:
+        return re.sub(r"\s+", " ", value or "").strip()
+
+    per_title_lines: List[str] = []
+    all_tags: List[str] = []
+    fallback_title = str(packet.get("name") or "Titre inconnu")
+
+    for file_name in file_names:
+        metadata = file_metadata.get(file_name) if isinstance(file_metadata.get(file_name), dict) else {}
+        title = str(metadata.get("title") or Path(file_name).stem or fallback_title)
+        author = str(metadata.get("author") or "Auteur inconnu")
+        synopsis = _single_line(str(metadata.get("synopsis") or "")) or "Résumé à compléter."
+        tags = [tag.strip() for tag in str(metadata.get("tags", "")).split(",") if tag.strip()]
+        all_tags.extend(tags)
+        per_title_lines.append(f"- {title} — {author} | synopsis: {synopsis}")
+
+    if not per_title_lines:
+        first_metadata = next((m for m in file_metadata.values() if isinstance(m, dict)), {})
+        title = str(first_metadata.get("title") or fallback_title)
+        author = str(first_metadata.get("author") or "Auteur inconnu")
+        synopsis = _single_line(str(first_metadata.get("synopsis") or "")) or "Résumé à compléter."
+        all_tags.extend([tag.strip() for tag in str(first_metadata.get("tags", "")).split(",") if tag.strip()])
+        per_title_lines = [f"- {title} — {author} | synopsis: {synopsis}"]
+
+    unique_tags = sorted({tag for tag in all_tags if tag})
+    titles_block = "\n".join(per_title_lines)
 
     prompt = (
         "Tu es un assistant de communication qui rédige un message de publication audiobook en français. "
         "Le résultat doit être agréable à lire pour des lecteurs humains: ton chaleureux, structure claire, emojis modérés. "
-        "Réponds en texte brut éditorial, 6 à 12 lignes, avec un titre et une section points clés.\n\n"
-        f"Titre: {title}\n"
-        f"Auteur: {author}\n"
-        f"Synopsis: {synopsis}\n"
-        f"Tags: {', '.join(tags) if tags else 'aucun'}\n"
+        "Réponds en texte brut éditorial, 6 à 12 lignes. "
+        "Tu DOIS faire apparaître chaque titre de la liste ci-dessous et garder chaque synopsis sur une seule ligne (pas de retour à la ligne dans les synopsis).\n\n"
+        f"Titres du paquet:\n{titles_block}\n"
+        f"Tags globaux: {', '.join(unique_tags) if unique_tags else 'aucun'}\n"
         f"Fichiers inclus: {', '.join(file_names) if file_names else 'aucun'}\n"
     )
 
@@ -800,12 +915,13 @@ def _generate_packet_changelog_draft(packet: Dict[str, object], config: Dict) ->
         except Exception as exc:  # noqa: BLE001
             logger.warning("Génération changelog via Ollama indisponible: %s", exc)
 
+    titles_fallback = "\n".join(
+        [f"• {line[2:]}" if line.startswith("- ") else f"• {line}" for line in per_title_lines]
+    )
     fallback = (
-        f"📚 **Nouvelle publication disponible**\n"
-        f"Titre : {title}\n"
-        f"Auteur : {author}\n\n"
-        "✨ Points clés\n"
-        f"• Résumé : {synopsis or 'Résumé à compléter.'}\n"
+        "📚 **Nouvelle publication disponible**\n"
+        "✨ Titres du paquet\n"
+        f"{titles_fallback}\n"
         f"• Fichiers inclus : {len(file_names)}\n"
         "Bonne écoute à toutes et à tous !"
     )
@@ -1802,6 +1918,63 @@ def api_integration_packet_update_metadata(packet_id: str):
     return jsonify({"ok": True, "packet": packet, "payload_preview": _packet_payload_preview(packet)})
 
 
+@app.route("/api/integrations/audiobookshelf/packets/<packet_id>/metadata/scrape", methods=["POST"])
+def api_integration_packet_scrape_metadata(packet_id: str):
+    _bootstrap_upload_packets()
+    payload = request.get_json(silent=True) or {}
+    target_file = str(payload.get("filename") or "").strip()
+    config = _load_config()
+
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+        if not packet:
+            return _api_error("Paquet introuvable", 404, code="packet_not_found")
+
+        _sync_packet_file_metadata(packet)
+        file_metadata = packet.get("file_metadata") if isinstance(packet.get("file_metadata"), dict) else {}
+        if not file_metadata:
+            return _api_error("Le paquet ne contient aucun fichier", code="packet_empty")
+
+        targets = [target_file] if target_file else list(file_metadata.keys())
+        for filename in targets:
+            if filename not in file_metadata:
+                return _api_error("Fichier de métadonnées introuvable", 404, code="packet_file_not_found")
+
+    updated_files: List[str] = []
+    for filename in targets:
+        with packets_lock:
+            packet = upload_packets.get(packet_id)
+            if not packet:
+                return _api_error("Paquet introuvable", 404, code="packet_not_found")
+            file_metadata = packet.get("file_metadata") if isinstance(packet.get("file_metadata"), dict) else {}
+            current = file_metadata.get(filename) if isinstance(file_metadata.get(filename), dict) else _default_file_metadata(filename)
+
+        scraped = _scrape_file_metadata(filename, {k: str(v) for k, v in current.items()}, config)
+        if not scraped:
+            continue
+
+        with packets_lock:
+            packet = upload_packets.get(packet_id)
+            if not packet:
+                return _api_error("Paquet introuvable", 404, code="packet_not_found")
+            file_metadata = packet.get("file_metadata") if isinstance(packet.get("file_metadata"), dict) else {}
+            latest = file_metadata.get(filename) if isinstance(file_metadata.get(filename), dict) else _default_file_metadata(filename)
+            merged = {**_default_file_metadata(filename), **latest, **{k: str(v) for k, v in scraped.items() if str(v).strip()}}
+            file_metadata[filename] = merged
+            packet["file_metadata"] = file_metadata
+            _refresh_packet_metrics(packet)
+            updated_files.append(filename)
+
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+    return jsonify({
+        "ok": True,
+        "updated_files": updated_files,
+        "packet": packet,
+        "payload_preview": _packet_payload_preview(packet if isinstance(packet, dict) else {}),
+    })
+
+
 @app.route("/api/integrations/audiobookshelf/packets/<packet_id>/changelog/draft", methods=["POST"])
 def api_integration_packet_changelog_draft(packet_id: str):
     _bootstrap_upload_packets()
@@ -1853,8 +2026,8 @@ def api_integration_packet_submit(packet_id: str):
     payload = request.get_json(silent=True) or {}
     request_changelog = payload.get("changelog")
     channels = payload.get("channels")
-    if not isinstance(channels, list) or not channels:
-        channels = ["discord", "telegram", "whatsapp", "email"]
+    if not isinstance(channels, list):
+        channels = []
     channels = [str(channel).strip().lower() for channel in channels if str(channel).strip()]
     channels = [channel for channel in channels if channel in PACKET_CHANNELS]
     config = _load_config()
@@ -1897,8 +2070,8 @@ def api_integration_packet_broadcast(packet_id: str):
     _bootstrap_upload_packets()
     payload = request.get_json(silent=True) or {}
     channels = payload.get("channels")
-    if not isinstance(channels, list) or not channels:
-        channels = ["discord", "telegram", "whatsapp", "email"]
+    if not isinstance(channels, list):
+        channels = []
     channels = [str(channel).strip().lower() for channel in channels if str(channel).strip()]
     channels = [channel for channel in channels if channel in PACKET_CHANNELS]
     if not channels:
@@ -1930,8 +2103,8 @@ def api_integration_packet_schedule(packet_id: str):
         return _api_error("La date de publication doit être dans le futur", code="invalid_publish_at")
 
     channels = payload.get("channels")
-    if not isinstance(channels, list) or not channels:
-        channels = ["discord", "telegram", "whatsapp", "email"]
+    if not isinstance(channels, list):
+        channels = []
     channels = [str(channel).strip().lower() for channel in channels if str(channel).strip()]
     channels = [channel for channel in channels if channel in PACKET_CHANNELS]
 

@@ -580,6 +580,19 @@ class TestSprint2PacketsApi(unittest.TestCase):
         self.assertTrue(payload['packet']['validation']['ok'])
         self.assertEqual(payload['packet']['status'], 'pret')
 
+    def test_packets_submit_without_channels_has_no_delivery(self):
+        (self.output_dir / "Livre-Canal.m4b").write_bytes(b"x")
+        self.client.post('/api/integrations/audiobookshelf/packets', json={'output_files': ['Livre-Canal.m4b']})
+        packet_id = self.client.get('/api/integrations/audiobookshelf/packets').get_json()['packets'][0]['id']
+        self.client.put(
+            f'/api/integrations/audiobookshelf/packets/{packet_id}/metadata',
+            json={'filename': 'Livre-Canal.m4b', 'metadata': {'title': 'Titre', 'author': 'Auteur', 'synopsis': 'Résumé'}}
+        )
+
+        response = self.client.post(f'/api/integrations/audiobookshelf/packets/{packet_id}/submit', json={'channels': []})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()['deliveries'], [])
+
     def test_packets_submit_requires_complete_metadata(self):
         (self.output_dir / "Livre-C.m4b").write_bytes(b"c")
         self.client.post('/api/integrations/audiobookshelf/packets', json={'output_files': ['Livre-C.m4b']})
@@ -631,6 +644,90 @@ class TestSprint2PacketsApi(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertEqual(payload['packet']['file_count'], 0)
+
+
+    def test_packets_create_prefills_metadata_from_filename(self):
+        (self.output_dir / "Auteur X - Saga Y - Vol 2 - Livre Z.m4b").write_bytes(b"x")
+        response = self.client.post(
+            '/api/integrations/audiobookshelf/packets',
+            json={'output_files': ['Auteur X - Saga Y - Vol 2 - Livre Z.m4b']}
+        )
+        self.assertEqual(response.status_code, 200)
+        packet = response.get_json()['packet']
+        md = packet['file_metadata']['Auteur X - Saga Y - Vol 2 - Livre Z.m4b']
+        self.assertEqual(md['author'], 'Auteur X')
+        self.assertEqual(md['series'], 'Saga Y')
+        self.assertEqual(md['volume'], '2')
+        self.assertEqual(md['title'], 'Livre Z')
+
+    def test_packets_require_volume_when_series_is_set(self):
+        (self.output_dir / "Livre-Serie.m4b").write_bytes(b"x")
+        self.client.post('/api/integrations/audiobookshelf/packets', json={'output_files': ['Livre-Serie.m4b']})
+        packet_id = self.client.get('/api/integrations/audiobookshelf/packets').get_json()['packets'][0]['id']
+
+        response = self.client.put(
+            f'/api/integrations/audiobookshelf/packets/{packet_id}/metadata',
+            json={'filename': 'Livre-Serie.m4b', 'metadata': {'title': 'Titre', 'author': 'Auteur', 'series': 'Saga', 'synopsis': 'Résumé'}}
+        )
+        self.assertEqual(response.status_code, 200)
+        missing = response.get_json()['packet']['validation']['missing']
+        self.assertIn('Livre-Serie.m4b:volume', missing)
+
+    @mock.patch('web.app._summarize_synopsis_no_spoiler', return_value='Résumé court sans spoiler')
+    @mock.patch('web.app.BookScraper')
+    def test_packets_metadata_scrape_endpoint(self, mocked_scraper_cls, _mock_summary):
+        (self.output_dir / "Auteur - Livre.m4b").write_bytes(b"x")
+        self.client.post('/api/integrations/audiobookshelf/packets', json={'output_files': ['Auteur - Livre.m4b']})
+        packet_id = self.client.get('/api/integrations/audiobookshelf/packets').get_json()['packets'][0]['id']
+
+        scraper = mocked_scraper_cls.return_value
+        scraper.search_book.return_value = mock.Mock(
+            title='Livre Officiel',
+            author='Auteur Officiel',
+            series='Saga Officielle',
+            series_number='4',
+            narrator='Narrateur',
+            description='Texte long de synopsis source',
+        )
+
+        response = self.client.post(
+            f'/api/integrations/audiobookshelf/packets/{packet_id}/metadata/scrape',
+            json={'filename': 'Auteur - Livre.m4b'}
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        md = payload['packet']['file_metadata']['Auteur - Livre.m4b']
+        self.assertEqual(md['title'], 'Livre Officiel')
+        self.assertEqual(md['author'], 'Auteur Officiel')
+        self.assertEqual(md['series'], 'Saga Officielle')
+        self.assertEqual(md['volume'], '4')
+        self.assertEqual(md['synopsis'], 'Résumé court sans spoiler')
+
+    def test_packets_changelog_draft_includes_each_title_and_single_line_synopsis(self):
+        (self.output_dir / "Livre-1.m4b").write_bytes(b"1")
+        (self.output_dir / "Livre-2.m4b").write_bytes(b"2")
+        packet = self.client.post(
+            '/api/integrations/audiobookshelf/packets',
+            json={'output_files': ['Livre-1.m4b', 'Livre-2.m4b'], 'name': 'Paquet Multi'}
+        ).get_json()['packet']
+
+        self.client.put(
+            f"/api/integrations/audiobookshelf/packets/{packet['id']}/metadata",
+            json={'filename': 'Livre-1.m4b', 'metadata': {'title': 'Titre 1', 'author': 'Auteur 1', 'synopsis': 'Ligne A\nLigne B'}}
+        )
+        self.client.put(
+            f"/api/integrations/audiobookshelf/packets/{packet['id']}/metadata",
+            json={'filename': 'Livre-2.m4b', 'metadata': {'title': 'Titre 2', 'author': 'Auteur 2', 'synopsis': 'Bloc X\nBloc Y'}}
+        )
+
+        draft = self.client.post(f"/api/integrations/audiobookshelf/packets/{packet['id']}/changelog/draft")
+        self.assertEqual(draft.status_code, 200)
+        payload = draft.get_json()
+        text = payload['draft']
+        self.assertIn('Titre 1', text)
+        self.assertIn('Titre 2', text)
+        self.assertIn('synopsis: Ligne A Ligne B', text)
+        self.assertIn('synopsis: Bloc X Bloc Y', text)
 
     def test_packets_changelog_draft_and_manual_update(self):
         (self.output_dir / "Livre-D.m4b").write_bytes(b"d")

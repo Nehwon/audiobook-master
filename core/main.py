@@ -29,6 +29,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def apply_log_profile(profile_name: str) -> None:
+    """Applique un profil de logs globalement via variables d'environnement."""
+    profile = (profile_name or "standard").strip().lower()
+    root_logger = logging.getLogger()
+
+    if profile == "debug-conversion":
+        os.environ["AUDIOBOOK_LOG_LEVEL"] = "DEBUG"
+        os.environ["LOG_LEVEL"] = "DEBUG"
+        root_logger.setLevel(logging.DEBUG)
+        logger.debug("Profil de logs activé: debug-conversion")
+    else:
+        logger.debug("Profil de logs activé: standard")
+
 def setup_argument_parser() -> argparse.ArgumentParser:
     """Configure l'analyseur d'arguments"""
     class _SampleRate(int):
@@ -136,6 +150,9 @@ Exemples d'utilisation:
                        help="Affiche un diagnostic de l'environnement puis quitte")
     parser.add_argument('--diagnostic-json', action='store_true',
                        help='Affiche le diagnostic en JSON (implique --diagnostic)')
+    parser.add_argument('--log-profile', choices=['standard', 'debug-conversion'],
+                       default=os.getenv('AUDIOBOOK_LOG_PROFILE', 'standard'),
+                       help='Profil de logs (ou variable AUDIOBOOK_LOG_PROFILE)')
     
     # Compatibilité avec d'anciens tests basés sur optparse
     def has_option(option_name: str) -> bool:
@@ -152,6 +169,8 @@ def main():
     # Configuration du logging
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
+
+    apply_log_profile(args.log_profile)
     
     # Configuration
     try:

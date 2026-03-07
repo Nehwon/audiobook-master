@@ -49,7 +49,7 @@ COPY . .
 
 # Configuration des permissions
 RUN chown -R audiobook:audiobook /app && \
-    chmod +x /app/run.py
+    if [ -f /app/run.py ]; then chmod +x /app/run.py; fi
 
 # Création des répertoires nécessaires
 RUN mkdir -p /app/logs /app/temp /app/data && \

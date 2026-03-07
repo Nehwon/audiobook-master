@@ -44,6 +44,7 @@ WEB_DEBUG_LOG_PATH = LOG_DIR / "web_debug.log"
 DEFAULT_CONFIG_PATH = Path(os.getenv("AUDIOBOOK_CONFIG_PATH", "/app/data/config/web_config.json"))
 CONFIG_PATH = DEFAULT_CONFIG_PATH
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
+APP_VERSION = os.getenv("AUDIOBOOK_MANAGER_VERSION", "v2.1.2")
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}
 ARCHIVE_EXTENSIONS = {".zip", ".rar"}
@@ -1619,7 +1620,7 @@ def _ensure_worker() -> None:
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", app_version=APP_VERSION)
 
 
 @app.route("/integrations/audiobookshelf/packets")

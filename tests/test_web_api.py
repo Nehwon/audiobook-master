@@ -1,3 +1,5 @@
+import json
+import sqlite3
 import tempfile
 import threading
 import unittest
@@ -157,7 +159,13 @@ class TestWebRenameApi(unittest.TestCase):
 
         web_app._save_config(cfg)
 
-        raw = web_app.CONFIG_PATH.read_text(encoding='utf-8')
+        with sqlite3.connect(web_app._state_db_path()) as conn:
+            row = conn.execute(
+                "SELECT config_payload FROM app_config WHERE config_key = ?",
+                ('web',),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        raw = row[0]
         self.assertNotIn('MotDePasseUltraSecret', raw)
         self.assertNotIn('api_key_123456', raw)
 
@@ -165,18 +173,43 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(loaded['audiobookshelf_password'], 'MotDePasseUltraSecret')
         self.assertEqual(loaded['audiobookshelf_api_key'], 'api_key_123456')
 
-    def test_save_config_creates_parent_directory_when_missing(self):
-        nested_path = self.temp_dir / 'persist' / 'config' / 'web_config.json'
-        web_app.CONFIG_PATH = nested_path
-
+    def test_save_config_persists_to_sqlite(self):
         cfg = web_app._default_config()
         cfg['audiobookshelf_server_url'] = 'https://abs.example'
         web_app._save_config(cfg)
 
-        self.assertTrue(nested_path.exists())
+        db_path = web_app._state_db_path()
+        self.assertTrue(db_path.exists())
+
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT config_payload FROM app_config WHERE config_key = ?",
+                ('web',),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        stored = json.loads(row[0])
+        self.assertEqual(stored['audiobookshelf_server_url'], 'https://abs.example')
+
         loaded = web_app._load_config()
         self.assertEqual(loaded['audiobookshelf_server_url'], 'https://abs.example')
 
+
+    def test_load_config_migrates_legacy_json_file_to_sqlite(self):
+        legacy = web_app._default_config()
+        legacy['audiobookshelf_server_url'] = 'https://legacy.example'
+        web_app.CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        web_app.CONFIG_PATH.write_text(json.dumps(legacy), encoding='utf-8')
+
+        loaded = web_app._load_config()
+        self.assertEqual(loaded['audiobookshelf_server_url'], 'https://legacy.example')
+
+        with sqlite3.connect(web_app._state_db_path()) as conn:
+            row = conn.execute(
+                "SELECT config_payload FROM app_config WHERE config_key = ?",
+                ('web',),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertIn('legacy.example', row[0])
 
     def test_api_config_preserves_audiobookshelf_and_plugin_settings(self):
         payload = {
@@ -199,6 +232,30 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(loaded['scraping_sources'], ['google_books', 'babelio'])
         self.assertEqual(loaded['cover_sources'], ['existing_file'])
         self.assertEqual(loaded['export_plugins'], ['audiobookshelf'])
+
+    def test_api_config_export_and_import(self):
+        payload = {
+            'audiobookshelf_server_url': 'https://abs-export.example',
+            'audiobookshelf_username': 'export-user',
+            'audiobookshelf_password': 'export-secret',
+            'scraping_sources': ['google_books'],
+        }
+        saved = self.client.post('/api/config', json=payload)
+        self.assertEqual(saved.status_code, 200)
+
+        exported_resp = self.client.get('/api/config/export')
+        self.assertEqual(exported_resp.status_code, 200)
+        exported = exported_resp.get_json()
+        self.assertTrue(exported['ok'])
+        self.assertEqual(exported['config']['audiobookshelf_server_url'], 'https://abs-export.example')
+        self.assertIn('version', exported['config'])
+
+        self.client.post('/api/config', json={'audiobookshelf_server_url': 'https://changed.example'})
+        imported_resp = self.client.post('/api/config/import', json=exported)
+        self.assertEqual(imported_resp.status_code, 200)
+        imported_payload = imported_resp.get_json()
+        self.assertTrue(imported_payload['ok'])
+        self.assertEqual(imported_payload['config']['audiobookshelf_server_url'], 'https://abs-export.example')
 
     @mock.patch('urllib.request.urlopen')
     def test_audiobookshelf_test_connection_with_api_key(self, mocked_urlopen):

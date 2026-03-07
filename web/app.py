@@ -170,6 +170,15 @@ def _ensure_state_db() -> None:
             ON m4b_candidates(source_folder)
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_config (
+                config_key TEXT PRIMARY KEY,
+                config_payload TEXT NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
 
 
 def _get_archive_fingerprint_from_db(archive_name: str, file_size: int, modified: float) -> Optional[Dict[str, Optional[str]]]:
@@ -803,26 +812,61 @@ def _fix_mojibake(text: str) -> str:
 
 
 def _load_config() -> Dict:
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if CONFIG_PATH.exists():
+    _ensure_state_db()
+    with sqlite3.connect(_state_db_path()) as conn:
+        row = conn.execute(
+            "SELECT config_payload FROM app_config WHERE config_key = ?",
+            ("web",),
+        ).fetchone()
+
+    if row and row[0]:
         try:
-            loaded = {**_default_config(), **json.loads(CONFIG_PATH.read_text(encoding="utf-8"))}
+            loaded = {**_default_config(), **json.loads(row[0])}
             for key in SENSITIVE_CONFIG_KEYS:
                 raw_value = loaded.get(key, "")
                 loaded[key] = _decrypt_config_secret(raw_value) if isinstance(raw_value, str) else ""
             return loaded
         except Exception:
             return _default_config()
+
+    # Migration transparente depuis l'ancien format JSON disque.
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if CONFIG_PATH.exists():
+        try:
+            legacy = {**_default_config(), **json.loads(CONFIG_PATH.read_text(encoding="utf-8"))}
+            _save_config(legacy)
+            return _load_config()
+        except Exception:
+            return _default_config()
+
     return _default_config()
 
 
 def _save_config(config: Dict) -> None:
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_state_db()
     serialized = {**config}
     for key in SENSITIVE_CONFIG_KEYS:
         value = serialized.get(key, "")
         serialized[key] = _encrypt_config_secret(value) if isinstance(value, str) and value else ""
-    CONFIG_PATH.write_text(json.dumps(serialized, indent=2, ensure_ascii=False), encoding="utf-8")
+    payload = json.dumps(serialized, ensure_ascii=False)
+    with sqlite3.connect(_state_db_path()) as conn:
+        conn.execute(
+            """
+            INSERT INTO app_config (config_key, config_payload, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(config_key) DO UPDATE SET
+                config_payload = excluded.config_payload,
+                updated_at = excluded.updated_at
+            """,
+            ("web", payload, time.time()),
+        )
+
+
+def _export_config_payload(config: Dict[str, object]) -> Dict[str, object]:
+    export_payload = {**config}
+    export_payload["version"] = 1
+    export_payload["exported_at"] = int(time.time())
+    return export_payload
 
 
 def _config_secret_key() -> bytes:
@@ -2284,6 +2328,27 @@ def api_config():
                 continue
 
     return jsonify(config)
+
+
+
+
+@app.route("/api/config/export", methods=["GET"])
+def api_config_export():
+    config = _load_config()
+    return jsonify({"ok": True, "config": _export_config_payload(config)})
+
+
+@app.route("/api/config/import", methods=["POST"])
+def api_config_import():
+    payload = request.get_json(silent=True) or {}
+    imported = payload.get("config") if isinstance(payload.get("config"), dict) else payload
+    if not isinstance(imported, dict):
+        return _api_error("Le payload d'import doit être un objet JSON", code="invalid_import_payload")
+
+    cleaned = {k: v for k, v in imported.items() if k not in {"version", "exported_at"}}
+    config = {**_load_config(), **cleaned}
+    _save_config(config)
+    return jsonify({"ok": True, "config": _load_config()})
 
 
 @app.route("/api/audiobookshelf/test-connection", methods=["POST"])

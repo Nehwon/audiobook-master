@@ -34,6 +34,7 @@
 
 - [ ] Créer un marketplace pour l'acquisition automatique des plugins
 - [ ] Developper un frontend web pour la partie integration avec Audiobookshelf
+    - [x] Rédiger un cadrage fonctionnel/technique initial (`docs/frontend-integration-concept.md`)
     - [ ] Interface pour gérer les packets d'upload, leur statut et leur progression
           - Principe : Permettre à l'utilisateur de choisir un groupe de fichiers en attente pour les publier sur Audiobookshelf
           - Logique : Lors de la publication du packet, une lecture des métadonnées est effectuée. Celle-ci sont présenté à l'utilisateur pour qu'il les modifie, fasse un recherche sur un site externe (Ex: Babelio, Google books, ...). Les données récupérées sont ensuite proposées pour remplacer les données existantes en commençant par le manquantes. Une couverture est rechercher pour remplacer l'embeded si besoin. Les synopsis sont proposés à l'ollama pour un synthèse plus concise.

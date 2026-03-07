@@ -71,6 +71,29 @@ worker_started = False
 MAX_JOB_EVENTS = 500
 job_events: List[Dict] = []
 archive_validation_cache: Dict[str, Dict[str, object]] = {}
+
+
+def _api_error(message: str, status: int = 400, code: str = "bad_request", *, details: Optional[Dict] = None):
+    payload: Dict[str, object] = {
+        "ok": False,
+        "error": message,
+        "code": code,
+    }
+    if details:
+        payload["details"] = details
+    return jsonify(payload), status
+
+
+def _resolve_output_file(filename: str) -> Optional[Path]:
+    root = OUTPUT_DIR.resolve()
+    target = (OUTPUT_DIR / filename).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return None
+    return target
+
+
 def _state_db_path() -> Path:
     return TEMP_DIR / "web_state.db"
 
@@ -1431,9 +1454,9 @@ def api_rename():
     folders = payload.get("folders", [])
     overrides = payload.get("overrides", {})
     if not isinstance(folders, list):
-        return jsonify({"error": "Le champ 'folders' doit être une liste"}), 400
+        return _api_error("Le champ 'folders' doit être une liste", code="invalid_folders")
     if not isinstance(overrides, dict):
-        return jsonify({"error": "Le champ 'overrides' doit être un objet"}), 400
+        return _api_error("Le champ 'overrides' doit être un objet", code="invalid_overrides")
 
     renamed = []
     skipped = []
@@ -1485,7 +1508,9 @@ def api_ignore_folder():
     payload = request.get_json(silent=True) or {}
     folder = payload.get("folder")
     if not isinstance(folder, str) or not folder.strip():
-        return jsonify({"error": "folder invalide"}), 400
+        return _api_error("folder invalide", code="invalid_folder")
+    if Path(folder).name != folder:
+        return _api_error("nom de dossier invalide", code="invalid_folder_name")
 
     config = _load_config()
     ignored = set(config.get("ignored_folders", []))
@@ -1500,15 +1525,15 @@ def api_delete_archive():
     payload = request.get_json(silent=True) or {}
     archive = (payload.get("archive") or "").strip()
     if not archive:
-        return jsonify({"error": "archive requis"}), 400
+        return _api_error("archive requis", code="missing_archive")
 
     normalized = Path(archive).name
     if normalized != archive:
-        return jsonify({"error": "nom d'archive invalide"}), 400
+        return _api_error("nom d'archive invalide", code="invalid_archive_name")
 
     targets = _archive_members_from_name(normalized)
     if not targets:
-        return jsonify({"error": "archive introuvable"}), 404
+        return _api_error("archive introuvable", status=404, code="archive_not_found")
 
     for target in targets:
         target.unlink(missing_ok=True)
@@ -1522,20 +1547,20 @@ def api_delete_folder():
     payload = request.get_json(silent=True) or {}
     folder = payload.get("folder")
     if not isinstance(folder, str) or not folder.strip():
-        return jsonify({"error": "folder invalide"}), 400
+        return _api_error("folder invalide", code="invalid_folder")
     if Path(folder).name != folder:
-        return jsonify({"error": "nom de dossier invalide"}), 400
+        return _api_error("nom de dossier invalide", code="invalid_folder_name")
 
     target = MEDIA_DIR / folder
     if not target.exists() or not target.is_dir():
-        return jsonify({"error": "dossier introuvable"}), 404
+        return _api_error("dossier introuvable", status=404, code="folder_not_found")
 
     file_count = sum(1 for f in target.rglob("*") if f.is_file())
     folder_size = _folder_size(target)
     has_part = any(f.is_file() for f in target.rglob("*.part*"))
     suggest_delete = has_part or (file_count == 1 and folder_size < 30 * 1024 * 1024)
     if not suggest_delete:
-        return jsonify({"error": "suppression autorisée uniquement pour dossier suspect"}), 400
+        return _api_error("suppression autorisée uniquement pour dossier suspect", code="folder_not_suspicious")
 
     shutil.rmtree(target)
     return jsonify({"deleted": folder})
@@ -1547,7 +1572,7 @@ def api_enqueue_jobs():
     payload = request.get_json(silent=True) or {}
     folders = payload.get("folders", [])
     if not isinstance(folders, list):
-        return jsonify({"error": "Le champ 'folders' doit être une liste"}), 400
+        return _api_error("Le champ 'folders' doit être une liste", code="invalid_folders")
 
     queued = []
     skipped = []
@@ -1608,7 +1633,7 @@ def api_review():
     with jobs_lock:
         job = jobs.get(job_id)
         if not job:
-            return jsonify({"error": "Job introuvable"}), 404
+            return _api_error("Job introuvable", status=404, code="job_not_found")
 
         review_bin.append({
             "job_id": job.id,
@@ -1626,7 +1651,12 @@ def api_reprocess():
     payload = request.get_json(silent=True) or {}
     folder = payload.get("folder")
     if not folder:
-        return jsonify({"error": "folder requis"}), 400
+        return _api_error("folder requis", code="missing_folder")
+    if not isinstance(folder, str) or Path(folder).name != folder:
+        return _api_error("nom de dossier invalide", code="invalid_folder_name")
+    target = MEDIA_DIR / folder
+    if not target.exists() or not target.is_dir():
+        return _api_error("dossier introuvable", status=404, code="folder_not_found")
 
     _ensure_worker()
     with jobs_lock:
@@ -1687,12 +1717,12 @@ def api_ollama_pull_model():
     payload = request.get_json(silent=True) or {}
     model = (payload.get("model") or "").strip()
     if not model:
-        return jsonify({"error": "model requis"}), 400
+        return _api_error("model requis", code="missing_model")
 
     try:
         output = _ollama_pull_model(model)
     except Exception as exc:  # noqa: BLE001
-        return jsonify({"error": str(exc)}), 503
+        return _api_error(str(exc), status=503, code="ollama_unavailable")
 
     return jsonify({"status": "ok", "model": model, "output": output})
 
@@ -1702,12 +1732,12 @@ def api_ollama_delete_model():
     payload = request.get_json(silent=True) or {}
     model = (payload.get("model") or "").strip()
     if not model:
-        return jsonify({"error": "model requis"}), 400
+        return _api_error("model requis", code="missing_model")
 
     try:
         output = _ollama_delete_model(model)
     except Exception as exc:  # noqa: BLE001
-        return jsonify({"error": str(exc)}), 500
+        return _api_error(str(exc), status=500, code="ollama_delete_failed")
 
     return jsonify({"status": "ok", "model": model, "output": output})
 
@@ -1717,7 +1747,7 @@ def api_ollama_search_metadata():
     payload = request.get_json(silent=True) or {}
     folders = payload.get("folders", [])
     if not isinstance(folders, list) or not folders:
-        return jsonify({"error": "folders requis"}), 400
+        return _api_error("folders requis", code="missing_folders")
 
     config = _load_config()
     results = [_run_ollama_metadata_search(folder, config) for folder in folders if isinstance(folder, str)]
@@ -1753,18 +1783,18 @@ def api_outputs():
 
 @app.route("/api/download/<path:filename>")
 def download_file(filename: str):
-    file_path = OUTPUT_DIR / filename
-    if file_path.exists():
+    file_path = _resolve_output_file(filename)
+    if file_path and file_path.is_file():
         return send_file(str(file_path), as_attachment=True)
-    return jsonify({"error": "Fichier non trouvé"}), 404
+    return _api_error("Fichier non trouvé", status=404, code="file_not_found")
 
 
 @app.route("/api/stream/<path:filename>")
 def stream_file(filename: str):
-    file_path = OUTPUT_DIR / filename
-    if file_path.exists():
+    file_path = _resolve_output_file(filename)
+    if file_path and file_path.is_file():
         return send_file(str(file_path), mimetype="audio/mp4")
-    return jsonify({"error": "Fichier non trouvé"}), 404
+    return _api_error("Fichier non trouvé", status=404, code="file_not_found")
 
 
 @app.route("/health")

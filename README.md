@@ -24,6 +24,7 @@ Audiobook Master est un projet Python qui convertit des dossiers de pistes audio
 ### Intégration Audiobookshelf
 - Authentification (token direct ou login/password).
 - Upload d’un `.m4b` vers une bibliothèque.
+- Matrice détaillée des formats supportés: `docs/audio-format-matrix.md`.
 - Déclenchement d’un scan de bibliothèque après upload.
 - Sélection explicite de bibliothèque via `AUDIOBOOKSHELF_LIBRARY_ID` ou `--abs-library-id`.
 

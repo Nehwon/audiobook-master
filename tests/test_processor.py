@@ -98,6 +98,29 @@ class TestAudiobookProcessor(unittest.TestCase):
         self.assertTrue((book_dir / "chapitre1.mp3").exists())
         mock_encode.assert_called_once()
 
+    @patch.object(AudiobookProcessor, 'encode_cpu_optimized_phase2', return_value=True)
+    def test_process_audiobook_emits_corrected_nested_folder_warning(self, mock_encode):
+        book_dir = self.source_dir / "Auteur - Livre"
+        child_dir = book_dir / "CD1"
+        child_dir.mkdir(parents=True)
+        (child_dir / "chapitre1.mp3").write_bytes(b"FAKE_AUDIO_DATA")
+
+        progress_events = []
+        self.processor.progress_callback = progress_events.append
+
+        result = self.processor.process_audiobook(book_dir)
+
+        self.assertTrue(result)
+        corrected_events = [
+            event for event in progress_events
+            if isinstance(event.get('details'), dict)
+            and event['details'].get('code') == 'nested_folder'
+            and event['details'].get('status') == 'corrected'
+        ]
+        self.assertTrue(corrected_events)
+        self.assertEqual(corrected_events[0]['details'].get('level'), 'warning')
+        mock_encode.assert_called_once()
+
     def test_process_audiobook_fails_with_nested_subdirectories(self):
         book_dir = self.source_dir / "MonLivre"
         nested_dir = book_dir / "Partie1" / "CD1"

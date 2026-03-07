@@ -1868,6 +1868,7 @@ class AudiobookProcessor:
             return False
     
     def convert_to_m4b(self, audio_files: List[Path], output_path: Path, metadata: AudiobookMetadata) -> bool:
+        self.last_error = None
         try:
             logger.info(f"🎵 CONVERSION M4B EN PAS SÉPARÉS: {len(audio_files)} fichiers")
             self._emit_progress("Conversion", "Préparation du pipeline FFmpeg en plusieurs étapes", 35)
@@ -2135,6 +2136,7 @@ class AudiobookProcessor:
                 audio_files = [file_path]
             
             if not audio_files:
+                self.last_error = "Aucun fichier audio trouvé"
                 logger.error(f"❌ Aucun fichier audio trouvé")
                 self._emit_progress("Erreur", "Aucun fichier audio trouvé", 100)
                 return False
@@ -2183,6 +2185,7 @@ class AudiobookProcessor:
                 self._emit_progress("Terminé", f"Fichier généré: {output_filename}", 100)
                 return True
             else:
+                self.last_error = self.last_error or f"Échec de conversion: {file_path.name}"
                 logger.error(f"❌ ÉCHEC: {file_path.name}")
                 self._emit_progress("Erreur", f"Échec de conversion: {file_path.name}", 100)
                 return False

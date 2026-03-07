@@ -50,6 +50,19 @@ class TestAudiobookProcessor(unittest.TestCase):
 
         self.assertFalse(result)
 
+    def test_convert_to_m4b_resets_last_error_between_runs(self):
+        self.processor.last_error = "old error"
+        test_audio = self.source_dir / "reset.mp3"
+        test_audio.write_bytes(b"FAKE_AUDIO_DATA")
+        output_path = self.output_dir / "reset.m4b"
+
+        with patch('subprocess.run', return_value=self._mock_run_result(0, stdout='1.0\n')):
+            result = self.processor.convert_to_m4b([test_audio], output_path, MagicMock())
+
+        self.assertTrue(result)
+        self.assertIsNone(self.processor.last_error)
+
+
     def test_convert_to_m4b_does_not_use_progress_pipe(self):
         test_audio = self.source_dir / "test_progress.mp3"
         test_audio.write_bytes(b"FAKE_AUDIO_DATA")

@@ -565,6 +565,24 @@ class TestSprint2PacketsApi(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload['packet']['file_count'], 0)
 
+    def test_packets_changelog_draft_and_manual_update(self):
+        (self.media_dir / "Livre D").mkdir(parents=True)
+        packet_id = self.client.get('/api/integrations/audiobookshelf/packets').get_json()['packets'][0]['id']
+
+        draft = self.client.post(f'/api/integrations/audiobookshelf/packets/{packet_id}/changelog/draft')
+        self.assertEqual(draft.status_code, 200)
+        draft_payload = draft.get_json()
+        self.assertTrue(draft_payload['draft'])
+        self.assertIn('source', draft_payload)
+
+        edited = self.client.put(
+            f'/api/integrations/audiobookshelf/packets/{packet_id}/changelog',
+            json={'edited': 'Message édité manuellement'}
+        )
+        self.assertEqual(edited.status_code, 200)
+        edited_payload = edited.get_json()
+        self.assertEqual(edited_payload['packet']['changelog']['edited'], 'Message édité manuellement')
+
 
 if __name__ == '__main__':
     unittest.main()

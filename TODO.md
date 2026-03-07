@@ -17,7 +17,7 @@
 ### Objectifs
 - [x] Interface pour gérer les paquets d'upload (statut, progression, validation métadonnées).
 - [x] Parcours de correction/enrichissement des métadonnées avant soumission.
-- [ ] Préparation d'un brouillon de changelog assisté IA (édition manuelle avant envoi).
+- [x] Préparation d'un brouillon de changelog assisté IA (édition manuelle avant envoi).
 - [x] Permettre la création d'un paquet à partir des fichiers `Output`.
 - [x] Permettre le retrait d'un fichier d'un paquet avant soumission.
 

@@ -289,6 +289,7 @@ def _bootstrap_upload_packets() -> None:
                     "synopsis": "",
                 },
                 "validation": {"ok": False, "missing": ["author", "synopsis"]},
+                "changelog": {"draft": "", "edited": "", "source": "none", "updated_at": None},
             }
 
 
@@ -634,6 +635,51 @@ def _run_ollama_metadata_search(folder_name: str, config: Dict) -> Dict:
 
     payload["folder"] = folder_name
     return payload
+
+
+def _generate_packet_changelog_draft(packet: Dict[str, object], config: Dict) -> Dict[str, object]:
+    metadata = packet.get("metadata") if isinstance(packet.get("metadata"), dict) else {}
+    files = packet.get("files") if isinstance(packet.get("files"), list) else []
+    file_names = [str(item.get("name")) for item in files if isinstance(item, dict) and item.get("name")]
+
+    title = str(metadata.get("title") or packet.get("name") or "Titre inconnu")
+    author = str(metadata.get("author") or "Auteur inconnu")
+    synopsis = str(metadata.get("synopsis") or "")
+    tags = [tag.strip() for tag in str(metadata.get("tags", "")).split(",") if tag.strip()]
+
+    prompt = (
+        "Tu es un assistant qui rédige un brouillon de changelog de publication audiobook en français. "
+        "Réponds avec du texte brut, concis (4 à 8 lignes), lisible et éditable humainement.\n\n"
+        f"Titre: {title}\n"
+        f"Auteur: {author}\n"
+        f"Synopsis: {synopsis}\n"
+        f"Tags: {', '.join(tags) if tags else 'aucun'}\n"
+        f"Fichiers inclus: {', '.join(file_names) if file_names else 'aucun'}\n"
+    )
+
+    model = str(config.get("ollama_model") or "qwen2.5:7b")
+    if bool(config.get("ollama_enabled", False)):
+        try:
+            data = _ollama_api_request(
+                "/api/generate",
+                {"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.3}},
+                timeout=90,
+            )
+            draft = str(data.get("response") or "").strip()
+            if draft:
+                return {"draft": draft, "source": "ollama"}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Génération changelog via Ollama indisponible: %s", exc)
+
+    fallback = (
+        f"📚 Nouvelle publication disponible\n"
+        f"Titre : {title}\n"
+        f"Auteur : {author}\n"
+        f"Résumé : {synopsis or 'Résumé à compléter.'}\n"
+        f"Fichiers : {len(file_names)}\n"
+        "#audiobook #nouveaute"
+    )
+    return {"draft": fallback, "source": "fallback"}
 
 
 def _fix_mojibake(text: str) -> str:
@@ -1548,6 +1594,7 @@ def api_integration_packets_create():
             "synopsis": "",
         },
         "validation": {"ok": False, "missing": ["author", "synopsis"]},
+        "changelog": {"draft": "", "edited": "", "source": "none", "updated_at": None},
     }
     _refresh_packet_metrics(packet)
 
@@ -1590,9 +1637,56 @@ def api_integration_packet_update_metadata(packet_id: str):
     return jsonify({"ok": True, "packet": packet, "payload_preview": _packet_payload_preview(packet)})
 
 
+@app.route("/api/integrations/audiobookshelf/packets/<packet_id>/changelog/draft", methods=["POST"])
+def api_integration_packet_changelog_draft(packet_id: str):
+    _bootstrap_upload_packets()
+    config = _load_config()
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+        if not packet:
+            return _api_error("Paquet introuvable", 404, code="packet_not_found")
+
+    result = _generate_packet_changelog_draft(packet, config)
+
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+        if not packet:
+            return _api_error("Paquet introuvable", 404, code="packet_not_found")
+        changelog = packet.get("changelog") if isinstance(packet.get("changelog"), dict) else {}
+        changelog["draft"] = str(result.get("draft") or "")
+        if not changelog.get("edited"):
+            changelog["edited"] = changelog["draft"]
+        changelog["source"] = str(result.get("source") or "fallback")
+        changelog["updated_at"] = int(time.time())
+        packet["changelog"] = changelog
+    return jsonify({"ok": True, "packet": packet, "draft": changelog["draft"], "source": changelog["source"]})
+
+
+@app.route("/api/integrations/audiobookshelf/packets/<packet_id>/changelog", methods=["PUT"])
+def api_integration_packet_changelog_update(packet_id: str):
+    _bootstrap_upload_packets()
+    payload = request.get_json(silent=True) or {}
+    edited = payload.get("edited")
+    if not isinstance(edited, str):
+        return _api_error("Le champ 'edited' doit être une chaîne", code="invalid_changelog")
+
+    with packets_lock:
+        packet = upload_packets.get(packet_id)
+        if not packet:
+            return _api_error("Paquet introuvable", 404, code="packet_not_found")
+        changelog = packet.get("changelog") if isinstance(packet.get("changelog"), dict) else {}
+        changelog["edited"] = edited.strip()
+        changelog["updated_at"] = int(time.time())
+        packet["changelog"] = changelog
+
+    return jsonify({"ok": True, "packet": packet})
+
+
 @app.route("/api/integrations/audiobookshelf/packets/<packet_id>/submit", methods=["POST"])
 def api_integration_packet_submit(packet_id: str):
     _bootstrap_upload_packets()
+    payload = request.get_json(silent=True) or {}
+    request_changelog = payload.get("changelog")
     with packets_lock:
         packet = upload_packets.get(packet_id)
         if not packet:
@@ -1605,6 +1699,11 @@ def api_integration_packet_submit(packet_id: str):
                 code="metadata_incomplete",
                 details={"missing": validation.get("missing", [])},
             )
+
+        changelog = packet.get("changelog") if isinstance(packet.get("changelog"), dict) else {}
+        if isinstance(request_changelog, str) and request_changelog.strip():
+            changelog["edited"] = request_changelog.strip()
+        packet["changelog"] = changelog
         packet["status"] = "publie"
         packet["progress"] = 100
 
@@ -1619,6 +1718,7 @@ def api_integration_packet_submit(packet_id: str):
                 {"key": "confirm", "status": "done", "label": "Confirmation finale"},
             ],
             "payload_preview": _packet_payload_preview(packet),
+            "changelog": packet.get("changelog", {}),
         }
     )
 

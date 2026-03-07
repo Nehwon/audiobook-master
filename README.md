@@ -8,7 +8,7 @@
 
 Audiobook Master est un projet Python qui convertit des dossiers de pistes audio (`.mp3`, `.m4a`, `.flac`, etc.) en fichiers `.m4b`, avec une interface web Flask, une CLI, et une intégration optionnelle avec Audiobookshelf.
 
-> ⚠️ **État du dépôt** : le projet contient des composants historiques (`run.py`, `start_web.py`) et des composants actifs (`core/`, `web/`, `integrations/`). Cette documentation décrit explicitement le chemin recommandé aujourd'hui.
+> ℹ️ **Compatibilité** : les entrées historiques (`run.py`, `start_web.py`) sont conservées comme wrappers de compatibilité et délèguent vers les modules actifs (`core/`, `web/`, `integrations/`). Le chemin recommandé reste `python -m core.main` et `python -m web.app`.
 
 ## 1) Fonctionnalités actuelles
 
@@ -172,7 +172,7 @@ pytest -q
 
 ## 9) Limites / points d’attention connus
 
-- Le dépôt contient des chemins “legacy” (`run.py`, `start_web.py`) qui ne reflètent pas toujours la structure active.
+- Les chemins “legacy” (`run.py`, `start_web.py`) restent disponibles pour compatibilité, mais affichent un avertissement de dépréciation.
 - La documentation historique mentionnait des promesses non vérifiables (couverture 100%, production-ready universel). Elles ont été retirées ici au profit d’un état factuel.
 - Certaines fonctionnalités IA dépendent d’Ollama et d’un modèle disponible localement.
 

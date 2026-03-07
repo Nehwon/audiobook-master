@@ -18,7 +18,7 @@
 
 ## Priorité P2 — Maintenabilité
 
-- [ ] Éliminer/archiver progressivement les scripts legacy non alignés (`run.py`, `start_web.py`) ou les remettre en cohérence.
+- [x] Éliminer/archiver progressivement les scripts legacy non alignés (`run.py`, `start_web.py`) ou les remettre en cohérence.
 - [ ] Factoriser la configuration partagée CLI/Web pour limiter la divergence des defaults.
 - [ ] Réduire la dette documentaire en gardant le README concis et les détails dans `docs/`.
 - [ ] Refactoriser la récupération de métadonnées externes en architecture de plugins (un plugin par source/site).

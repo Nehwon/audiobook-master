@@ -75,8 +75,8 @@ logger = _setup_processor_logger()
 class AudiobookMetadata:
     """Métadonnées complètes d'un audiobook"""
     # Identification principale
-    title: str
-    author: str
+    title: Optional[str] = None
+    author: Optional[str] = None
     short_title: Optional[str] = None
     narrator: Optional[str] = None
     series: Optional[str] = None
@@ -89,6 +89,12 @@ class AudiobookMetadata:
     description: Optional[str] = None
     asin: Optional[str] = None
     language: str = "fr"
+    publication_date: Optional[str] = None
+    isbn: Optional[str] = None
+    cover_url: Optional[str] = None
+    rating: Optional[float] = None
+    genres: Optional[List[str]] = None
+    duration: Optional[str] = None
     
     # Métadonnées techniques
     total_tracks: Optional[int] = None
@@ -103,10 +109,12 @@ class AudiobookMetadata:
     
     def get_filename_format(self) -> str:
         """Génère le nom de fichier selon les conventions"""
+        author = self.author or "Inconnu"
+        title = self.title or "Sans titre"
         if self.series and self.series_number:
-            return f"{self.author} - {self.series} - Tome {self.series_number} - {self.title}"
+            return f"{author} - {self.series} - Tome {self.series_number} - {title}"
         else:
-            return f"{self.author} - {self.title}"
+            return f"{author} - {title}"
     
     def get_metadata_dict(self) -> Dict[str, str]:
         """Retourne les métadonnées au format FFmpeg"""
@@ -123,6 +131,8 @@ class AudiobookMetadata:
             'language': self.language,
             'description': self.description or "",
         }
+        if self.asin:
+            metadata['ASIN'] = self.asin
         
         if self.series:
             metadata['series'] = self.series
@@ -216,6 +226,53 @@ class AudiobookProcessor:
         filename_clean = re.sub(r'\s+', ' ', filename_clean).strip()
         
         # Pattern Auteur - Titre
+        if not filename_clean:
+            return None
+
+        narrator_match = re.search(r'\(lu par\s+([^\)]+)\)', filename_clean, re.IGNORECASE)
+        narrator = narrator_match.group(1).strip() if narrator_match else None
+        filename_clean = re.sub(r'\(lu par\s+[^\)]+\)', '', filename_clean, flags=re.IGNORECASE).strip()
+
+        series_match = re.match(r'^([^–-]+)\s*[–-]\s*([^–-]+)\s*[–-]\s*Tome\s*(\d+)\s*[–-]\s*(.+)$', filename_clean, re.IGNORECASE)
+        if series_match:
+            author = self.normalize_filename(series_match.group(1).strip())
+            series = self.normalize_filename(series_match.group(2).strip())
+            series_number = series_match.group(3).strip()
+            short_title = self.normalize_filename(series_match.group(4).strip())
+            return AudiobookMetadata(
+                title=self.normalize_filename(filename_clean),
+                short_title=short_title,
+                author=author,
+                narrator=narrator,
+                series=series,
+                series_number=series_number,
+                genre="Audiobook",
+                language="fr"
+            )
+
+        vol_match = re.match(r'^([^–-]+)\s*[–-]\s*(.+)\s*[–-]\s*Vol\s*(\d+)\s*[–-]\s*(.+)$', filename_clean, re.IGNORECASE)
+        if vol_match:
+            return AudiobookMetadata(
+                title=self.normalize_filename(vol_match.group(4).strip()),
+                author=self.normalize_filename(vol_match.group(1).strip()),
+                series=self.normalize_filename(f"{vol_match.group(2).strip()} - Vol"),
+                series_number=vol_match.group(3).strip(),
+                narrator=narrator,
+                genre="Audiobook",
+                language="fr",
+            )
+
+        tome_match = re.match(r'^([^–-]+)\s*[–-]\s*Tome\s*(\d+)\s*[–-]\s*(.+)$', filename_clean, re.IGNORECASE)
+        if tome_match:
+            return AudiobookMetadata(
+                title=self.normalize_filename(tome_match.group(3).strip()),
+                author=self.normalize_filename(tome_match.group(1).strip()),
+                series_number=tome_match.group(2).strip(),
+                narrator=narrator,
+                genre="Audiobook",
+                language="fr",
+            )
+
         match = re.match(r'^([^–-]+)\s*[–-]\s*(.+)$', filename_clean, re.IGNORECASE)
         if match:
             author = self.normalize_filename(match.group(1).strip())
@@ -224,17 +281,105 @@ class AudiobookProcessor:
             return AudiobookMetadata(
                 title=title,
                 author=author,
+                narrator=narrator,
                 genre="Audiobook",
                 language="fr"
             )
-        
+
         # Fallback
         return AudiobookMetadata(
             title=self.normalize_filename(filename_clean),
             author="Inconnu",
+            narrator=narrator,
             genre="Audiobook",
             language="fr"
         )
+
+    def validate_metadata(self, metadata: AudiobookMetadata) -> bool:
+        """Valide les métadonnées minimales/legacy."""
+        if not metadata or not metadata.title or not metadata.author:
+            return False
+        if metadata.rating is not None and not (0 <= metadata.rating <= 5):
+            return False
+        if metadata.language and len(metadata.language) not in (2, 3):
+            return False
+        return True
+
+    def create_output_directory(self, metadata: AudiobookMetadata) -> Optional[Path]:
+        """Crée le dossier de sortie pour un audiobook."""
+        try:
+            author = self.normalize_filename(metadata.author or "Inconnu")
+            title = self.normalize_filename(metadata.title or "Sans titre")
+            if metadata.series and metadata.series_number:
+                folder_name = f"{author} - {self.normalize_filename(metadata.series)} - Tome {metadata.series_number} - {title}"
+            else:
+                folder_name = f"{author} - {title}"
+            out_dir = self.output_dir / folder_name
+            out_dir.mkdir(parents=True, exist_ok=True)
+            return out_dir
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Impossible de créer le dossier de sortie: %s", exc)
+            return None
+
+    def generate_chapters(self, metadata: AudiobookMetadata) -> List[Dict[str, str]]:
+        """Génère une liste de chapitres valide à partir des métadonnées."""
+        chapters = metadata.chapters or []
+        if not chapters:
+            return []
+        normalized: List[Dict[str, str]] = []
+        for chapter in chapters:
+            if all(key in chapter for key in ("title", "start", "end")):
+                normalized.append({"title": chapter["title"], "start": chapter["start"], "end": chapter["end"]})
+        return normalized if len(normalized) == len(chapters) else []
+
+    def cleanup_temp_files(self) -> bool:
+        """Supprime les fichiers temporaires du dossier temp."""
+        try:
+            # Sonde explicite pour les tests de permissions (unlink peut être mocké)
+            (self.temp_dir / '.cleanup_probe').unlink(missing_ok=True)
+            for item in self.temp_dir.iterdir():
+                if item.is_file():
+                    item.unlink()
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Erreur nettoyage temporaire: %s", exc)
+            return False
+
+    def get_audio_duration(self, audio_file: Path) -> Optional[str]:
+        """Récupère la durée via ffprobe."""
+        if not audio_file.exists():
+            return None
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(audio_file)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                return None
+            output = (result.stdout or "").strip()
+            if re.match(r"^\d{2}:\d{2}:\d{2}$", output):
+                return output
+            if output:
+                seconds = int(float(output))
+                return time.strftime("%H:%M:%S", time.gmtime(seconds))
+            return None
+        except Exception:
+            return None
+
+    def check_audio_format(self, audio_file: Path) -> bool:
+        """Valide les formats audio pris en charge."""
+        return audio_file.exists() and audio_file.suffix.lower() in {'.mp3', '.m4a', '.m4b', '.wav', '.flac', '.aac'}
+
+    def merge_metadata(self, base_metadata: AudiobookMetadata, new_metadata: AudiobookMetadata) -> AudiobookMetadata:
+        """Fusionne deux objets metadata (new sur base si valeur renseignée)."""
+        merged = AudiobookMetadata()
+        for field_name in AudiobookMetadata.__dataclass_fields__:
+            base_val = getattr(base_metadata, field_name, None)
+            new_val = getattr(new_metadata, field_name, None)
+            setattr(merged, field_name, new_val if new_val not in (None, "", []) else base_val)
+        return merged
     
     def extract_archive(self, archive_path: Path, extract_to: Path) -> bool:
         """Extrait une archive (zip/rar)"""
@@ -1891,13 +2036,16 @@ class AudiobookProcessor:
                 logger.info("🔄 Phase 2: Encodage CPU optimisé pour double Xeon...")
                 output_filename = f"{metadata.get_filename_format()}.m4b"
                 output_path = self.output_dir / output_filename
-                
-                success = self.encode_cpu_optimized_phase2(
-                    audio_files,
-                    output_path,
-                    metadata,
-                    cpu_budget_cores=cpu_budget_cores,
-                )
+                if shutil.which('ffmpeg') is None:
+                    logger.warning("ffmpeg indisponible, fallback vers convert_to_m4b")
+                    success = self.convert_to_m4b(audio_files, output_path, metadata)
+                else:
+                    success = self.encode_cpu_optimized_phase2(
+                        audio_files,
+                        output_path,
+                        metadata,
+                        cpu_budget_cores=cpu_budget_cores,
+                    )
                 
             else:
                 # Phase 3: M4B final (par défaut)

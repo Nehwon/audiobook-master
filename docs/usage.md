@@ -30,6 +30,7 @@ python -m core.main --source /chemin/source --output /chemin/output
 --no-gpu               Désactive accélération GPU
 --aac-coder            twolo|fast
 --verbose / -v         Logs détaillés
+--log-profile          Profil de logs (standard|debug-conversion)
 --diagnostic           Diagnostic environnement (texte)
 --diagnostic-json      Diagnostic environnement (JSON)
 ```
@@ -42,6 +43,36 @@ python -m core.main --diagnostic-json
 ```
 
 Le diagnostic vérifie les dépendances Python clés, la présence de `ffmpeg`/`ollama`, l'accessibilité des répertoires (source/output/temp) et l'état des variables d'environnement Audiobookshelf.
+
+Exemple de dépannage rapide :
+
+```bash
+python -m core.main --diagnostic
+python -m core.main --diagnostic-json > /tmp/audiobook-diagnostic.json
+```
+
+Points à vérifier en priorité dans le rapport :
+
+- `ffmpeg` doit être résolu dans la section `[Binaires systeme]`.
+- Les répertoires `source`/`output`/`temp` doivent être `readable=True` et `writable=True`.
+- La variable `AUDIOBOOKSHELF_LIBRARY_ID` doit être `set` si vous activez `--upload`.
+
+### Profil de logs `debug-conversion`
+
+Activation ponctuelle (CLI) :
+
+```bash
+python -m core.main --log-profile debug-conversion
+```
+
+Activation persistante (sans modifier le code) :
+
+```bash
+export AUDIOBOOK_LOG_PROFILE=debug-conversion
+python -m core.main
+```
+
+Ce profil force les niveaux de logs à `DEBUG` pour faciliter l'analyse des conversions.
 
 ### Variables d'environnement Audiobookshelf (CLI)
 
@@ -170,6 +201,25 @@ Validation ciblée (exemples) :
 pytest tests/test_web_api.py -q
 pytest tests/test_smoke_suite.py -q
 ```
+
+## Boucle locale de dev (checklist courte)
+
+1. **Test rapide**
+   ```bash
+   pytest -q tests/test_smoke_suite.py
+   ```
+2. **Diagnostic environnement**
+   ```bash
+   python -m core.main --diagnostic
+   ```
+3. **Debug conversion (si incident ffmpeg/qualité)**
+   ```bash
+   AUDIOBOOK_LOG_PROFILE=debug-conversion python -m core.main --single /chemin/vers/fichier
+   ```
+4. **Validation avant release locale**
+   ```bash
+   pytest -q
+   ```
 
 ## Limites connues
 

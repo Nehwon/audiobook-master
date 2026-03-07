@@ -5,12 +5,12 @@
 ### Objectifs
 - [x] Préparer un plan de sprint exploitable depuis `TODO.md`.
 - [x] Ajouter une commande de diagnostic CLI unique (dépendances, binaires, répertoires, variables d'environnement).
-- [ ] Ajouter un profil de logs `debug conversion` activable sans modifier le code.
-- [ ] Documenter la boucle locale de dev (test, debug, release) avec une checklist courte.
+- [x] Ajouter un profil de logs `debug conversion` activable sans modifier le code.
+- [x] Documenter la boucle locale de dev (test, debug, release) avec une checklist courte.
 
 ### Livrables attendus
 - [x] Nouveau module de diagnostic CLI et option `--diagnostic`.
-- [ ] Documentation utilisateur enrichie avec exemples de diagnostics et dépannage.
+- [x] Documentation utilisateur enrichie avec exemples de diagnostics et dépannage.
 
 ## Sprint 2 — Frontend d'intégration Audiobookshelf
 

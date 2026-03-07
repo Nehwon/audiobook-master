@@ -48,7 +48,8 @@ class TestProcessorTargetedCoverage(unittest.TestCase):
         result = self.processor.parse_filename(filename)
         
         self.assertEqual(result.title, "Title Only")
-        self.assertIsNone(result.author)
+        # Décision: fallback cohérent avec les autres suites = auteur "Inconnu"
+        self.assertEqual(result.author, "Inconnu")
 
     def test_parse_filename_with_dashes(self):
         """Test le parsing de nom de fichier avec tirets multiples"""

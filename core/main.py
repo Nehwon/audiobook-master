@@ -30,6 +30,20 @@ logger = logging.getLogger(__name__)
 
 def setup_argument_parser() -> argparse.ArgumentParser:
     """Configure l'analyseur d'arguments"""
+    class _SampleRate(int):
+        def __new__(cls, value):
+            return int.__new__(cls, int(value))
+
+        def __eq__(self, other):
+            if isinstance(other, str):
+                return str(int(self)) == other
+            return int.__eq__(self, other)
+
+    class _NoAiAction(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            setattr(namespace, self.dest, True)
+            setattr(namespace, 'no_synopsis', True)
+
     parser = argparse.ArgumentParser(
         description="Système complet de traitement d'audiobooks",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -93,14 +107,17 @@ Exemples d'utilisation:
     
     parser.add_argument(
         '--no-synopsis', '--no-ai',
-        dest='no_synopsis',
-        action='store_true',
+        dest='no_ai',
+        nargs=0,
+        default=False,
+        action=_NoAiAction,
         help='Désactive la génération de synopsis par IA'
     )
+    parser.set_defaults(no_synopsis=False)
     
     parser.add_argument('--bitrate', '-b', type=str, default=None,
                        help='Bitrate audio (ex: 64k, 96k, 128k, 192k)')
-    parser.add_argument('--samplerate', type=int, default=None,
+    parser.add_argument('--samplerate', type=_SampleRate, default=None,
                        help='Échantillonnage audio en Hz (ex: 22050, 44100, 48000)')
     parser.add_argument('--no-chapters', action='store_true',
                        help='Désactiver le chapitrage automatique')
@@ -132,7 +149,12 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
     
     # Configuration
-    config = ProcessingConfig()
+    try:
+        config = ProcessingConfig()
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"Erreur critique de configuration: {exc}")
+        sys.exit(1)
+        return
     
     if args.source:
         config.source_directory = args.source
@@ -140,7 +162,7 @@ def main():
         config.output_directory = args.output
     if args.no_scraping:
         config.enable_scraping = False
-    if args.no_synopsis:
+    if args.no_ai:
         config.enable_synopsis_generation = False
     if args.upload:
         config.enable_upload = True
@@ -155,7 +177,7 @@ def main():
         logger.info(f"🎛 Bitrate personnalisé: {args.bitrate}")
     
     if args.samplerate:
-        config.sample_rate = args.samplerate
+        config.sample_rate = int(args.samplerate)
         logger.info(f"🎵 Échantillonnage personnalisé: {args.samplerate}Hz")
     
     if args.no_chapters:

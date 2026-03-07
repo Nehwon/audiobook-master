@@ -8,6 +8,7 @@ Cette roadmap se concentre sur des objectifs vérifiables à partir du code pré
   - Réduire drastiquement le nombre d’échecs sur `pytest -q`.
   - Isoler les tests obsolètes ou non alignés avec l’implémentation actuelle.
   - Définir un “socle CI minimal” fiable (smoke tests obligatoires).
+  - Consolider la compatibilité legacy des modules `core/processor`, `core/metadata` et `ai/synopsis` sans diverger du comportement produit.
 
 - **Clarifier les points d’entrée**
   - Conserver un chemin officiel pour la CLI (`core/main.py`).
@@ -23,6 +24,7 @@ Cette roadmap se concentre sur des objectifs vérifiables à partir du code pré
 - **Fiabiliser la conversion audio**
   - Uniformiser les stratégies de conversion et les retours d’erreur FFmpeg.
   - Consolider la gestion de chapitres et métadonnées dans le flux principal.
+  - Remplacer progressivement les wrappers legacy temporaires par des interfaces testées et documentées.
 
 - **Améliorer l’observabilité**
   - Structurer davantage les logs (par job, niveau, composant).

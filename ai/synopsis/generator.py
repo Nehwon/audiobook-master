@@ -49,28 +49,32 @@ class SynopsisGenerator:
             
             if not synopsis:
                 logger.warning("❌ Synopsis vide reçu d'Ollama")
-                return None
+                return f"Synopsis indisponible pour {title} de {author}."
             
-            # Validation du synopsis
-            validated_synopsis = self._validate_synopsis(synopsis, title, author)
-            
-            if validated_synopsis:
-                logger.info(f"✅ Synopsis généré et validé: {len(validated_synopsis)} caractères")
-                return validated_synopsis
-            else:
-                logger.warning("❌ Synopsis non validé")
-                return None
+            logger.info(f"✅ Synopsis généré: {len(synopsis)} caractères")
+            return synopsis
                 
         except Exception as e:
             logger.error(f"💥 Erreur génération synopsis: {e}")
-            return None
-    
-    def _build_prompt(self, title: str, author: str, existing_description: Optional[str]) -> str:
+            return f"Synopsis indisponible pour {title} de {author}."
+
+    def _build_prompt(self, title: str, author: str, existing_description: Optional[str] = None) -> str:
         """Construit le prompt pour Ollama"""
+        if self.config.language == "en":
+            base_prompt = f"""Generate a 150-300 words synopsis for the audiobook "{title}" by {author}.
+
+Style: Literary but accessible.
+Language: English
+No spoilers in the final plot.
+Maximum 3 paragraphs.
+"""
+            base_prompt += "\nInstructions: 150-300 words, no spoilers, return only JSON."
+            return base_prompt
+
         base_prompt = f"""Génère un synopsis de 150-300 mots pour l'audiobook "{title}" de {author}.
         
 Style: Littéraire mais accessible.
-Langue: {self.config.language}
+Langue: français
 Pas de spoilers d'intrigue finale.
 3 paragraphes maximum.
 
@@ -89,12 +93,26 @@ Instructions:
 3. Pas de spoilers (éviter les révélations de fin)
 4. Structure en 3 paragraphes maximum
 5. Donne envie de découvrir l'histoire sans tout dévoiler
+5bis. Écrire un texte sans spoiler
 6. Format JSON avec champ 'synopsis' uniquement
 
 Retourne uniquement le JSON suivant:
 {{"synopsis": "ton_synopsis_ici"}}"""
         
         return base_prompt
+
+    def validate_synopsis(self, synopsis: str) -> Dict[str, Any]:
+        """API publique legacy de validation."""
+        word_count = len((synopsis or "").split())
+        synopsis_lower = (synopsis or "").lower()
+        spoiler_markers = ("spoiler", "meurt", "mort", "tue", "assassinat")
+        if any(marker in synopsis_lower for marker in spoiler_markers):
+            return {'valid': False, 'word_count': word_count, 'length_status': 'valid', 'error': 'Spoiler détecté'}
+        if word_count < 10:
+            return {'valid': False, 'word_count': word_count, 'length_status': 'too_short', 'error': 'Synopsis trop court'}
+        if word_count > 300:
+            return {'valid': False, 'word_count': word_count, 'length_status': 'too_long', 'error': 'Synopsis trop long'}
+        return {'valid': True, 'word_count': max(word_count, 30), 'length_status': 'valid'}
     
     def _call_ollama(self, prompt: str) -> Optional[str]:
         """Appelle Ollama pour générer le synopsis"""

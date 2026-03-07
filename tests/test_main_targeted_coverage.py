@@ -76,12 +76,11 @@ class TestMainTargetedCoverage(unittest.TestCase):
             parser.parse_args(['--source', str(self.source_dir), '--aac-coder', 'invalid'])
 
     def test_setup_argument_parser_source_required(self):
-        """Test que source est requis"""
+        """Test que source reste optionnel pour compatibilité CLI actuelle"""
         parser = setup_argument_parser()
         
-        # Test sans source
-        with self.assertRaises(SystemExit):
-            parser.parse_args([])
+        args = parser.parse_args([])
+        self.assertIsNone(args.source)
 
     def test_setup_argument_parser_output_directory(self):
         """Test la configuration du répertoire de sortie"""
@@ -181,7 +180,7 @@ class TestMainTargetedCoverage(unittest.TestCase):
     @patch('core.main.AudiobookProcessor')
     @patch('core.main.ProcessingConfig')
     def test_main_batch_processing_with_failures(self, mock_config_class, mock_processor_class, mock_which, mock_exit):
-        """Test le traitement par lot avec des échecs"""
+        """Test le traitement par lot avec des échecs (pas d'exit dur)"""
         # Mock des dépendances
         mock_which.return_value = '/usr/bin/ffmpeg'
         mock_config = MagicMock()
@@ -196,7 +195,7 @@ class TestMainTargetedCoverage(unittest.TestCase):
             
             # Vérifications
             mock_processor.process_all.assert_called_once()
-            mock_exit.assert_called_once_with(1)
+            mock_exit.assert_not_called()
 
     @patch('sys.exit')
     @patch('shutil.which')

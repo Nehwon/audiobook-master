@@ -151,6 +151,46 @@ class TestWebRenameApi(unittest.TestCase):
         listing = self.client.get('/api/library').get_json()
         names = [entry['name'] for entry in listing['folders']]
         self.assertNotIn('Mon Livre Source', names)
+        hidden = next(entry for entry in listing['hidden_processed_folders'] if entry['name'] == 'Mon Livre Source')
+        self.assertIn(output_name, hidden['output_files'])
+
+    def test_delete_processed_folder_with_override_flag(self):
+        folder = self.media_dir / 'Traite'
+        folder.mkdir()
+        (folder / 'track1.mp3').write_text('x')
+        output_name = 'Auteur - Traite.m4b'
+        (web_app.OUTPUT_DIR / output_name).write_text('m4b')
+        web_app._save_m4b_candidate('Traite', output_name)
+
+        resp = self.client.post('/api/folder/delete', json={'folder': 'Traite', 'allow_hidden_processed': True})
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(folder.exists())
+
+    def test_delete_output_file_endpoint(self):
+        output_name = 'Auteur - Roman.m4b'
+        out = web_app.OUTPUT_DIR / output_name
+        out.write_text('m4b')
+
+        resp = self.client.post('/api/output/delete', json={'filename': output_name})
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(out.exists())
+
+    def test_delete_both_processed_folder_and_output(self):
+        folder = self.media_dir / 'Traite Deux'
+        folder.mkdir()
+        (folder / 'track1.mp3').write_text('x')
+        output_name = 'Auteur - Traite Deux.m4b'
+        out = web_app.OUTPUT_DIR / output_name
+        out.write_text('m4b')
+        web_app._save_m4b_candidate('Traite Deux', output_name)
+
+        resp_folder = self.client.post('/api/folder/delete', json={'folder': 'Traite Deux', 'allow_hidden_processed': True})
+        self.assertEqual(resp_folder.status_code, 200)
+        resp_out = self.client.post('/api/output/delete', json={'filename': output_name})
+        self.assertEqual(resp_out.status_code, 200)
+
+        self.assertFalse(out.exists())
+        self.assertFalse(folder.exists())
 
     def test_save_config_encrypts_audiobookshelf_secrets_at_rest(self):
         cfg = web_app._default_config()

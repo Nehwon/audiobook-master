@@ -607,6 +607,30 @@ def _get_completed_folders_with_existing_outputs() -> set[str]:
     return {str(row[0]) for row in rows if row and row[0]}
 
 
+def _get_completed_outputs_by_source_folder() -> Dict[str, List[str]]:
+    _ensure_state_db()
+    if not OUTPUT_DIR.exists():
+        return {}
+
+    existing_outputs = {file.name for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()}
+    if not existing_outputs:
+        return {}
+
+    placeholders = ",".join("?" for _ in existing_outputs)
+    query = (
+        "SELECT source_folder, output_name FROM m4b_candidates "
+        "WHERE metadata_status = 'completed' AND output_name IN (" + placeholders + ")"
+    )
+    mapping: Dict[str, List[str]] = {}
+    with sqlite3.connect(_state_db_path()) as conn:
+        rows = conn.execute(query, tuple(existing_outputs)).fetchall()
+    for row in rows:
+        if not row or not row[0] or not row[1]:
+            continue
+        mapping.setdefault(str(row[0]), []).append(str(row[1]))
+    return mapping
+
+
 _ensure_state_db()
 
 def _default_config() -> Dict:
@@ -1262,12 +1286,13 @@ def _list_media() -> Dict:
     folders = []
     hidden_processed_folders = []
     archives = []
-    output_keys = {
-        _normalize_media_label(file.stem)
-        for file in OUTPUT_DIR.glob("*.m4b")
-        if file.is_file()
-    } if OUTPUT_DIR.exists() else set()
-    completed_source_folders = _get_completed_folders_with_existing_outputs()
+    output_files = [file for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()] if OUTPUT_DIR.exists() else []
+    output_keys = {_normalize_media_label(file.stem) for file in output_files}
+    output_names_by_key: Dict[str, List[str]] = {}
+    for output_file in output_files:
+        output_names_by_key.setdefault(_normalize_media_label(output_file.stem), []).append(output_file.name)
+    completed_outputs_by_source = _get_completed_outputs_by_source_folder()
+    completed_source_folders = set(completed_outputs_by_source.keys()) | _get_completed_folders_with_existing_outputs()
 
     for item in sorted(MEDIA_DIR.iterdir(), key=lambda x: x.name.lower()):
         if item.is_dir():
@@ -1277,7 +1302,12 @@ def _list_media() -> Dict:
             if file_count == 0:
                 continue
             folder_size = _folder_size(item)
-            if item.name in completed_source_folders or _normalize_media_label(item.name) in output_keys:
+            normalized_folder_name = _normalize_media_label(item.name)
+            if item.name in completed_source_folders or normalized_folder_name in output_keys:
+                matched_outputs = list(completed_outputs_by_source.get(item.name, []))
+                for output_name in output_names_by_key.get(normalized_folder_name, []):
+                    if output_name not in matched_outputs:
+                        matched_outputs.append(output_name)
                 hidden_processed_folders.append(
                     {
                         "name": item.name,
@@ -1285,6 +1315,7 @@ def _list_media() -> Dict:
                         "size": folder_size,
                         "file_count": file_count,
                         "modified": item.stat().st_mtime,
+                        "output_files": matched_outputs,
                     }
                 )
                 continue
@@ -2781,6 +2812,25 @@ def api_outputs():
     for item in sorted(OUTPUT_DIR.glob("*.m4b"), key=lambda p: p.stat().st_mtime, reverse=True):
         files.append({"name": item.name, "size": item.stat().st_size, "created": item.stat().st_mtime})
     return jsonify(files)
+
+
+@app.route("/api/output/delete", methods=["POST"])
+def api_delete_output_file():
+    payload = request.get_json(silent=True) or {}
+    filename = (payload.get("filename") or "").strip()
+    if not filename:
+        return _api_error("filename requis", code="missing_filename")
+
+    normalized = Path(filename).name
+    if normalized != filename:
+        return _api_error("nom de fichier invalide", code="invalid_filename")
+
+    target = _resolve_output_file(normalized)
+    if not target or not target.exists() or not target.is_file():
+        return _api_error("fichier output introuvable", status=404, code="output_not_found")
+
+    target.unlink(missing_ok=True)
+    return jsonify({"deleted": normalized})
 
 
 @app.route("/api/download/<path:filename>")

@@ -167,7 +167,7 @@
         <div class="card">
             <h3>Dossiers déjà traités (cachés automatiquement)</h3>
             <table>
-                <thead><tr><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>M4B lié</th><th>Actions</th></tr></thead>
                 <tbody id="hiddenProcessedFoldersBody"></tbody>
             </table>
         </div>
@@ -634,15 +634,25 @@ async function loadLibrary() {
     (data.hidden_processed_folders || []).forEach(f => {
         const jsFolder = toJsString(f.name);
         const folderNameEscaped = escapeHtml(f.name);
+        const outputFiles = Array.isArray(f.output_files) ? f.output_files.filter(Boolean) : [];
+        const outputName = outputFiles[0] || '';
+        const jsOutputName = toJsString(outputName);
+        const hasOutput = !!outputName;
+        const outputLabel = hasOutput ? escapeHtml(outputName) : '<span class="muted">Aucun M4B trouvé</span>';
         hpb.innerHTML += `<tr>
             <td>${folderNameEscaped}</td>
             <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
             <td>${fmtMb(f.size)}</td>
-            <td><button class="danger" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer</button></td>
+            <td>${outputLabel}</td>
+            <td>
+                <button class="danger" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer dossier</button>
+                <button class="danger" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedOutput('${jsOutputName}','${jsFolder}')">Supprimer M4B</button>
+                <button class="danger" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedBoth('${jsFolder}','${jsOutputName}')">Supprimer les deux</button>
+            </td>
         </tr>`;
     });
     if (!(data.hidden_processed_folders || []).length) {
-        hpb.innerHTML = '<tr><td colspan="4" class="muted">Aucun dossier déjà traité caché</td></tr>';
+        hpb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier déjà traité caché</td></tr>';
     }
 
     data.archives.forEach(a => {
@@ -769,6 +779,24 @@ async function deleteProcessedFolder(folder){
     if (!confirmed) return;
     await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder, allow_hidden_processed: true})});
     notify(`Dossier traité "${folder}" supprimé.`, 'success');
+    await loadLibrary();
+}
+
+async function deleteProcessedOutput(outputName, folder){
+    if (!outputName) return notify('Aucun fichier M4B associé.', 'warn');
+    const confirmed = await askConfirmation(`Supprimer le fichier M4B "${outputName}" ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
+    await api('/api/output/delete',{method:'POST', body: JSON.stringify({filename: outputName})});
+    notify(`M4B "${outputName}" supprimé${folder ? ` (source: ${folder})` : ''}.`, 'success');
+    await loadLibrary();
+}
+
+async function deleteProcessedBoth(folder, outputName){
+    const confirmed = await askConfirmation(`Supprimer le dossier "${folder}" et le M4B "${outputName}" ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
+    await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder, allow_hidden_processed: true})});
+    await api('/api/output/delete',{method:'POST', body: JSON.stringify({filename: outputName})});
+    notify(`Dossier "${folder}" et M4B "${outputName}" supprimés.`, 'success');
     await loadLibrary();
 }
 

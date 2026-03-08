@@ -607,6 +607,30 @@ def _get_completed_folders_with_existing_outputs() -> set[str]:
     return {str(row[0]) for row in rows if row and row[0]}
 
 
+def _get_completed_outputs_by_source_folder() -> Dict[str, List[str]]:
+    _ensure_state_db()
+    if not OUTPUT_DIR.exists():
+        return {}
+
+    existing_outputs = {file.name for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()}
+    if not existing_outputs:
+        return {}
+
+    placeholders = ",".join("?" for _ in existing_outputs)
+    query = (
+        "SELECT source_folder, output_name FROM m4b_candidates "
+        "WHERE metadata_status = 'completed' AND output_name IN (" + placeholders + ")"
+    )
+    mapping: Dict[str, List[str]] = {}
+    with sqlite3.connect(_state_db_path()) as conn:
+        rows = conn.execute(query, tuple(existing_outputs)).fetchall()
+    for row in rows:
+        if not row or not row[0] or not row[1]:
+            continue
+        mapping.setdefault(str(row[0]), []).append(str(row[1]))
+    return mapping
+
+
 _ensure_state_db()
 
 def _default_config() -> Dict:
@@ -1260,30 +1284,45 @@ def _list_media() -> Dict:
     }
     changed = False
     folders = []
+    hidden_processed_folders = []
     archives = []
-    output_keys = {
-        _normalize_media_label(file.stem)
-        for file in OUTPUT_DIR.glob("*.m4b")
-        if file.is_file()
-    } if OUTPUT_DIR.exists() else set()
-    completed_source_folders = _get_completed_folders_with_existing_outputs()
+    output_files = [file for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()] if OUTPUT_DIR.exists() else []
+    output_keys = {_normalize_media_label(file.stem) for file in output_files}
+    output_names_by_key: Dict[str, List[str]] = {}
+    for output_file in output_files:
+        output_names_by_key.setdefault(_normalize_media_label(output_file.stem), []).append(output_file.name)
+    completed_outputs_by_source = _get_completed_outputs_by_source_folder()
+    completed_source_folders = set(completed_outputs_by_source.keys()) | _get_completed_folders_with_existing_outputs()
 
     for item in sorted(MEDIA_DIR.iterdir(), key=lambda x: x.name.lower()):
         if item.is_dir():
             if item.name in ignored:
                 continue
-            if item.name in completed_source_folders:
-                continue
-            if _normalize_media_label(item.name) in output_keys:
-                continue
             file_count = sum(1 for f in item.rglob("*") if f.is_file())
             if file_count == 0:
+                continue
+            folder_size = _folder_size(item)
+            normalized_folder_name = _normalize_media_label(item.name)
+            if item.name in completed_source_folders or normalized_folder_name in output_keys:
+                matched_outputs = list(completed_outputs_by_source.get(item.name, []))
+                for output_name in output_names_by_key.get(normalized_folder_name, []):
+                    if output_name not in matched_outputs:
+                        matched_outputs.append(output_name)
+                hidden_processed_folders.append(
+                    {
+                        "name": item.name,
+                        "audio_count": _count_audio_files(item),
+                        "size": folder_size,
+                        "file_count": file_count,
+                        "modified": item.stat().st_mtime,
+                        "output_files": matched_outputs,
+                    }
+                )
                 continue
             issues = []
             part_files = [f.name for f in item.rglob("*.part*") if f.is_file()]
             if part_files:
                 issues.append("Fichier .part détecté (décompression incomplète)")
-            folder_size = _folder_size(item)
             if file_count == 1:
                 issues.append("Un seul fichier dans le dossier (anormal)")
             if folder_size < 30 * 1024 * 1024:
@@ -1337,7 +1376,12 @@ def _list_media() -> Dict:
     if changed:
         _save_config(config)
 
-    return {"base_path": str(MEDIA_DIR), "folders": folders, "archives": grouped_archives}
+    return {
+        "base_path": str(MEDIA_DIR),
+        "folders": folders,
+        "hidden_processed_folders": hidden_processed_folders,
+        "archives": grouped_archives,
+    }
 
 
 def _archive_group_parts(name: str) -> tuple[str, Optional[int]]:
@@ -2407,6 +2451,7 @@ def api_delete_archive():
 def api_delete_folder():
     payload = request.get_json(silent=True) or {}
     folder = payload.get("folder")
+    allow_hidden_processed = bool(payload.get("allow_hidden_processed", False))
     if not isinstance(folder, str) or not folder.strip():
         return _api_error("folder invalide", code="invalid_folder")
     if Path(folder).name != folder:
@@ -2416,12 +2461,23 @@ def api_delete_folder():
     if not target.exists() or not target.is_dir():
         return _api_error("dossier introuvable", status=404, code="folder_not_found")
 
-    file_count = sum(1 for f in target.rglob("*") if f.is_file())
-    folder_size = _folder_size(target)
-    has_part = any(f.is_file() for f in target.rglob("*.part*"))
-    suggest_delete = has_part or (file_count == 1 and folder_size < 30 * 1024 * 1024)
-    if not suggest_delete:
-        return _api_error("suppression autorisée uniquement pour dossier suspect", code="folder_not_suspicious")
+    if not allow_hidden_processed:
+        file_count = sum(1 for f in target.rglob("*") if f.is_file())
+        folder_size = _folder_size(target)
+        has_part = any(f.is_file() for f in target.rglob("*.part*"))
+        suggest_delete = has_part or (file_count == 1 and folder_size < 30 * 1024 * 1024)
+        if not suggest_delete:
+            return _api_error("suppression autorisée uniquement pour dossier suspect", code="folder_not_suspicious")
+    else:
+        output_keys = {
+            _normalize_media_label(file.stem)
+            for file in OUTPUT_DIR.glob("*.m4b")
+            if file.is_file()
+        } if OUTPUT_DIR.exists() else set()
+        completed_source_folders = _get_completed_folders_with_existing_outputs()
+        is_hidden_processed = folder in completed_source_folders or _normalize_media_label(folder) in output_keys
+        if not is_hidden_processed:
+            return _api_error("dossier non éligible à la suppression des éléments déjà traités", code="folder_not_processed")
 
     shutil.rmtree(target)
     return jsonify({"deleted": folder})
@@ -2756,6 +2812,25 @@ def api_outputs():
     for item in sorted(OUTPUT_DIR.glob("*.m4b"), key=lambda p: p.stat().st_mtime, reverse=True):
         files.append({"name": item.name, "size": item.stat().st_size, "created": item.stat().st_mtime})
     return jsonify(files)
+
+
+@app.route("/api/output/delete", methods=["POST"])
+def api_delete_output_file():
+    payload = request.get_json(silent=True) or {}
+    filename = (payload.get("filename") or "").strip()
+    if not filename:
+        return _api_error("filename requis", code="missing_filename")
+
+    normalized = Path(filename).name
+    if normalized != filename:
+        return _api_error("nom de fichier invalide", code="invalid_filename")
+
+    target = _resolve_output_file(normalized)
+    if not target or not target.exists() or not target.is_file():
+        return _api_error("fichier output introuvable", status=404, code="output_not_found")
+
+    target.unlink(missing_ok=True)
+    return jsonify({"deleted": normalized})
 
 
 @app.route("/api/download/<path:filename>")

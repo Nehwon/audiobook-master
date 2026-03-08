@@ -39,3 +39,8 @@ class TestWebUiVersioning(unittest.TestCase):
         payload = response.get_json()
         self.assertIn("warning", payload)
         self.assertEqual(payload["active"], web_app.UI_DEFAULT_VERSION)
+
+    def test_logo_asset_route_is_available(self):
+        response = self.client.get("/assets/audiobook-manager.jpg")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("image", response.content_type)

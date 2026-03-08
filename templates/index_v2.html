@@ -137,9 +137,16 @@
         body.v2-dashboard { background:#eef1f5; }
         .app-shell { min-height:100vh; display:flex; }
         .sidebar { width:240px; background:#2f333a; color:#e5e7eb; border-right:1px solid #23272e; padding:14px 10px; position:sticky; top:0; height:100vh; box-sizing:border-box; }
-        .brand { font-weight:700; font-size:28px; letter-spacing:0.02em; margin:2px 10px 14px; color:#f3f4f6; }
-        .brand .x { color:#f97316; }
+         .brand { margin:2px 10px 14px; }
+        .brand img { width: 190px; max-width: 100%; height:auto; display:block; filter: drop-shadow(0 1px 0 rgba(0,0,0,.2)); }
+
         .sidebar .tab { width:100%; text-align:left; background:transparent; color:#cbd5e1; border:1px solid transparent; margin-bottom:6px; border-radius:6px; padding:10px 12px; }
+        .library-panels { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; align-items:start; }
+        .panel-card { display:flex; flex-direction:column; min-height:0; max-height:calc(100vh - 300px); }
+        .panel-card h3 { margin:0; }
+        .panel-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+        .panel-body { overflow:auto; min-height:0; border:1px solid var(--border); border-radius:8px; }
+        .panel-body table { min-width:560px; }
         .sidebar .tab.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
         .sidebar .tab.packet-tab,.sidebar .tab.plugin-tab,.sidebar .tab.config-tab { background:transparent; border-color:transparent; color:#cbd5e1; }
         .sidebar .tab.packet-tab.active,.sidebar .tab.plugin-tab.active,.sidebar .tab.config-tab.active { background:#2563eb; border-color:#2563eb; color:#fff; }
@@ -163,6 +170,8 @@
             .sidebar { width:100%; height:auto; position:static; display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
             .brand { width:100%; margin-bottom:6px; }
             .sidebar .tab { width:auto; }
+            .library-panels { grid-template-columns:1fr; }
+            .panel-card { max-height:none; }
             .sidebar-divider { display:none; }
         }
 
@@ -171,7 +180,7 @@
 <body class="v2-dashboard">
 <div class="app-shell">
 <aside class="sidebar">
-    <div class="brand"><span class="x">X</span>PRO<span class="x">X</span>MO<span class="x">X</span></div>
+    <div class="brand"><img src="/assets/audiobook-manager.jpg" alt="Audiobook Manager"></div>
     <button class="tab active" data-page="library">📚 Dashboard bibliothèque</button>
     <button class="tab" data-page="processing">⚙️ Traitements</button>
     <div class="sidebar-divider"></div>
@@ -211,32 +220,43 @@
             </div>
             <span class="pill">UI v2 preview · style dashboard</span>
         </div>
-        <div class="card">
-            <h3>Dossiers</h3>
-            <table>
-                <thead><tr><th><input id="folderSelAll" type="checkbox" onchange="toggleAllSelection('folderSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
-                <tbody id="foldersBody"></tbody>
-            </table>
-        </div>
-        <div class="card">
-            <h3>Dossiers déjà traités (cachés automatiquement)</h3>
-            <table>
-                <thead><tr><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>M4B lié</th><th>Actions</th></tr></thead>
-                <tbody id="hiddenProcessedFoldersBody"></tbody>
-            </table>
-        </div>
-        <div class="card archive-actions-bar">
-            <div class="row">
-                <button class="secondary" onclick="validateSelectedArchives()">Valider sélection</button>
-                <button class="secondary" onclick="extractSelected()">Extraire sélection</button>
-            </div>
-        </div>
-        <div class="card">
-            <h3>Archives</h3>
-            <table>
-                <thead><tr><th><input id="archiveSelAll" type="checkbox" onchange="toggleAllSelection('archiveSel', this.checked)"></th><th>Archive</th><th>Taille MB</th><th>Actions</th></tr></thead>
-                <tbody id="archivesBody"></tbody>
-            </table>
+
+        <div class="library-panels">
+            <article class="card panel-card">
+                <div class="panel-head"><h3>Dossiers</h3></div>
+                <div class="panel-body">
+                    <table>
+                        <thead><tr><th><input id="folderSelAll" type="checkbox" onchange="toggleAllSelection('folderSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                        <tbody id="foldersBody"></tbody>
+                    </table>
+                </div>
+            </article>
+
+            <article class="card panel-card">
+                <div class="panel-head"><h3>Fichiers</h3></div>
+                <div class="panel-body">
+                    <table>
+                        <thead><tr><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>M4B lié</th><th>Actions</th></tr></thead>
+                        <tbody id="hiddenProcessedFoldersBody"></tbody>
+                    </table>
+                </div>
+            </article>
+
+            <article class="card panel-card">
+                <div class="panel-head">
+                    <h3>Archives</h3>
+                    <div class="row">
+                        <button class="secondary" onclick="validateSelectedArchives()">Valider sélection</button>
+                        <button class="secondary" onclick="extractSelected()">Extraire sélection</button>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <table>
+                        <thead><tr><th><input id="archiveSelAll" type="checkbox" onchange="toggleAllSelection('archiveSel', this.checked)"></th><th>Archive</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                        <tbody id="archivesBody"></tbody>
+                    </table>
+                </div>
+            </article>
         </div>
     </section>
 

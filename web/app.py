@@ -46,6 +46,7 @@ DEFAULT_CONFIG_PATH = Path(os.getenv("AUDIOBOOK_CONFIG_PATH", "/app/data/config/
 CONFIG_PATH = DEFAULT_CONFIG_PATH
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
 APP_VERSION = os.getenv("AUDIOBOOK_MANAGER_VERSION", "v2.1.2")
+APP_ROOT = Path(__file__).resolve().parent.parent
 UI_VERSION_COOKIE = "audiobook_ui_version"
 UI_VERSION_QUERY_KEY = "ui"
 UI_VERSION_TEMPLATES = {
@@ -1879,6 +1880,15 @@ def _resolve_ui_version() -> str:
         return UI_DEFAULT_VERSION
     return "v1"
 
+
+
+
+@app.route("/assets/audiobook-manager.jpg")
+def app_logo():
+    logo_path = APP_ROOT / "audiobook-manager.jpg"
+    if not logo_path.exists():
+        return _api_error("Logo introuvable", status=404, code="logo_not_found")
+    return send_file(logo_path)
 
 @app.route("/")
 def index():

@@ -5,6 +5,7 @@ Cette stratégie permet d'activer progressivement la nouvelle interface sans per
 ## Mécanisme implémenté
 - `v1` (legacy) : `templates/index_v1.html`
 - `v2` (preview) : `templates/index_v2.html`
+- Sélecteur visible dans le header (`UI v1` / `UI v2`) pour basculer sans éditer l'URL
 - Sélecteur via query string : `/?ui=v1` ou `/?ui=v2`
 - Persistance du choix utilisateur via cookie `audiobook_ui_version`
 - Valeur par défaut configurable avec `AUDIOBOOK_UI_DEFAULT` (`v1` recommandé au début)

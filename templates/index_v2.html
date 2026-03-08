@@ -129,6 +129,9 @@
         }
         .footer-fixed a { color: var(--text); display:inline-flex; align-items:center; }
         .footer-fixed svg { width: 18px; height: 18px; fill: currentColor; }
+        .ui-switch { display:inline-flex; border:1px solid var(--border); border-radius:999px; overflow:hidden; margin-right:8px; }
+        .ui-switch a { text-decoration:none; color:var(--text); padding:4px 10px; font-size:12px; background:var(--card); }
+        .ui-switch a.active { background:var(--primary); color:#fff; }
 
     </style>
 </head>
@@ -138,7 +141,14 @@
     <div>
         <strong class="app-title">Audiobook Manager <span class="app-version">{{ app_version }}</span></strong>
     </div>
-    <div class="row"><span id="apiActivityDot" class="status-dot" title="Activité API"></span><label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label></div>
+    <div class="row">
+        <nav class="ui-switch" aria-label="Version de l'interface">
+            <a id="uiSwitchV1" href="/?ui=v1" class="{{ 'active' if ui_version == 'v1' else '' }}" title="Basculer vers l'interface classique">UI v1</a>
+            <a id="uiSwitchV2" href="/?ui=v2" class="{{ 'active' if ui_version == 'v2' else '' }}" title="Basculer vers l'interface dashboard">UI v2</a>
+        </nav>
+        <span id="apiActivityDot" class="status-dot" title="Activité API"></span>
+        <label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label>
+    </div>
 </header>
 <div class="tabs">
     <button class="tab active" data-page="library">Bibliothèque</button>
@@ -1501,8 +1511,24 @@ function setupTheme(){
     });
 }
 
+function setupUiSwitchLinks(){
+    const v1 = document.getElementById('uiSwitchV1');
+    const v2 = document.getElementById('uiSwitchV2');
+    if (!v1 || !v2) return;
+
+    const refreshLinks = () => {
+        const hash = window.location.hash || '';
+        v1.href = `/?ui=v1${hash}`;
+        v2.href = `/?ui=v2${hash}`;
+    };
+
+    refreshLinks();
+    window.addEventListener('hashchange', refreshLinks);
+}
+
 setupTabs();
 setupTheme();
+setupUiSwitchLinks();
 setupAudiobookshelfAutosave();
 loadLibrary();
 loadJobs();

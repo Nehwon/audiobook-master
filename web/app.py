@@ -1260,6 +1260,7 @@ def _list_media() -> Dict:
     }
     changed = False
     folders = []
+    hidden_processed_folders = []
     archives = []
     output_keys = {
         _normalize_media_label(file.stem)
@@ -1272,18 +1273,25 @@ def _list_media() -> Dict:
         if item.is_dir():
             if item.name in ignored:
                 continue
-            if item.name in completed_source_folders:
-                continue
-            if _normalize_media_label(item.name) in output_keys:
-                continue
             file_count = sum(1 for f in item.rglob("*") if f.is_file())
             if file_count == 0:
+                continue
+            folder_size = _folder_size(item)
+            if item.name in completed_source_folders or _normalize_media_label(item.name) in output_keys:
+                hidden_processed_folders.append(
+                    {
+                        "name": item.name,
+                        "audio_count": _count_audio_files(item),
+                        "size": folder_size,
+                        "file_count": file_count,
+                        "modified": item.stat().st_mtime,
+                    }
+                )
                 continue
             issues = []
             part_files = [f.name for f in item.rglob("*.part*") if f.is_file()]
             if part_files:
                 issues.append("Fichier .part détecté (décompression incomplète)")
-            folder_size = _folder_size(item)
             if file_count == 1:
                 issues.append("Un seul fichier dans le dossier (anormal)")
             if folder_size < 30 * 1024 * 1024:
@@ -1337,7 +1345,12 @@ def _list_media() -> Dict:
     if changed:
         _save_config(config)
 
-    return {"base_path": str(MEDIA_DIR), "folders": folders, "archives": grouped_archives}
+    return {
+        "base_path": str(MEDIA_DIR),
+        "folders": folders,
+        "hidden_processed_folders": hidden_processed_folders,
+        "archives": grouped_archives,
+    }
 
 
 def _archive_group_parts(name: str) -> tuple[str, Optional[int]]:
@@ -2407,6 +2420,7 @@ def api_delete_archive():
 def api_delete_folder():
     payload = request.get_json(silent=True) or {}
     folder = payload.get("folder")
+    allow_hidden_processed = bool(payload.get("allow_hidden_processed", False))
     if not isinstance(folder, str) or not folder.strip():
         return _api_error("folder invalide", code="invalid_folder")
     if Path(folder).name != folder:
@@ -2416,12 +2430,23 @@ def api_delete_folder():
     if not target.exists() or not target.is_dir():
         return _api_error("dossier introuvable", status=404, code="folder_not_found")
 
-    file_count = sum(1 for f in target.rglob("*") if f.is_file())
-    folder_size = _folder_size(target)
-    has_part = any(f.is_file() for f in target.rglob("*.part*"))
-    suggest_delete = has_part or (file_count == 1 and folder_size < 30 * 1024 * 1024)
-    if not suggest_delete:
-        return _api_error("suppression autorisée uniquement pour dossier suspect", code="folder_not_suspicious")
+    if not allow_hidden_processed:
+        file_count = sum(1 for f in target.rglob("*") if f.is_file())
+        folder_size = _folder_size(target)
+        has_part = any(f.is_file() for f in target.rglob("*.part*"))
+        suggest_delete = has_part or (file_count == 1 and folder_size < 30 * 1024 * 1024)
+        if not suggest_delete:
+            return _api_error("suppression autorisée uniquement pour dossier suspect", code="folder_not_suspicious")
+    else:
+        output_keys = {
+            _normalize_media_label(file.stem)
+            for file in OUTPUT_DIR.glob("*.m4b")
+            if file.is_file()
+        } if OUTPUT_DIR.exists() else set()
+        completed_source_folders = _get_completed_folders_with_existing_outputs()
+        is_hidden_processed = folder in completed_source_folders or _normalize_media_label(folder) in output_keys
+        if not is_hidden_processed:
+            return _api_error("dossier non éligible à la suppression des éléments déjà traités", code="folder_not_processed")
 
     shutil.rmtree(target)
     return jsonify({"deleted": folder})

@@ -133,15 +133,60 @@
         .ui-switch a { text-decoration:none; color:var(--text); padding:4px 10px; font-size:12px; background:var(--card); }
         .ui-switch a.active { background:var(--primary); color:#fff; }
 
+        /* Dashboard V2 layout */
+        body.v2-dashboard { background:#eef1f5; }
+        .app-shell { min-height:100vh; display:flex; }
+        .sidebar { width:240px; background:#2f333a; color:#e5e7eb; border-right:1px solid #23272e; padding:14px 10px; position:sticky; top:0; height:100vh; box-sizing:border-box; }
+        .brand { font-weight:700; font-size:28px; letter-spacing:0.02em; margin:2px 10px 14px; color:#f3f4f6; }
+        .brand .x { color:#f97316; }
+        .sidebar .tab { width:100%; text-align:left; background:transparent; color:#cbd5e1; border:1px solid transparent; margin-bottom:6px; border-radius:6px; padding:10px 12px; }
+        .sidebar .tab.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+        .sidebar .tab.packet-tab,.sidebar .tab.plugin-tab,.sidebar .tab.config-tab { background:transparent; border-color:transparent; color:#cbd5e1; }
+        .sidebar .tab.packet-tab.active,.sidebar .tab.plugin-tab.active,.sidebar .tab.config-tab.active { background:#2563eb; border-color:#2563eb; color:#fff; }
+        .sidebar-divider { height:1px; background:#475569; margin:10px 8px; opacity:.55; }
+        .app-main { flex:1; min-width:0; }
+        .topbar { background:#e5e7eb; border-bottom:1px solid #cbd5e1; padding:10px 20px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+        .topbar h1 { margin:0; font-size:24px; }
+        .topbar .meta { color:#475569; font-size:13px; }
+        .top-actions { display:flex; align-items:center; gap:10px; }
+        .search-pill { background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:7px 10px; min-width:240px; color:#64748b; font-size:13px; }
+        main { padding: 18px 20px 76px; }
+        .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px; margin-bottom:14px; }
+        .kpi-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; box-shadow:0 1px 2px rgba(15,23,42,.06); }
+        .kpi-title { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 8px; }
+        .kpi-value { font-size:30px; font-weight:700; color:#0f172a; margin:0; }
+        .kpi-sub { margin-top:4px; font-size:12px; color:#64748b; }
+        .dashboard-actions { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+        .dashboard-actions .row { gap:8px; }
+        @media (max-width: 980px){
+            .app-shell { flex-direction:column; }
+            .sidebar { width:100%; height:auto; position:static; display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+            .brand { width:100%; margin-bottom:6px; }
+            .sidebar .tab { width:auto; }
+            .sidebar-divider { display:none; }
+        }
+
     </style>
 </head>
-<body>
-<header>
-        <span style="position:absolute;top:10px;right:20px;background:#2563eb;color:#fff;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;">UI v2 preview</span>
+<body class="v2-dashboard">
+<div class="app-shell">
+<aside class="sidebar">
+    <div class="brand"><span class="x">X</span>PRO<span class="x">X</span>MO<span class="x">X</span></div>
+    <button class="tab active" data-page="library">📚 Dashboard bibliothèque</button>
+    <button class="tab" data-page="processing">⚙️ Traitements</button>
+    <div class="sidebar-divider"></div>
+    <button class="tab packet-tab" data-page="submission">📦 Paquets</button>
+    <button class="tab plugin-tab" data-page="plugins">🧩 Plugins</button>
+    <button class="tab config-tab" data-page="config">🛠️ Configuration</button>
+</aside>
+<div class="app-main">
+<header class="topbar">
     <div>
-        <strong class="app-title">Audiobook Manager <span class="app-version">{{ app_version }}</span></strong>
+        <h1>Audiobook Manager <span class="app-version">{{ app_version }}</span></h1>
+        <div class="meta">Dernière vue: <span id="kpiLastRefresh">-</span></div>
     </div>
-    <div class="row">
+    <div class="top-actions">
+        <div class="search-pill">Search (Ctrl+Space / Ctrl+Shift+F)</div>
         <nav class="ui-switch" aria-label="Version de l'interface">
             <a id="uiSwitchV1" href="/?ui=v1" class="{{ 'active' if ui_version == 'v1' else '' }}" title="Basculer vers l'interface classique">UI v1</a>
             <a id="uiSwitchV2" href="/?ui=v2" class="{{ 'active' if ui_version == 'v2' else '' }}" title="Basculer vers l'interface dashboard">UI v2</a>
@@ -150,23 +195,21 @@
         <label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label>
     </div>
 </header>
-<div class="tabs">
-    <button class="tab active" data-page="library">Bibliothèque</button>
-    <button class="tab" data-page="processing">Traitements</button>
-    <div class="tabs-right">
-        <button class="tab packet-tab" data-page="submission">Paquets</button>
-        <button class="tab plugin-tab" data-page="plugins">Plugins</button>
-        <button class="tab config-tab" data-page="config">Configuration</button>
-    </div>
-</div>
 <main>
     <section id="page-library" class="page active">
-        <div class="card">
+        <div class="kpi-grid">
+            <article class="kpi-card"><p class="kpi-title">Dossiers détectés</p><p id="kpiFolders" class="kpi-value">0</p><div class="kpi-sub">dans la bibliothèque</div></article>
+            <article class="kpi-card"><p class="kpi-title">Jobs en cours</p><p id="kpiRunning" class="kpi-value">0</p><div class="kpi-sub">pipeline actif</div></article>
+            <article class="kpi-card"><p class="kpi-title">En attente</p><p id="kpiPending" class="kpi-value">0</p><div class="kpi-sub">avant traitement</div></article>
+            <article class="kpi-card"><p class="kpi-title">À revoir</p><p id="kpiReview" class="kpi-value">0</p><div class="kpi-sub">suppression/retraitement</div></article>
+        </div>
+        <div class="card dashboard-actions">
             <div class="row">
                 <button onclick="loadLibrary()">Rafraîchir</button>
                 <button id="renameSelectedBtn" class="secondary" onclick="renameSelected()">Renommage batch</button>
                 <button onclick="enqueueSelected()">Ajouter sélection à la queue M4B</button>
             </div>
+            <span class="pill">UI v2 preview · style dashboard</span>
         </div>
         <div class="card">
             <h3>Dossiers</h3>
@@ -343,6 +386,8 @@
 
 
 </main>
+</div>
+</div>
 <div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
 <footer class="footer-fixed">
     <span>Licence 2026 - NehwonLM</span>
@@ -428,6 +473,17 @@ function setRenameBusy(isBusy){
 function fmtMb(v){ return (v/1024/1024).toFixed(1); }
 function fmtDateTime(ts){ if(!ts) return '-'; const d = new Date(ts * 1000); return Number.isNaN(d.getTime()) ? '-' : d.toLocaleString(); }
 function selectedValues(name){ return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value); }
+
+function setKpiValue(id, value){
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(value ?? 0);
+}
+
+function touchKpiRefresh(){
+    const el = document.getElementById('kpiLastRefresh');
+    if (!el) return;
+    el.textContent = new Date().toLocaleString();
+}
 function escapeHtml(value){
     return String(value)
         .replaceAll('&', '&amp;')
@@ -675,6 +731,8 @@ async function loadLibrary() {
         </tr>`;
     });
     if (!data.folders.length) fb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier</td></tr>';
+    setKpiValue('kpiFolders', data.folders.length || 0);
+    touchKpiRefresh();
 
     (data.hidden_processed_folders || []).forEach(f => {
         const jsFolder = toJsString(f.name);
@@ -1070,6 +1128,11 @@ async function loadJobs({forceDoneRefresh=false} = {}){
     renderEvents(data.events || []);
 
     const review = document.getElementById('reviewList');
+    setKpiValue('kpiPending', (data.pending || []).length);
+    setKpiValue('kpiRunning', (data.running || []).length);
+    setKpiValue('kpiReview', (data.review || []).length);
+    touchKpiRefresh();
+
     if (!data.review.length) review.innerHTML = '<p class="muted">Aucune entrée.</p>';
     else review.innerHTML = data.review.map(r => `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0;">
         <div><strong>${r.folder}</strong> - action: ${r.action}</div>

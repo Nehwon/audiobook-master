@@ -164,6 +164,13 @@
                 <tbody id="foldersBody"></tbody>
             </table>
         </div>
+        <div class="card">
+            <h3>Dossiers déjà traités (cachés automatiquement)</h3>
+            <table>
+                <thead><tr><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                <tbody id="hiddenProcessedFoldersBody"></tbody>
+            </table>
+        </div>
         <div class="card archive-actions-bar">
             <div class="row">
                 <button class="secondary" onclick="validateSelectedArchives()">Valider sélection</button>
@@ -583,8 +590,10 @@ async function loadLibrary() {
     libraryCache = data;
     const fb = document.getElementById('foldersBody');
     const ab = document.getElementById('archivesBody');
+    const hpb = document.getElementById('hiddenProcessedFoldersBody');
     fb.innerHTML = '';
     ab.innerHTML = '';
+    hpb.innerHTML = '';
 
     data.folders.forEach(f => {
         const jsFolder = toJsString(f.name);
@@ -621,6 +630,20 @@ async function loadLibrary() {
         </tr>`;
     });
     if (!data.folders.length) fb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier</td></tr>';
+
+    (data.hidden_processed_folders || []).forEach(f => {
+        const jsFolder = toJsString(f.name);
+        const folderNameEscaped = escapeHtml(f.name);
+        hpb.innerHTML += `<tr>
+            <td>${folderNameEscaped}</td>
+            <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
+            <td>${fmtMb(f.size)}</td>
+            <td><button class="danger" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer</button></td>
+        </tr>`;
+    });
+    if (!(data.hidden_processed_folders || []).length) {
+        hpb.innerHTML = '<tr><td colspan="4" class="muted">Aucun dossier déjà traité caché</td></tr>';
+    }
 
     data.archives.forEach(a => {
         const archiveEscaped = escapeHtml(a.primary_name || a.name);
@@ -738,6 +761,14 @@ async function deleteSuspectFolder(folder){
     if (!confirmed) return;
     await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder})});
     notify(`Dossier "${folder}" supprimé.`, 'success');
+    await loadLibrary();
+}
+
+async function deleteProcessedFolder(folder){
+    const confirmed = await askConfirmation(`Supprimer définitivement le dossier déjà traité "${folder}" ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
+    await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder, allow_hidden_processed: true})});
+    notify(`Dossier traité "${folder}" supprimé.`, 'success');
     await loadLibrary();
 }
 

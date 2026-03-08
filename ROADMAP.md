@@ -1,51 +1,49 @@
-# Roadmap
+# 🗺️ Roadmap produit (alignée code actuel)
 
-Cette roadmap se concentre sur des objectifs vérifiables à partir du code présent dans le dépôt.
+Cette roadmap reflète l'état du dépôt tel qu'implémenté aujourd'hui, avec une trajectoire réaliste.
 
-## Horizon court terme (0–1 mois)
+## ✅ Déjà en place
 
-- **Stabiliser la base de tests**
-  - Réduire drastiquement le nombre d’échecs sur `pytest -q`.
-  - Isoler les tests obsolètes ou non alignés avec l’implémentation actuelle.
-  - Définir un “socle CI minimal” fiable (smoke tests obligatoires).
-  - Consolider la compatibilité legacy des modules `core/processor`, `core/metadata` et `ai/synopsis` sans diverger du comportement produit.
+- Pipeline CLI stable avec diagnostics (`--diagnostic`, `--diagnostic-json`).
+- Interface web Flask avec gestion des jobs, extraction d'archives, renommage et monitoring.
+- Intégration Audiobookshelf (packets, scheduling, diffusion, nettoyage).
+- Architecture plugins (metadata, covers, exports).
+- Base de tests étendue + smoke suite dédiée.
 
-- **Clarifier les points d’entrée**
-  - Conserver un chemin officiel pour la CLI (`core/main.py`).
-  - Conserver un chemin officiel pour le web (`web/app.py`).
-  - Documenter explicitement les scripts legacy et leur statut.
+## 🎯 Court terme (0–1 mois)
 
-- **Durcir les flux archives/renommage**
-  - Ajouter des validations supplémentaires sur les payloads API.
-  - Renforcer les protections contre conflits et collisions de noms.
+- **Stabiliser la CI sur un socle vert**
+  - Maintenir `tests/test_smoke_suite.py` comme garde-fou.
+  - Isoler les tests fragiles et normaliser les fixtures.
+- **Réduire la dette documentaire**
+  - Garder README concis et docs spécialisées à jour.
+  - Éviter les doublons entre `docs/INSTALLATION.md` et `docs/installation.md`.
+- **Durcir la couche API web**
+  - Uniformiser les codes/structures d'erreurs sur tous les endpoints.
 
-## Horizon moyen terme (1–3 mois)
+## 🔧 Moyen terme (1–3 mois)
 
-- **Fiabiliser la conversion audio**
-  - Uniformiser les stratégies de conversion et les retours d’erreur FFmpeg.
-  - Consolider la gestion de chapitres et métadonnées dans le flux principal.
-  - Remplacer progressivement les wrappers legacy temporaires par des interfaces testées et documentées.
+- **Conversion audio**
+  - Harmoniser les stratégies FFmpeg et les retours erreurs.
+  - Fiabiliser davantage chapitres + métadonnées sur cas limites.
+- **Observabilité**
+  - Enrichir `/api/monitor` (métriques de file, durée moyenne jobs, erreurs récentes).
+  - Structurer les logs par composant (web, processor, integrations).
+- **Configuration**
+  - Clarifier la hiérarchie env/fichier/défaut.
+  - Mieux documenter les valeurs sensibles et leur chiffrement côté web config.
 
-- **Améliorer l’observabilité**
-  - Structurer davantage les logs (par job, niveau, composant).
-  - Ajouter des indicateurs explicites dans `/api/monitor` utiles à l’exploitation.
-
-- **Rationaliser la configuration**
-  - Éviter les valeurs par défaut trop spécifiques machine.
-  - Introduire une hiérarchie claire des sources de configuration (env > fichier > défaut).
-
-## Horizon long terme (3+ mois)
+## 🚀 Long terme (3+ mois)
 
 - **Convergence architecture**
-  - Réduire les duplications entre composants historiques et actuels.
-  - Encapsuler les intégrations externes (Ollama, Audiobookshelf) derrière des interfaces stables.
+  - Réduire les chemins legacy restants.
+  - Encapsuler complètement les intégrations externes derrière interfaces plugin.
+- **Qualité release**
+  - Définir une routine release automatisée (tests + changelog + versioning).
+  - Renforcer les checks de sécurité et de qualité (lint/typecheck si activés).
 
-- **Qualité de release**
-  - Définir des critères de release mesurables (tests passants, checks lint, smoke Docker).
-  - Mettre en place une stratégie de version/release disciplinée (notes courtes, diff clair).
+## ❌ Hors périmètre immédiat
 
-## Hors périmètre immédiat
-
-- Réécriture complète de l’UI.
+- Refonte totale UI.
 - Migration vers un autre framework web.
-- Refonte massive du packaging tant que la base de tests n’est pas stabilisée.
+- Changement majeur de stack tant que la stabilité test n'est pas consolidée.

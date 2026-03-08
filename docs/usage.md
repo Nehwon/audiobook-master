@@ -1,10 +1,6 @@
-# Utilisation détaillée
+# 🧭 Utilisation (CLI + Web)
 
-Ce document centralise les détails d'usage (CLI, Web, Docker et tests) pour garder le `README.md` concis.
-
-## CLI (entrée recommandée)
-
-Entrée principale : `core/main.py`
+## 1) CLI (entrée recommandée)
 
 ```bash
 python -m core.main --source /chemin/source --output /chemin/output
@@ -12,216 +8,83 @@ python -m core.main --source /chemin/source --output /chemin/output
 
 ### Options principales
 
-```text
---source / -s          Dossier source
---output / -o          Dossier de sortie
---single / -f          Traiter un fichier spécifique
---dry-run / -n         Simulation sans conversion
---upload / -u          Upload vers Audiobookshelf après traitement
---abs-token            Token API Audiobookshelf (prioritaire)
---abs-library-id       Bibliothèque Audiobookshelf cible
---no-scraping          Désactive le scraping de métadonnées
---no-synopsis|--no-ai  Désactive la génération IA
---bitrate / -b         Bitrate (ex: 64k, 128k, 192k)
---samplerate           Fréquence d'échantillonnage
---no-chapters          Désactive le chapitrage
---no-normalization     Désactive loudnorm
---no-compression       Désactive compresseur
---no-gpu               Désactive accélération GPU
---aac-coder            twolo|fast
---verbose / -v         Logs détaillés
---log-profile          Profil de logs (standard|debug-conversion)
---diagnostic           Diagnostic environnement (texte)
---diagnostic-json      Diagnostic environnement (JSON)
-```
+| Option | Description |
+|---|---|
+| `--source`, `-s` | Dossier source |
+| `--output`, `-o` | Dossier de sortie |
+| `--single`, `-f` | Traiter un seul fichier/dossier |
+| `--dry-run`, `-n` | Simulation sans conversion |
+| `--upload`, `-u` | Upload Audiobookshelf après traitement |
+| `--abs-token` | Token API Audiobookshelf |
+| `--abs-library-id` | ID de bibliothèque Audiobookshelf |
+| `--no-scraping` | Désactive scraping métadonnées |
+| `--no-synopsis` / `--no-ai` | Désactive synopsis IA |
+| `--bitrate`, `-b` | Bitrate cible (ex: `96k`, `128k`) |
+| `--samplerate` | Échantillonnage (Hz) |
+| `--no-chapters` | Désactive chapitrage auto |
+| `--no-normalization` | Désactive loudnorm |
+| `--no-compression` | Désactive compresseur |
+| `--no-gpu` | Désactive accélération GPU |
+| `--aac-coder` | `twolo` ou `fast` |
+| `--diagnostic` | Rapport diagnostic humain |
+| `--diagnostic-json` | Rapport diagnostic JSON |
+| `--log-profile` | `standard` ou `debug-conversion` |
 
-### Diagnostic rapide
+### Exemples
 
 ```bash
+# Diagnostic rapide
 python -m core.main --diagnostic
-python -m core.main --diagnostic-json
+
+# Conversion avec logs détaillés
+python -m core.main --source ./data/source --output ./data/output --log-profile debug-conversion -v
+
+# Conversion + upload Audiobookshelf
+python -m core.main --source ./data/source --output ./data/output --upload --abs-token "$AUDIOBOOKSHELF_TOKEN" --abs-library-id "$AUDIOBOOKSHELF_LIBRARY_ID"
 ```
 
-Le diagnostic vérifie les dépendances Python clés, la présence de `ffmpeg`/`ollama`, l'accessibilité des répertoires (source/output/temp) et l'état des variables d'environnement Audiobookshelf.
-
-Exemple de dépannage rapide :
-
-```bash
-python -m core.main --diagnostic
-python -m core.main --diagnostic-json > /tmp/audiobook-diagnostic.json
-```
-
-Points à vérifier en priorité dans le rapport :
-
-- `ffmpeg` doit être résolu dans la section `[Binaires systeme]`.
-- Les répertoires `source`/`output`/`temp` doivent être `readable=True` et `writable=True`.
-- La variable `AUDIOBOOKSHELF_LIBRARY_ID` doit être `set` si vous activez `--upload`.
-
-### Profil de logs `debug-conversion`
-
-Activation ponctuelle (CLI) :
-
-```bash
-python -m core.main --log-profile debug-conversion
-```
-
-Activation persistante (sans modifier le code) :
-
-```bash
-export AUDIOBOOK_LOG_PROFILE=debug-conversion
-python -m core.main
-```
-
-Ce profil force les niveaux de logs à `DEBUG` pour faciliter l'analyse des conversions.
-
-### Variables d'environnement Audiobookshelf (CLI)
-
-```text
-AUDIOBOOKSHELF_HOST
-AUDIOBOOKSHELF_PORT
-AUDIOBOOKSHELF_USERNAME
-AUDIOBOOKSHELF_PASSWORD
-AUDIOBOOKSHELF_TOKEN
-AUDIOBOOKSHELF_LIBRARY_ID
-```
-
-Dans l'UI web, la configuration Audiobookshelf inclut aussi `audiobookshelf_library_id` (préservé dans `/api/config`).
-
-## Interface Web
-
-Lancement :
+## 2) Web
 
 ```bash
 python -m web.app
 ```
 
-Variables d'environnement dossiers :
+Application exposée par défaut sur `http://localhost:5000`.
 
-- `AUDIOBOOK_MEDIA_DIR` (fallback `SOURCE_DIR`, puis `/app/data/source`)
-- `AUDIOBOOK_OUTPUT_DIR` (fallback `OUTPUT_DIR`, puis `/app/data/output`)
-- `AUDIOBOOK_TEMP_DIR` (fallback `TEMP_DIR`, puis `/tmp/audiobooks_web`)
-- `AUDIOBOOK_LOG_DIR` (fallback `LOG_DIR`, puis `/app/logs`)
+### Endpoints clés
 
-### Endpoints principaux
+| Méthode | Endpoint | Rôle |
+|---|---|---|
+| `GET` | `/` | UI principale |
+| `GET` | `/api/library` | Inventaire source |
+| `POST` | `/api/archive/validate` | Validation archive |
+| `POST` | `/api/extract` | Extraction archive |
+| `POST` | `/api/rename` | Renommage dossier |
+| `POST` | `/api/jobs/enqueue` | Créer jobs conversion |
+| `GET` | `/api/jobs` | Suivi jobs |
+| `GET` | `/api/monitor` | Signatures d'état |
+| `GET` | `/api/outputs` | Liste sorties `.m4b` |
+| `GET` | `/api/download/<filename>` | Téléchargement sortie |
+| `GET` | `/health` | Santé service |
 
-- `GET /` : interface HTML.
-- `GET /api/library` : inventaire des dossiers source.
-- `POST /api/archive/validate` : validation d’archive.
-- `POST /api/extract` : extraction d’archive.
-- `POST /api/rename` : renommage de dossiers.
-- `POST /api/jobs/enqueue` : création de jobs.
-- `GET /api/jobs` : état des jobs.
-- `GET /api/logs` : logs applicatifs.
-- `GET /api/config` / `POST /api/config` : lecture/écriture config web.
-- `GET /api/ollama/status` : état du service Ollama.
-- `GET /health` : endpoint santé.
+### Intégration Audiobookshelf (web)
 
+Routes disponibles sous `/api/integrations/audiobookshelf/...` :
+- gestion packets,
+- metadata,
+- changelog,
+- soumission,
+- scheduling,
+- diffusion,
+- nettoyage.
 
-## Onglet Plugins
+## 3) Variables d'environnement utiles
 
-Onglet `Plugins` (UI web) : permet d'activer/désactiver les plugins metadata/covers/exports et de sauvegarder leur configuration dans `web_config.json`.
-
-Configuration des plugins (source de métadonnées) sous forme de tableau :
-
-| Plugin | Clé de configuration | Valeur par défaut | Description |
-|---|---|---|---|
-| `google_books` | `scraping_sources` (CLI/Web config) | activé | Recherche via API Google Books (priorité 1). |
-| `audible` | `scraping_sources` (CLI/Web config) | activé | Recherche spécialisée audiobook (priorité 2). |
-| `babelio` | `scraping_sources` (CLI/Web config) | activé | Fallback francophone (priorité 3). |
-
-Exemple de configuration (ordre = fallback) :
-
-```json
-{
-  "scraping_sources": ["google_books", "audible", "babelio"]
-}
-```
-
-Si un plugin est retiré de `scraping_sources`, il ne sera pas utilisé pendant l'enrichissement des métadonnées.
-
-
-### Structure du dossier `plugins/`
-
-```text
-plugins/
-  metadata/
-    base_scraper.py
-    scraper_google_books.py
-    scraper_audible.py
-    scraper_babelio.py
-  covers/
-    base_cover.py
-    provider_existing_file.py
-    provider_url_download.py
-  exports/
-    base_export.py
-    export_audiobookshelf.py
-```
-
-### Plugins covers (tableau)
-
-| Plugin | Fichier | Configuration principale | Description |
-|---|---|---|---|
-| `existing_file` | `plugins/covers/provider_existing_file.py` | `cover_sources` | Réutilise `metadata.cover_path` si le fichier existe. |
-| `url_download` | `plugins/covers/provider_url_download.py` | `cover_sources` | Télécharge la cover depuis `metadata.cover_url`. |
-
-### Plugins d'export (tableau)
-
-| Plugin | Fichier | Configuration principale | Description |
-|---|---|---|---|
-| `audiobookshelf` | `plugins/exports/export_audiobookshelf.py` | `library_id` | Exporte un `.m4b` vers Audiobookshelf via le client configuré. |
-
-## Docker
-
-Démarrage rapide :
-
-```bash
-docker compose up -d
-```
-
-Avec monitoring :
-
-```bash
-docker compose --profile monitoring up -d
-```
-
-Voir aussi : `docs/docker-setup.md`.
-
-## Tests
-
-Suite complète :
-
-```bash
-pytest -q
-```
-
-Validation ciblée (exemples) :
-
-```bash
-pytest tests/test_web_api.py -q
-pytest tests/test_smoke_suite.py -q
-```
-
-## Boucle locale de dev (checklist courte)
-
-1. **Test rapide**
-   ```bash
-   pytest -q tests/test_smoke_suite.py
-   ```
-2. **Diagnostic environnement**
-   ```bash
-   python -m core.main --diagnostic
-   ```
-3. **Debug conversion (si incident ffmpeg/qualité)**
-   ```bash
-   AUDIOBOOK_LOG_PROFILE=debug-conversion python -m core.main --single /chemin/vers/fichier
-   ```
-4. **Validation avant release locale**
-   ```bash
-   pytest -q
-   ```
-
-## Limites connues
-
-- Les scripts legacy `run.py` et `start_web.py` sont conservés pour compatibilité et affichent un avertissement de dépréciation.
-- Les fonctionnalités IA dépendent d'Ollama et d'un modèle local disponible.
+| Variable | Usage |
+|---|---|
+| `AUDIOBOOK_MEDIA_DIR` | Source web |
+| `AUDIOBOOK_OUTPUT_DIR` | Sortie web |
+| `AUDIOBOOK_TEMP_DIR` | Temp web |
+| `AUDIOBOOK_LOG_DIR` | Logs web |
+| `AUDIOBOOK_LOG_PROFILE` | Profil logs CLI |
+| `AUDIOBOOKSHELF_*` | Paramètres intégration Audiobookshelf |

@@ -1791,11 +1791,17 @@ def _worker_loop() -> None:
                             total = 0
                         if total and processed > total:
                             processed = total
+                        previous_phase = current_job.phase_progress.get(phase_key, {})
+                        phase_started_at = previous_phase.get("started_at") or time.time()
                         current_job.phase_progress[phase_key] = {
                             "label": str(phase_label),
                             "processed": processed,
                             "total": total,
+                            "started_at": float(phase_started_at),
+                            "updated_at": time.time(),
                         }
+
+                        current_job.stage = str(phase_label)
 
                     _push_job_event(current_job.id, current_job.folder, stage, message, event_level, details)
 
@@ -2283,6 +2289,8 @@ def api_library():
                 "status": job.get("status"),
                 "progress": job.get("progress", 0),
                 "stage": job.get("stage", "En attente"),
+                "phase_progress": job.get("phase_progress", {}),
+                "started_at": job.get("started_at"),
             }
 
     for folder in media["folders"]:

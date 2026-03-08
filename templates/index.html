@@ -478,6 +478,39 @@ function archiveValidationBadge(archive){
 }
 
 
+function formatEtaFromSeconds(seconds){
+    if (!Number.isFinite(seconds) || seconds <= 0) return 'Calcul ETA...';
+    const totalSeconds = Math.round(seconds);
+    if (totalSeconds < 60) return `${totalSeconds}s restantes`;
+    const minutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
+    if (minutes < 60) return `${minutes}m ${remainingSeconds}s restantes`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes}m restantes`;
+}
+
+function computePhaseEta(job){
+    const phaseOrder = ['conversion', 'normalization', 'chapters', 'finalization'];
+    const phaseProgress = (job?.phase_progress && typeof job.phase_progress === 'object') ? job.phase_progress : {};
+    for (const phaseKey of phaseOrder) {
+        const phase = phaseProgress[phaseKey];
+        if (!phase || typeof phase !== 'object') continue;
+        const total = Math.max(0, parseInt(phase.total ?? 0, 10) || 0);
+        const processed = Math.max(0, parseInt(phase.processed ?? 0, 10) || 0);
+        const startedAt = Number(phase.started_at);
+        if (!total || processed <= 0 || processed >= total || !Number.isFinite(startedAt)) continue;
+        const elapsed = Math.max(1, Date.now() / 1000 - startedAt);
+        const speed = processed / elapsed;
+        if (speed <= 0) continue;
+        const remaining = Math.max(0, total - processed);
+        const etaSec = remaining / speed;
+        return formatEtaFromSeconds(etaSec);
+    }
+    if (job?.status === 'pending') return 'En attente de démarrage';
+    return 'Calcul ETA...';
+}
+
 function renderInlineJobProgress(job){
     if (!job) return '';
     const pct = Math.max(0, Math.min(100, parseInt(job.progress ?? 0, 10) || 0));
@@ -488,13 +521,14 @@ function renderInlineJobProgress(job){
         if (job.status === 'pending' || normalizedStage.includes('préparation')) return 1;
         if (normalizedStage.includes('métadonnées')) return 2;
         if (normalizedStage.includes('analyse')) return 3;
-        if (normalizedStage.includes('conversion')) return 4;
+        if (normalizedStage.includes('conversion') || normalizedStage.includes('normalisation') || normalizedStage.includes('chapitres')) return 4;
         if (normalizedStage.includes('finalisation')) return 5;
         if (normalizedStage.includes('terminé') || normalizedStage.includes('erreur')) return 6;
         return 4;
     })();
     const stage = escapeHtml(stageRaw);
-    return `<div class="job-inline"><div class="meta">${statusLabel} · Phase ${phase}/6 · ${pct}%</div><div class="muted" style="font-size:12px">${stage}</div><div class="track"><div class="bar" style="width:${pct}%"></div></div></div>`;
+    const etaText = escapeHtml(computePhaseEta(job));
+    return `<div class="job-inline"><div class="meta">${statusLabel} · Phase ${phase}/6 · ${pct}% · ETA: ${etaText}</div><div class="muted" style="font-size:12px">${stage}</div><div class="track"><div class="bar" style="width:${pct}%"></div></div></div>`;
 }
 
 function notify(message, type='info', timeoutMs=3600){

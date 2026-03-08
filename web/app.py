@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import rarfile
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, jsonify, make_response, render_template, request, send_file
 
 from core.config import ProcessingConfig
 from core.metadata import BookScraper
@@ -46,6 +46,13 @@ DEFAULT_CONFIG_PATH = Path(os.getenv("AUDIOBOOK_CONFIG_PATH", "/app/data/config/
 CONFIG_PATH = DEFAULT_CONFIG_PATH
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
 APP_VERSION = os.getenv("AUDIOBOOK_MANAGER_VERSION", "v2.1.2")
+UI_VERSION_COOKIE = "audiobook_ui_version"
+UI_VERSION_QUERY_KEY = "ui"
+UI_VERSION_TEMPLATES = {
+    "v1": "index_v1.html",
+    "v2": "index_v2.html",
+}
+UI_DEFAULT_VERSION = os.getenv("AUDIOBOOK_UI_DEFAULT", "v1").strip().lower() or "v1"
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}
 ARCHIVE_EXTENSIONS = {".zip", ".rar"}
@@ -1860,9 +1867,50 @@ def _ensure_worker() -> None:
     worker_started = True
 
 
+def _resolve_ui_version() -> str:
+    query_version = (request.args.get(UI_VERSION_QUERY_KEY) or "").strip().lower()
+    cookie_version = (request.cookies.get(UI_VERSION_COOKIE) or "").strip().lower()
+
+    if query_version in UI_VERSION_TEMPLATES:
+        return query_version
+    if cookie_version in UI_VERSION_TEMPLATES:
+        return cookie_version
+    if UI_DEFAULT_VERSION in UI_VERSION_TEMPLATES:
+        return UI_DEFAULT_VERSION
+    return "v1"
+
+
 @app.route("/")
 def index():
-    return render_template("index.html", app_version=APP_VERSION)
+    selected_ui = _resolve_ui_version()
+    selected_template = UI_VERSION_TEMPLATES[selected_ui]
+    response = make_response(
+        render_template(
+            selected_template,
+            app_version=APP_VERSION,
+            ui_version=selected_ui,
+            ui_versions=list(UI_VERSION_TEMPLATES.keys()),
+        )
+    )
+
+    query_version = (request.args.get(UI_VERSION_QUERY_KEY) or "").strip().lower()
+    if query_version in UI_VERSION_TEMPLATES:
+        response.set_cookie(UI_VERSION_COOKIE, query_version, max_age=60 * 60 * 24 * 90, samesite="Lax")
+    return response
+
+
+@app.route("/api/ui/version")
+def api_ui_version():
+    selected_ui = _resolve_ui_version()
+    query_version = (request.args.get(UI_VERSION_QUERY_KEY) or "").strip().lower()
+    payload = {
+        "active": selected_ui,
+        "default": UI_DEFAULT_VERSION if UI_DEFAULT_VERSION in UI_VERSION_TEMPLATES else "v1",
+        "available": list(UI_VERSION_TEMPLATES.keys()),
+    }
+    if query_version and query_version not in UI_VERSION_TEMPLATES:
+        payload["warning"] = f"Version UI inconnue: {query_version}"
+    return jsonify(payload)
 
 
 @app.route("/integrations/audiobookshelf/packets")

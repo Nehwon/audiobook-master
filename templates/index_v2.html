@@ -143,10 +143,13 @@
         .sidebar .tab { width:100%; text-align:left; background:transparent; color:#cbd5e1; border:1px solid transparent; margin-bottom:6px; border-radius:6px; padding:10px 12px; }
         .library-panels { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; align-items:start; }
         .panel-card { display:flex; flex-direction:column; min-height:0; max-height:calc(100vh - 300px); }
-        .panel-card h3 { margin:0; }
-        .panel-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+        .panel-card h3 { margin:0; font-size:14px; }
+        .panel-head { display:flex; flex-direction:column; align-items:flex-start; gap:8px; margin-bottom:8px; }
+        .panel-actions { display:flex; flex-wrap:wrap; gap:6px; }
+        .panel-actions button { font-size:12px; padding:4px 8px; }
         .panel-body { overflow:auto; min-height:0; border:1px solid var(--border); border-radius:8px; }
-        .panel-body table { min-width:560px; }
+        .panel-body table { min-width:520px; }
+        .panel-body th, .panel-body td { font-size:12px; padding:6px; }
         .sidebar .tab.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
         .sidebar .tab.packet-tab,.sidebar .tab.plugin-tab,.sidebar .tab.config-tab { background:transparent; border-color:transparent; color:#cbd5e1; }
         .sidebar .tab.packet-tab.active,.sidebar .tab.plugin-tab.active,.sidebar .tab.config-tab.active { background:#2563eb; border-color:#2563eb; color:#fff; }
@@ -211,19 +214,19 @@
             <article class="kpi-card"><p class="kpi-title">Jobs en cours</p><p id="kpiRunning" class="kpi-value">0</p><div class="kpi-sub">pipeline actif</div></article>
             <article class="kpi-card"><p class="kpi-title">En attente</p><p id="kpiPending" class="kpi-value">0</p><div class="kpi-sub">avant traitement</div></article>
             <article class="kpi-card"><p class="kpi-title">À revoir</p><p id="kpiReview" class="kpi-value">0</p><div class="kpi-sub">suppression/retraitement</div></article>
-        </div>
-        <div class="card dashboard-actions">
-            <div class="row">
-                <button onclick="loadLibrary()">Rafraîchir</button>
-                <button id="renameSelectedBtn" class="secondary" onclick="renameSelected()">Renommage batch</button>
-                <button onclick="enqueueSelected()">Ajouter sélection à la queue M4B</button>
-            </div>
-            <span class="pill">UI v2 preview · style dashboard</span>
+            <article class="kpi-card"><p class="kpi-title">Archives en attente</p><p id="kpiArchivesPending" class="kpi-value">0</p><div class="kpi-sub">à valider / extraire</div></article>
         </div>
 
         <div class="library-panels">
             <article class="card panel-card">
-                <div class="panel-head"><h3>Dossiers</h3></div>
+                <div class="panel-head">
+                    <h3>Dossiers</h3>
+                    <div class="panel-actions">
+                        <button onclick="loadLibrary()">Rafraîchir</button>
+                        <button id="renameSelectedBtn" class="secondary" onclick="renameSelected()">Renommage batch</button>
+                        <button onclick="enqueueSelected()">Traiter sélection M4B</button>
+                    </div>
+                </div>
                 <div class="panel-body">
                     <table>
                         <thead><tr><th><input id="folderSelAll" type="checkbox" onchange="toggleAllSelection('folderSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
@@ -233,7 +236,12 @@
             </article>
 
             <article class="card panel-card">
-                <div class="panel-head"><h3>Fichiers</h3></div>
+                <div class="panel-head">
+                    <h3>Fichiers</h3>
+                    <div class="panel-actions">
+                        <button class="secondary" onclick="loadLibrary()">Rafraîchir</button>
+                    </div>
+                </div>
                 <div class="panel-body">
                     <table>
                         <thead><tr><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>M4B lié</th><th>Actions</th></tr></thead>
@@ -245,9 +253,10 @@
             <article class="card panel-card">
                 <div class="panel-head">
                     <h3>Archives</h3>
-                    <div class="row">
+                    <div class="panel-actions">
                         <button class="secondary" onclick="validateSelectedArchives()">Valider sélection</button>
                         <button class="secondary" onclick="extractSelected()">Extraire sélection</button>
+                        <button class="secondary" onclick="loadLibrary()">Rafraîchir</button>
                     </div>
                 </div>
                 <div class="panel-body">
@@ -751,7 +760,9 @@ async function loadLibrary() {
         </tr>`;
     });
     if (!data.folders.length) fb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier</td></tr>';
+    const archivesPending = (data.archives || []).filter(a => !(a.validation && a.validation.valid === true)).length;
     setKpiValue('kpiFolders', data.folders.length || 0);
+    setKpiValue('kpiArchivesPending', archivesPending);
     touchKpiRefresh();
 
     (data.hidden_processed_folders || []).forEach(f => {

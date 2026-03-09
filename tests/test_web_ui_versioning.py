@@ -20,7 +20,7 @@ class TestWebUiVersioning(unittest.TestCase):
     def test_index_can_switch_to_v2_with_query_param_and_set_cookie(self):
         response = self.client.get("/?ui=v2")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"UI v2 preview", response.data)
+        self.assertIn(b"Dashboard V2", response.data)
         set_cookie = response.headers.get("Set-Cookie", "")
         self.assertIn("audiobook_ui_version=v2", set_cookie)
 
@@ -39,6 +39,12 @@ class TestWebUiVersioning(unittest.TestCase):
         payload = response.get_json()
         self.assertIn("warning", payload)
         self.assertEqual(payload["active"], web_app.UI_DEFAULT_VERSION)
+
+
+    def test_v2_displays_archives_pending_kpi(self):
+        response = self.client.get("/?ui=v2")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Archives en attente", response.data)
 
     def test_logo_asset_route_is_available(self):
         response = self.client.get("/assets/audiobook-manager.jpg")

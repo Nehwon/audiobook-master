@@ -29,3 +29,8 @@ Ce sprint introduit une base de persistance transactionnelle pour les états de 
 
 Étendre la persistance au niveau fin des étapes (`processing_step`) et des résultats de
 validation (`validation_result`) pour préparer la reprise automatique du Sprint 2.
+
+
+## Clôture
+
+- Bilan de fin de sprint: `docs/sprint-1/CLOTURE.md`

@@ -61,6 +61,6 @@ class ProcessingStateService:
             user_message=user_message,
             technical_message=technical_message,
             stacktrace=stacktrace,
-            retryable="true" if retryable else "false",
+            retryable=retryable,
         )
         self.transition_job(job_id=job_id, folder_id=folder_id, status="failed")

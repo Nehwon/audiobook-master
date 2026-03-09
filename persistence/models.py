@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -67,7 +67,7 @@ class ProcessingError(Base):
     user_message: Mapped[str] = mapped_column(Text, nullable=False)
     technical_message: Mapped[str | None] = mapped_column(Text)
     stacktrace: Mapped[str | None] = mapped_column(Text)
-    retryable: Mapped[str] = mapped_column(String(8), nullable=False, default="false")
+    retryable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
 

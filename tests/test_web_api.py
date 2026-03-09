@@ -443,6 +443,26 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(len(payload2['skipped']), 1)
         self.assertEqual(payload2['skipped'][0]['reason'], 'déjà en attente/en cours')
 
+    @mock.patch('web.app._persist_job_created')
+    def test_enqueue_persists_created_jobs(self, mocked_persist):
+        folder = self.media_dir / 'Livre Persisté'
+        folder.mkdir()
+        (folder / 'a.mp3').write_text('x')
+
+        resp = self.client.post('/api/jobs/enqueue', json={'folders': ['Livre Persisté']})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(mocked_persist.call_count, 1)
+
+    @mock.patch('web.app._persist_job_created')
+    def test_reprocess_persists_created_job(self, mocked_persist):
+        folder = self.media_dir / 'Livre Reprocess'
+        folder.mkdir()
+        (folder / 'a.mp3').write_text('x')
+
+        resp = self.client.post('/api/jobs/reprocess', json={'folder': 'Livre Reprocess'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(mocked_persist.call_count, 1)
+
     def test_enqueue_rejects_non_list_payload(self):
         resp = self.client.post('/api/jobs/enqueue', json={'folders': 'not-a-list'})
         self.assertEqual(resp.status_code, 400)

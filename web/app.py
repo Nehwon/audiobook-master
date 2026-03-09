@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import base64
 import hashlib
 import hmac
@@ -33,6 +34,11 @@ from core.metadata import BookScraper
 from core.runtime_paths import resolve_runtime_paths
 from core.processor import AudiobookProcessor, PROCESSOR_LOG_PATH
 from core.versioning import get_project_version
+
+HAS_SQLALCHEMY = importlib.util.find_spec("sqlalchemy") is not None
+if HAS_SQLALCHEMY:
+    from persistence.db import build_engine, build_session_factory, get_database_url, session_scope
+    from persistence.service import ProcessingStateService
 
 app = Flask(__name__, template_folder="../templates")
 app.config["SECRET_KEY"] = "audiobook_manager_2024"
@@ -89,6 +95,57 @@ job_events: List[Dict] = []
 archive_validation_cache: Dict[str, Dict[str, object]] = {}
 PACKET_STATUSES = ["en_attente", "en_preparation", "pret", "planifie", "publie", "erreur"]
 PACKET_CHANNELS = {"discord", "telegram", "whatsapp", "email"}
+_persistence_session_factory = None
+_persistence_bootstrap_done = False
+
+
+def _get_persistence_session_factory():
+    global _persistence_session_factory, _persistence_bootstrap_done
+    if not HAS_SQLALCHEMY:
+        return None
+    if _persistence_bootstrap_done:
+        return _persistence_session_factory
+    _persistence_bootstrap_done = True
+    database_url = get_database_url()
+    if not database_url:
+        return None
+    engine = build_engine(database_url)
+    _persistence_session_factory = build_session_factory(engine)
+    return _persistence_session_factory
+
+
+def _persist_job_created(job: Job) -> None:
+    session_factory = _get_persistence_session_factory()
+    if not session_factory:
+        return
+    with session_scope(session_factory) as session:
+        service = ProcessingStateService(session)
+        service.create_job(job_id=job.id, folder_id=job.folder)
+
+
+def _persist_job_transition(job: Job, status: str) -> None:
+    session_factory = _get_persistence_session_factory()
+    if not session_factory:
+        return
+    with session_scope(session_factory) as session:
+        service = ProcessingStateService(session)
+        service.transition_job(job_id=job.id, folder_id=job.folder, status=status)
+
+
+def _persist_job_error(job: Job, *, user_message: str, technical_message: Optional[str] = None) -> None:
+    session_factory = _get_persistence_session_factory()
+    if not session_factory:
+        return
+    with session_scope(session_factory) as session:
+        service = ProcessingStateService(session)
+        service.record_error(
+            job_id=job.id,
+            folder_id=job.folder,
+            error_code="conversion_failed",
+            user_message=user_message,
+            technical_message=technical_message,
+            retryable=False,
+        )
 
 
 def _api_error(message: str, status: int = 400, code: str = "bad_request", *, details: Optional[Dict] = None):
@@ -1740,6 +1797,7 @@ def _push_job_event(
 def _worker_loop() -> None:
     while True:
         job_id = job_queue.get()
+        job: Optional[Job] = None
         with jobs_lock:
             job = jobs.get(job_id)
             if not job:
@@ -1749,6 +1807,8 @@ def _worker_loop() -> None:
             job.progress = 5
             job.started_at = time.time()
             _push_job_event(job.id, job.folder, job.stage, "Job démarré")
+        if job:
+            _persist_job_transition(job, "running")
 
         try:
             folder_path = MEDIA_DIR / job.folder
@@ -1845,6 +1905,11 @@ def _worker_loop() -> None:
                     )
                 job.ended_at = time.time()
 
+            if success:
+                _persist_job_transition(job, "done")
+            else:
+                _persist_job_error(job, user_message=job.error or "Échec conversion")
+
             if success and job.output_file:
                 _save_m4b_candidate(job.folder, job.output_file)
         except Exception as exc:  # noqa: BLE001
@@ -1855,6 +1920,7 @@ def _worker_loop() -> None:
                 job.progress = 100
                 job.ended_at = time.time()
                 _push_job_event(job.id, job.folder, job.stage, f"Exception: {exc}", "error")
+            _persist_job_error(job, user_message="Exception durant le traitement", technical_message=str(exc))
         finally:
             job_queue.task_done()
 
@@ -2558,6 +2624,7 @@ def api_enqueue_jobs():
         return _api_error("Le champ 'folders' doit être une liste", code="invalid_folders")
 
     queued = []
+    queued_jobs: List[Job] = []
     skipped = []
 
     with jobs_lock:
@@ -2575,7 +2642,11 @@ def api_enqueue_jobs():
             jobs[jid] = job
             job_queue.put(jid)
             queued.append(asdict(job))
+            queued_jobs.append(job)
             active_folders.add(folder_name)
+
+    for job in queued_jobs:
+        _persist_job_created(job)
 
     return jsonify({"queued": queued, "skipped": skipped})
 
@@ -2655,6 +2726,8 @@ def api_reprocess():
         job = Job(id=jid, folder=folder)
         jobs[jid] = job
         job_queue.put(jid)
+
+    _persist_job_created(job)
 
     return jsonify({"queued": asdict(job)})
 

@@ -47,7 +47,7 @@ Valider l'architecture cible et découper techniquement les migrations React + P
 
 ## Sprint 1 — Fondations PostgreSQL + persistance d'états (2 semaines)
 
-> Statut: **autorisé à démarrer** (validation produit).
+> Statut: **terminé** ✅ (implémentation validée, documentation de clôture publiée).
 
 ### But
 Mettre en place PostgreSQL et enregistrer toutes les informations minimales nécessaires à la reprise.
@@ -78,9 +78,18 @@ Mettre en place PostgreSQL et enregistrer toutes les informations minimales néc
 - En cas de redémarrage, les jobs en cours sont visibles en base avec état cohérent.
 - Les erreurs sont historisées et requêtables par dossier/job.
 
+### Bilan de clôture
+
+- Couche de persistance PostgreSQL livrée (`persistence/` + migration SQL initiale).
+- Intégration aux flux web de création, transition et annulation de jobs.
+- Bootstrap PostgreSQL local/Docker disponible pour exécution reproductible.
+- Synthèse de clôture: `docs/sprint-1/CLOTURE.md`.
+
 ---
 
 ## Sprint 2 — Reprise automatique et résilience des traitements (2 semaines)
+
+> Statut: **prêt à démarrer** 🚀 (backlog détaillé + plan d'exécution publiés).
 
 ### But
 Automatiser la reprise des traitements interrompus et sécuriser l'exécution.
@@ -106,6 +115,12 @@ Automatiser la reprise des traitements interrompus et sécuriser l'exécution.
 
 - Après crash simulé, reprise automatique sans action manuelle pour les cas nominalement retryables.
 - Pas de duplication de sorties pour un même job (idempotence vérifiée).
+
+### Préparation de sprint
+
+- Plan d'exécution Sprint 2: `docs/sprint-2/README.md`.
+- Découpage en lots techniques: heartbeat, recovery bootstrap, retries, observabilité admin.
+- Stratégie de validation prête (tests intégration crash/restart + assertions d'idempotence).
 
 ---
 

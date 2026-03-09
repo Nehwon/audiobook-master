@@ -82,7 +82,9 @@ Routes disponibles sous `/api/integrations/audiobookshelf/...` :
 
 | Variable | Usage |
 |---|---|
-| `AUDIOBOOK_MEDIA_DIR` | Source web |
+| `AUDIOBOOK_MEDIA_DIR` | Source web (prioritaire) |
+| `AUDIOBOOK_SOURCE_DIR` | Alias compatibilité source web |
+| `SOURCE_DIR` | Variable legacy source web |
 | `AUDIOBOOK_OUTPUT_DIR` | Sortie web |
 | `AUDIOBOOK_TEMP_DIR` | Temp web |
 | `AUDIOBOOK_LOG_DIR` | Logs web |

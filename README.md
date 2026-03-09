@@ -61,6 +61,17 @@ python -m web.app
 pytest -q tests/test_smoke_suite.py
 ```
 
+
+## 🔖 Versionnage automatique (M.m.f)
+
+Le projet utilise désormais un versionnage **M.m.f** automatique, indépendant des numéros de sprint.
+
+- `M.m` : base fonctionnelle définie dans `VERSION_BASE` (ex: `2.2`)
+- `f` : compteur de commits Git (`git rev-list --count HEAD`)
+- Version runtime exposée: `vM.m.f`
+
+Vous pouvez forcer une version explicite avec `AUDIOBOOK_MANAGER_VERSION`, ou piloter les composants via `AUDIOBOOK_VERSION_BASE` / `AUDIOBOOK_VERSION_PATCH`.
+
 ## 📚 Documentation
 
 - Utilisation (CLI/Web/API) : `docs/usage.md`

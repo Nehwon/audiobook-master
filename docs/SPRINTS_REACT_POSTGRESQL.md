@@ -7,7 +7,7 @@
 
 ## Hypothèses et contraintes
 
-- Backend actuel Flask conservé dans un premier temps, avec introduction progressive d'une API JSON stable.
+- Backend Flask conservé comme socle d'API JSON stable, sans objectif de maintien d'une UI legacy en parallèle.
 - Migration incrémentale pour éviter un « big bang » risqué.
 - Les traitements existants (jobs/pipeline) restent la source métier, mais leur orchestration devient **pilotée par l'état en base**.
 - Objectif de continuité: aucune perte d'information sur les traitements en cours pendant la migration.
@@ -16,7 +16,7 @@
 
 ## Sprint 0 — Cadrage technique et architecture (1 semaine)
 
-> Statut: **lancé**. Livrables initialisés dans `docs/sprint-0/`.
+> Statut: **terminé et validé**. Livrables approuvés, passage en Sprint 1 validé.
 
 ### But
 Valider l'architecture cible et découper techniquement les migrations React + PostgreSQL.
@@ -33,10 +33,10 @@ Valider l'architecture cible et découper techniquement les migrations React + P
 
 ### Backlog sprint
 
-- [ ] Atelier de modélisation des états de traitement (state machine explicite).
-- [ ] Définition d'un contrat d'erreur standard (`code`, `message`, `details`, `retryable`).
-- [ ] Définition du contrat d'événements UI temps réel (`job.updated`, `folder.failed`, etc.).
-- [ ] Définition des KPI de succès (temps de rafraîchissement UI, taux de reprise, taux d'erreurs muettes = 0).
+- [x] Atelier de modélisation des états de traitement (state machine explicite).
+- [x] Définition d'un contrat d'erreur standard (`code`, `message`, `details`, `retryable`).
+- [x] Définition du contrat d'événements UI temps réel (`job.updated`, `folder.failed`, etc.).
+- [x] Définition des KPI de succès (temps de rafraîchissement UI, taux de reprise, taux d'erreurs muettes = 0).
 
 ### Critères d'acceptation
 
@@ -46,6 +46,8 @@ Valider l'architecture cible et découper techniquement les migrations React + P
 ---
 
 ## Sprint 1 — Fondations PostgreSQL + persistance d'états (2 semaines)
+
+> Statut: **autorisé à démarrer** (validation produit).
 
 ### But
 Mettre en place PostgreSQL et enregistrer toutes les informations minimales nécessaires à la reprise.
@@ -207,7 +209,7 @@ Sécuriser la bascule finale et garantir l'exploitabilité en production.
 - [ ] Tests E2E UI (flux nominal + cas erreurs).
 - [ ] Vérifier sauvegardes/restauration PostgreSQL.
 - [ ] Former les utilisateurs internes sur la nouvelle UI.
-- [ ] Décommission progressive des templates legacy.
+- [ ] Finaliser la suppression des templates Flask non utilisés après cutover Docker.
 
 ### Critères d'acceptation
 

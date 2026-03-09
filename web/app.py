@@ -32,6 +32,7 @@ from core.config import ProcessingConfig
 from core.metadata import BookScraper
 from core.runtime_paths import resolve_runtime_paths
 from core.processor import AudiobookProcessor, PROCESSOR_LOG_PATH
+from core.versioning import get_project_version
 
 app = Flask(__name__, template_folder="../templates")
 app.config["SECRET_KEY"] = "audiobook_manager_2024"
@@ -45,7 +46,7 @@ WEB_DEBUG_LOG_PATH = LOG_DIR / "web_debug.log"
 DEFAULT_CONFIG_PATH = Path(os.getenv("AUDIOBOOK_CONFIG_PATH", "/app/data/config/web_config.json"))
 CONFIG_PATH = DEFAULT_CONFIG_PATH
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
-APP_VERSION = os.getenv("AUDIOBOOK_MANAGER_VERSION", "v2.1.2")
+APP_VERSION = get_project_version()
 APP_ROOT = Path(__file__).resolve().parent.parent
 UI_VERSION_COOKIE = "audiobook_ui_version"
 UI_VERSION_QUERY_KEY = "ui"

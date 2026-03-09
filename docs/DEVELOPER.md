@@ -64,3 +64,20 @@ python -m core.main --log-profile debug-conversion -v
 - `web/app.py` : fichier volumineux, toucher par blocs isolés + tests API ciblés.
 - `core/processor.py` : conserver compatibilité des helpers legacy couverts par tests.
 - `integrations/audiobookshelf.py` : attention aux erreurs réseau et auth.
+
+
+## Versionnage (M.m.f)
+
+Le runtime applique un versionnage automatique `vM.m.f` :
+
+- base `M.m` lue depuis `VERSION_BASE` (ou `AUDIOBOOK_VERSION_BASE`)
+- `f` calculé automatiquement via le nombre de commits Git
+- override complet possible via `AUDIOBOOK_MANAGER_VERSION`
+
+Commande utile :
+
+```bash
+python scripts/print_version.py
+```
+
+Ce schéma reste valable après la fin des sprints (les sprints ne pilotent pas la version applicative).

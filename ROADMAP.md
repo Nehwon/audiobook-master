@@ -42,6 +42,11 @@ Cette roadmap reflète l'état du dépôt tel qu'implémenté aujourd'hui, avec 
   - Définir une routine release automatisée (tests + changelog + versioning).
   - Renforcer les checks de sécurité et de qualité (lint/typecheck si activés).
 
+
+## 📌 Plan de transformation React + PostgreSQL
+
+- Un plan de sprints détaillé est disponible dans `docs/SPRINTS_REACT_POSTGRESQL.md`.
+
 ## ❌ Hors périmètre immédiat
 
 - Refonte totale UI.

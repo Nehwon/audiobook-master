@@ -1711,16 +1711,6 @@ document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeJobLightbox();
 });
 
-const jobLightboxEl = document.getElementById('jobLightbox');
-if (jobLightboxEl) {
-    jobLightboxEl.addEventListener('click', (event) => {
-        if (event.target === jobLightboxEl) closeJobLightbox();
-    });
-}
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeJobLightbox();
-});
-
 setupTabs();
 setupTheme();
 setupAudiobookshelfAutosave();

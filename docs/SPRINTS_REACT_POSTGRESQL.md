@@ -16,6 +16,8 @@
 
 ## Sprint 0 — Cadrage technique et architecture (1 semaine)
 
+> Statut: **lancé**. Livrables initialisés dans `docs/sprint-0/`.
+
 ### But
 Valider l'architecture cible et découper techniquement les migrations React + PostgreSQL.
 

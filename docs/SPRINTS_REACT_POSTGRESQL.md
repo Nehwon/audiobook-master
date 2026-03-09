@@ -67,11 +67,11 @@ Mettre en place PostgreSQL et enregistrer toutes les informations minimales néc
 
 ### Backlog sprint
 
-- [ ] Ajouter couche repository/service pour découpler la logique métier de la DB.
-- [ ] Persister transitions d'état (queued, running, failed, done, cancelled).
-- [ ] Persister erreurs techniques + fonctionnelles avec contexte (stacktrace optionnelle + message utilisateur).
-- [ ] Ajouter index sur colonnes de recherche (status, updated_at, folder_id).
-- [ ] Préparer scripts de bootstrap et migration des environnements (docker-compose inclus).
+- [x] Ajouter couche repository/service pour découpler la logique métier de la DB.
+- [x] Persister transitions d'état (queued, running, failed, done, cancelled).
+- [x] Persister erreurs techniques + fonctionnelles avec contexte (stacktrace optionnelle + message utilisateur).
+- [x] Ajouter index sur colonnes de recherche (status, updated_at, folder_id).
+- [x] Préparer scripts de bootstrap et migration des environnements (docker-compose inclus).
 
 ### Critères d'acceptation
 

@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS processing_error (
     user_message TEXT NOT NULL,
     technical_message TEXT,
     stacktrace TEXT,
-    retryable VARCHAR(8) NOT NULL DEFAULT 'false',
+    retryable BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

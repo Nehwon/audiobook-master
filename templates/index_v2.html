@@ -1,0 +1,1642 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audiobook Manager - Dashboard V2 (preview)</title>
+    <style>
+        :root {
+            --bg: #f5f7fb;
+            --card: #ffffff;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --border: #d1d5db;
+            --primary: #4f46e5;
+            --danger: #b91c1c;
+            --warning-bg: #fff8db;
+            --warning-border: #facc15;
+            --warning-text: #8a5a00;
+        }
+        body.dark {
+            --bg: #0b1020;
+            --card: #172036;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --border: #334155;
+            --primary: #818cf8;
+            --danger: #ef4444;
+            --warning-bg: #423300;
+            --warning-border: #facc15;
+            --warning-text: #fef08a;
+        }
+        body { font-family: Arial, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+        header { background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 20px; display:flex; justify-content:space-between; align-items:center; }
+        .app-title { font-size: 26px; line-height: 1.1; display:inline-flex; align-items:flex-end; gap:8px; }
+        .app-version { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0.02em; }
+        .tabs { display:flex; gap:8px; padding: 10px 20px; flex-wrap:wrap; justify-content:flex-start; }
+        .tabs-right { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
+        .tab { border:1px solid var(--border); background:var(--card); color:var(--text); padding:8px 12px; border-radius:8px; cursor:pointer; }
+        .tab.active { background:var(--primary); color:white; border-color:var(--primary); }
+        .tab.packet-tab { background:#16a34a; border-color:#16a34a; color:white; }
+        .tab.packet-tab.active { background:#15803d; border-color:#15803d; color:white; }
+        .tab.plugin-tab { background:#b45309; border-color:#b45309; color:white; }
+        .tab.plugin-tab.active { background:#92400e; border-color:#92400e; color:white; }
+        .tab.config-tab { background:#64748b; border-color:#64748b; color:white; }
+        .tab.config-tab.active { background:#475569; border-color:#475569; color:white; }
+        main { padding: 0 20px 76px; }
+        .page { display:none; }
+        .page.active { display:block; }
+        .card { background: var(--card); border:1px solid var(--border); border-radius:10px; padding: 14px; margin-bottom: 14px; }
+        table { width:100%; border-collapse: collapse; }
+        th, td { border-bottom:1px solid var(--border); text-align:left; padding:8px; }
+        button { background: var(--primary); color:white; border:none; border-radius:6px; padding: 6px 10px; cursor:pointer; }
+        button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+        button.danger { background: var(--danger); }
+        button:disabled { opacity: 0.55; cursor: not-allowed; }
+        .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+        input, select, textarea { background: var(--bg); color: var(--text); border:1px solid var(--border); border-radius:6px; padding:7px; }
+        .muted { color: var(--muted); }
+        .pill { border:1px solid var(--border); border-radius:999px; padding:2px 8px; font-size:12px; }
+        audio { width:100%; max-width: 300px; }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--muted) 60%, transparent);
+            box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.0);
+            transition: background-color .2s ease;
+            display: inline-block;
+        }
+        .status-dot.active {
+            background: var(--primary);
+            animation: softPulse 1.8s ease-in-out infinite;
+        }
+        @keyframes softPulse {
+            0% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.35); transform: scale(1); }
+            70% { box-shadow: 0 0 0 9px rgba(79, 70, 229, 0); transform: scale(1.04); }
+            100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); transform: scale(1); }
+        }
+        .progress-track { width:100%; height:6px; background: color-mix(in srgb, var(--border) 70%, transparent); overflow:hidden; }
+        .progress-indeterminate { height:100%; width:35%; background: var(--primary); animation: indeterminate 1.1s infinite; }
+        .progress-determinate { height:100%; width:0%; background: var(--primary); transition: width .2s ease; }
+        .toast-wrap { position: fixed; left: 16px; right: 16px; bottom: 16px; display:flex; flex-direction:column; gap:8px; z-index: 1200; pointer-events:none; }
+        .toast { background: var(--card); border:1px solid var(--border); border-left:4px solid var(--primary); border-radius:8px; padding:10px 12px; box-shadow:0 8px 24px rgba(0,0,0,.12); pointer-events:auto; }
+        .toast.warn { border-left-color: #d97706; }
+        .toast.error { border-left-color: var(--danger); }
+        .toast.success { border-left-color: #059669; }
+        .toast-actions { margin-top:8px; display:flex; gap:8px; }
+        @keyframes indeterminate { from { transform: translateX(-120%);} to { transform: translateX(330%);} }
+        .job-inline { margin-top:6px; }
+        .job-inline .meta { font-size:12px; color: var(--muted); margin-bottom:4px; }
+        .job-inline .track { width:220px; max-width:100%; height:8px; border-radius:999px; background: color-mix(in srgb, var(--border) 70%, transparent); overflow:hidden; }
+        .job-inline .bar { height:100%; background: var(--primary); transition: width .25s ease; }
+        .events-scroll {
+            max-height: 300px;
+            overflow-y: auto;
+            padding-right: 6px;
+        }
+        .phase-list { margin-top:8px; display:grid; gap:6px; max-width:420px; }
+        .phase-item { font-size:12px; }
+        .phase-meta { display:flex; justify-content:space-between; color: var(--muted); margin-bottom:3px; gap:8px; }
+        .phase-track { width:100%; height:6px; border-radius:999px; background: color-mix(in srgb, var(--border) 70%, transparent); overflow:hidden; }
+        .phase-bar { height:100%; background: color-mix(in srgb, var(--primary) 82%, white); transition: width .2s ease; }
+        .archive-actions-bar { margin: 10px 0 14px; }
+        .dup-badge { display:inline-block; margin-left:6px; color:#b45309; font-size:12px; }
+
+        .warning-banner {
+            margin-top: 10px;
+            background: var(--warning-bg);
+            color: var(--warning-text);
+            border: 1px solid var(--warning-border);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-weight: 600;
+        }
+        .warning-banner.hidden { display: none; }
+        .footer-fixed {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            z-index: 900;
+        }
+        .footer-fixed a { color: var(--text); display:inline-flex; align-items:center; }
+        .footer-fixed svg { width: 18px; height: 18px; fill: currentColor; }
+        .ui-switch { display:inline-flex; border:1px solid var(--border); border-radius:999px; overflow:hidden; margin-right:8px; }
+        .ui-switch a { text-decoration:none; color:var(--text); padding:4px 10px; font-size:12px; background:var(--card); }
+        .ui-switch a.active { background:var(--primary); color:#fff; }
+
+        /* Dashboard V2 layout */
+        body.v2-dashboard { background:#eef1f5; }
+        .app-shell { min-height:100vh; display:flex; }
+        .sidebar { width:240px; background:#2f333a; color:#e5e7eb; border-right:1px solid #23272e; padding:14px 10px; position:sticky; top:0; height:100vh; box-sizing:border-box; }
+         .brand { margin:2px 10px 14px; }
+        .brand img { width: 190px; max-width: 100%; height:auto; display:block; filter: drop-shadow(0 1px 0 rgba(0,0,0,.2)); }
+
+        .sidebar .tab { width:100%; text-align:left; background:transparent; color:#cbd5e1; border:1px solid transparent; margin-bottom:6px; border-radius:6px; padding:10px 12px; }
+        .library-panels { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; align-items:start; }
+        .panel-card { display:flex; flex-direction:column; min-height:0; max-height:calc(100vh - 300px); }
+        .panel-card h3 { margin:0; font-size:14px; }
+        .panel-head { display:flex; flex-direction:column; align-items:flex-start; gap:8px; margin-bottom:8px; }
+        .panel-actions { display:flex; flex-wrap:wrap; gap:6px; }
+        .panel-actions button { font-size:12px; padding:4px 8px; }
+        .panel-body { overflow:auto; min-height:0; border:1px solid var(--border); border-radius:8px; }
+        .panel-body table { min-width:520px; }
+        .panel-body th, .panel-body td { font-size:12px; padding:6px; }
+        .sidebar .tab.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+        .sidebar .tab.packet-tab,.sidebar .tab.plugin-tab,.sidebar .tab.config-tab { background:transparent; border-color:transparent; color:#cbd5e1; }
+        .sidebar .tab.packet-tab.active,.sidebar .tab.plugin-tab.active,.sidebar .tab.config-tab.active { background:#2563eb; border-color:#2563eb; color:#fff; }
+        .sidebar-divider { height:1px; background:#475569; margin:10px 8px; opacity:.55; }
+        .app-main { flex:1; min-width:0; }
+        .topbar { background:#e5e7eb; border-bottom:1px solid #cbd5e1; padding:10px 20px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+        .topbar h1 { margin:0; font-size:24px; }
+        .topbar .meta { color:#475569; font-size:13px; }
+        .top-actions { display:flex; align-items:center; gap:10px; }
+        .search-pill { background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:7px 10px; min-width:240px; color:#64748b; font-size:13px; }
+        main { padding: 18px 20px 76px; }
+        .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px; margin-bottom:14px; }
+        .kpi-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; box-shadow:0 1px 2px rgba(15,23,42,.06); }
+        .kpi-title { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 8px; }
+        .kpi-value { font-size:30px; font-weight:700; color:#0f172a; margin:0; }
+        .kpi-sub { margin-top:4px; font-size:12px; color:#64748b; }
+        .dashboard-actions { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+        .dashboard-actions .row { gap:8px; }
+        @media (max-width: 980px){
+            .app-shell { flex-direction:column; }
+            .sidebar { width:100%; height:auto; position:static; display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+            .brand { width:100%; margin-bottom:6px; }
+            .sidebar .tab { width:auto; }
+            .library-panels { grid-template-columns:1fr; }
+            .panel-card { max-height:none; }
+            .sidebar-divider { display:none; }
+        }
+
+    </style>
+</head>
+<body class="v2-dashboard">
+<div class="app-shell">
+<aside class="sidebar">
+    <div class="brand"><img src="/assets/audiobook-manager.jpg" alt="Audiobook Manager"></div>
+    <button class="tab active" data-page="library">📚 Dashboard bibliothèque</button>
+    <button class="tab" data-page="processing">⚙️ Traitements</button>
+    <div class="sidebar-divider"></div>
+    <button class="tab packet-tab" data-page="submission">📦 Paquets</button>
+    <button class="tab plugin-tab" data-page="plugins">🧩 Plugins</button>
+    <button class="tab config-tab" data-page="config">🛠️ Configuration</button>
+</aside>
+<div class="app-main">
+<header class="topbar">
+    <div>
+        <h1>Audiobook Manager <span class="app-version">{{ app_version }}</span></h1>
+        <div class="meta">Dernière vue: <span id="kpiLastRefresh">-</span></div>
+    </div>
+    <div class="top-actions">
+        <div class="search-pill">Search (Ctrl+Space / Ctrl+Shift+F)</div>
+        <nav class="ui-switch" aria-label="Version de l'interface">
+            <a id="uiSwitchV1" href="/?ui=v1" class="{{ 'active' if ui_version == 'v1' else '' }}" title="Basculer vers l'interface classique">UI v1</a>
+            <a id="uiSwitchV2" href="/?ui=v2" class="{{ 'active' if ui_version == 'v2' else '' }}" title="Basculer vers l'interface dashboard">UI v2</a>
+        </nav>
+        <span id="apiActivityDot" class="status-dot" title="Activité API"></span>
+        <label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label>
+    </div>
+</header>
+<main>
+    <section id="page-library" class="page active">
+        <div class="kpi-grid">
+            <article class="kpi-card"><p class="kpi-title">Dossiers détectés</p><p id="kpiFolders" class="kpi-value">0</p><div class="kpi-sub">dans la bibliothèque</div></article>
+            <article class="kpi-card"><p class="kpi-title">Jobs en cours</p><p id="kpiRunning" class="kpi-value">0</p><div class="kpi-sub">pipeline actif</div></article>
+            <article class="kpi-card"><p class="kpi-title">En attente</p><p id="kpiPending" class="kpi-value">0</p><div class="kpi-sub">avant traitement</div></article>
+            <article class="kpi-card"><p class="kpi-title">À revoir</p><p id="kpiReview" class="kpi-value">0</p><div class="kpi-sub">suppression/retraitement</div></article>
+            <article class="kpi-card"><p class="kpi-title">Archives en attente</p><p id="kpiArchivesPending" class="kpi-value">0</p><div class="kpi-sub">à valider / extraire</div></article>
+        </div>
+
+        <div class="library-panels">
+            <article class="card panel-card">
+                <div class="panel-head">
+                    <h3>Dossiers</h3>
+                    <div class="panel-actions">
+                        <button onclick="loadLibrary()">Rafraîchir</button>
+                        <button id="renameSelectedBtn" class="secondary" onclick="renameSelected()">Renommage batch</button>
+                        <button onclick="enqueueSelected()">Traiter sélection M4B</button>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <table>
+                        <thead><tr><th><input id="folderSelAll" type="checkbox" onchange="toggleAllSelection('folderSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                        <tbody id="foldersBody"></tbody>
+                    </table>
+                </div>
+            </article>
+
+            <article class="card panel-card">
+                <div class="panel-head">
+                    <h3>Fichiers</h3>
+                    <div class="panel-actions">
+                        <button class="secondary" onclick="loadLibrary()">Rafraîchir</button>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <table>
+                        <thead><tr><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>M4B lié</th><th>Actions</th></tr></thead>
+                        <tbody id="hiddenProcessedFoldersBody"></tbody>
+                    </table>
+                </div>
+            </article>
+
+            <article class="card panel-card">
+                <div class="panel-head">
+                    <h3>Archives</h3>
+                    <div class="panel-actions">
+                        <button class="secondary" onclick="validateSelectedArchives()">Valider sélection</button>
+                        <button class="secondary" onclick="extractSelected()">Extraire sélection</button>
+                        <button class="secondary" onclick="loadLibrary()">Rafraîchir</button>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <table>
+                        <thead><tr><th><input id="archiveSelAll" type="checkbox" onchange="toggleAllSelection('archiveSel', this.checked)"></th><th>Archive</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                        <tbody id="archivesBody"></tbody>
+                    </table>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section id="page-processing" class="page">
+        <div class="card"><button onclick="loadJobs()">Rafraîchir statuts</button></div>
+        <div class="card"><h3>En attente</h3><div id="pendingList"></div></div>
+        <div class="card"><h3>En cours</h3><div id="runningList"></div></div>
+        <div class="card"><h3>Terminés</h3><div id="doneList"></div></div>
+        <div class="card"><h3>En attente de suppression / retraitement</h3><div id="reviewList"></div></div>
+        <div id="liveTrackingCard" class="card" style="display:none"><h3>Suivi traitement (temps réel)</h3><div id="liveEvents" class="muted events-scroll">Aucun événement.</div></div>
+        <div id="debugLogsCard" class="card" style="display:none">
+            <h3>Logs debug backend (web)</h3>
+            <div class="row" style="margin-bottom:8px"><button class="secondary" onclick="loadDebugLogs()">Rafraîchir logs</button></div>
+            <pre id="debugLogs" style="white-space:pre-wrap;max-height:260px;overflow:auto;background:var(--bg);border:1px solid var(--border);padding:8px;border-radius:8px" class="muted">Chargement...</pre>
+        </div>
+    </section>
+
+
+
+    <section id="page-submission" class="page">
+        <div class="card">
+            <div class="row">
+                <button onclick="loadSubmissionQueue()">Rafraîchir</button>
+                <button class="secondary" onclick="createPacketFromSelection()">Créer un paquet depuis la sélection</button>
+                <button class="secondary" onclick="window.open('/integrations/audiobookshelf/packets','_blank')">Ouvrir le gestionnaire des paquets</button>
+            </div>
+            <div id="submissionConfigWarning" class="warning-banner hidden">
+                ⚠️ Configuration Audiobookshelf vide : configurez l'accès dans l'onglet Configuration.
+            </div>
+        </div>
+        <div class="card">
+            <h3>Fichiers M4B disponibles (source des paquets)</h3>
+            <table>
+                <thead><tr><th><input id="submissionSelAll" type="checkbox" onchange="toggleAllSelection('submissionSel', this.checked)"></th><th>Fichier</th><th>Taille MB</th><th>Créé le</th><th>Actions</th></tr></thead>
+                <tbody id="submissionBody"></tbody>
+            </table>
+        </div>
+        <div class="card">
+            <h3>Paquets d'upload Audiobookshelf</h3>
+            <table>
+                <thead><tr><th>Nom</th><th>Statut</th><th>Fichiers</th><th>Taille MB</th><th>Progression</th><th>Actions</th></tr></thead>
+                <tbody id="packetsSummaryBody"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="page-config" class="page">
+        <div class="card">
+            <h3>Paramètres d'encodage</h3>
+            <div class="row">
+                <label>Bitrate <select id="cfgBitrate"><option>64k</option><option>96k</option><option selected>128k</option><option>192k</option></select></label>
+                <label>Sample rate <select id="cfgRate"><option value="22050">22050</option><option value="44100" selected>44100</option><option value="48000">48000</option></select></label>
+                <label>Mode <select id="cfgMode"><option value="concat_fast">concat_fast</option><option value="encode_aac">encode_aac</option><option value="final_m4b" selected>final_m4b</option></select></label>
+                <label><input id="cfgGpu" type="checkbox" checked> GPU</label>
+                <label><input id="cfgLoud" type="checkbox" checked> Loudnorm</label>
+                <label><input id="cfgComp" type="checkbox" checked> Compresseur</label>
+                <label><input id="cfgAutoExtract" type="checkbox"> Auto-décompresser les archives</label>
+                <button onclick="saveConfig()">Sauvegarder</button>
+            </div>
+        </div>
+        <div class="card">
+            <h3>Visibilité des blocs dans Traitements</h3>
+            <div class="row">
+                <label><input id="cfgShowLiveTracking" type="checkbox"> Afficher "Suivi traitement (temps réel)"</label>
+                <label><input id="cfgShowDebugLogs" type="checkbox"> Afficher "Logs debug backend (web)"</label>
+            </div>
+            <p class="muted">Ces options sont désactivées par défaut.</p>
+        </div>
+        <div class="card">
+            <h3>Connexion Audiobookshelf (serveur distant)</h3>
+            <div class="row">
+                <label>URL serveur <input id="cfgAbsServerUrl" type="url" placeholder="https://audiobookshelf.example.com"></label>
+                <label>Login <input id="cfgAbsUsername" placeholder="utilisateur"></label>
+                <label>Mot de passe <input id="cfgAbsPassword" type="password" placeholder="mot de passe"></label>
+            </div>
+            <div class="row" style="margin-top:8px">
+                <label>API Key <input id="cfgAbsApiKey" placeholder="clé API Audiobookshelf"></label>
+                <label>Library ID <input id="cfgAbsLibraryId" placeholder="ID bibliothèque"></label>
+                <button id="saveAbsConfigBtn" onclick="saveAudiobookshelfConfig({showNotification:true})">Sauvegarder connexion Audiobookshelf</button>
+                <button class="secondary" id="testAbsConfigBtn" onclick="testAudiobookshelfConnection()">Tester la connexion</button>
+            </div>
+            <p class="muted" id="cfgAbsSaveStatus" style="margin-top:8px">Les champs sont sauvegardés automatiquement à la perte de focus.</p>
+            <p class="muted" id="cfgAbsTestStatus">Test de connexion non lancé.</p>
+        </div>
+        <div class="card">
+            <h3>Option Ollama (dans Configuration)</h3>
+            <div class="row">
+                <label><input id="ollamaEnabled" type="checkbox"> Activer la recherche LLM</label>
+                <label>Modèle agent <input id="ollamaModel" placeholder="qwen2.5:7b"></label>
+                <label>Modèle extraction <input id="ollamaExtractModel" placeholder="nuextract"></label>
+                <button onclick="saveOllamaConfig()">Sauvegarder config Ollama</button>
+            </div>
+        </div>
+        <div class="card">
+            <h3>Pull / suppression des modèles</h3>
+            <div class="row">
+                <input id="ollamaModelToPull" placeholder="llama3.1:8b ou qwen2.5:7b">
+                <button onclick="pullOllamaModel()">Pull modèle</button>
+                <input id="ollamaModelToDelete" placeholder="nom du modèle à supprimer">
+                <button class="danger" onclick="deleteOllamaModel()">Supprimer modèle</button>
+                <button class="secondary" onclick="loadOllamaStatus()">Rafraîchir modèles</button>
+            </div>
+            <div id="ollamaStatus" class="muted" style="margin-top:8px"></div>
+            <div id="ollamaPullProgressWrap" style="display:none;margin-top:8px">
+                <div class="muted" id="ollamaPullProgressLabel">Téléchargement en cours...</div>
+                <div class="progress-track" style="margin-top:6px">
+                    <div id="ollamaPullProgressBar" class="progress-determinate"></div>
+                </div>
+            </div>
+            <ul id="ollamaModelsList"></ul>
+        </div>
+        <div class="card">
+            <h3>Prompt par défaut</h3>
+            <textarea id="ollamaPrompt" style="width:100%;min-height:110px"></textarea>
+        </div>
+        <div class="card">
+            <h3>MCP tools (JSON)</h3>
+            <textarea id="ollamaTools" style="width:100%;min-height:170px"></textarea>
+        </div>
+        <div class="card">
+            <h3>Résultats de recherche métadonnées</h3>
+            <div id="llmResults" class="muted">Aucun résultat pour l'instant.</div>
+        </div>
+    </section>
+
+    <section id="page-plugins" class="page">
+        <div class="card">
+            <h3>Onglet Plugins - Configuration</h3>
+            <p class="muted">Configure les plugins actifs pour les métadonnées, covers et exports.</p>
+            <table>
+                <thead><tr><th>Type</th><th>Plugin</th><th>Actif</th><th>Clé config</th></tr></thead>
+                <tbody>
+                    <tr><td>Metadata</td><td>google_books</td><td><input id="plgMetaGoogle" type="checkbox"></td><td><code>scraping_sources</code></td></tr>
+                    <tr><td>Metadata</td><td>audible</td><td><input id="plgMetaAudible" type="checkbox"></td><td><code>scraping_sources</code></td></tr>
+                    <tr><td>Metadata</td><td>babelio</td><td><input id="plgMetaBabelio" type="checkbox"></td><td><code>scraping_sources</code></td></tr>
+                    <tr><td>Cover</td><td>existing_file</td><td><input id="plgCoverExisting" type="checkbox"></td><td><code>cover_sources</code></td></tr>
+                    <tr><td>Cover</td><td>url_download</td><td><input id="plgCoverUrl" type="checkbox"></td><td><code>cover_sources</code></td></tr>
+                    <tr><td>Export</td><td>audiobookshelf</td><td><input id="plgExportAbs" type="checkbox"></td><td><code>export_plugins</code></td></tr>
+                </tbody>
+            </table>
+            <div class="row" style="margin-top:10px">
+                <button onclick="savePluginConfig()">Sauvegarder plugins</button>
+                <span id="pluginSaveStatus" class="muted">Aucune modification.</span>
+            </div>
+        </div>
+    </section>
+
+
+</main>
+</div>
+</div>
+<div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
+<footer class="footer-fixed">
+    <span>Licence 2026 - NehwonLM</span>
+    <a href="https://github.com" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.66.5 12.03c0 5.1 3.3 9.43 7.88 10.96.58.11.79-.25.79-.56v-2.16c-3.2.7-3.88-1.38-3.88-1.38-.52-1.34-1.28-1.7-1.28-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.78 1.2 1.78 1.2 1.03 1.78 2.7 1.27 3.36.97.1-.75.4-1.27.73-1.56-2.55-.3-5.24-1.29-5.24-5.74 0-1.27.45-2.32 1.2-3.14-.12-.29-.52-1.48.11-3.08 0 0 .98-.32 3.2 1.2a10.9 10.9 0 0 1 5.82 0c2.21-1.52 3.19-1.2 3.19-1.2.63 1.6.23 2.8.11 3.08.74.82 1.2 1.87 1.2 3.14 0 4.46-2.7 5.43-5.27 5.72.41.36.78 1.07.78 2.15v3.2c0 .31.21.68.8.56 4.57-1.53 7.86-5.86 7.86-10.96C23.5 5.66 18.35.5 12 .5Z"/></svg>
+    </a>
+</footer>
+
+<script>
+let libraryCache = { folders: [], archives: [] };
+let renameInProgress = false;
+let manualRenameRow = null;
+let pendingApiCalls = 0;
+let ollamaPullTicker = null;
+let hiddenDuplicateDeleteTargets = new Set();
+let enqueueInFlight = new Set();
+let submissionFilesCache = [];
+let packetsSummaryCache = [];
+
+function isAudiobookshelfConfigMissing(config){
+    if (!config || typeof config !== 'object') return true;
+    return !(
+        (config.audiobookshelf_server_url || '').trim() ||
+        (config.audiobookshelf_username || '').trim() ||
+        (config.audiobookshelf_password || '').trim() ||
+        (config.audiobookshelf_api_key || '').trim()
+    );
+}
+
+function updateSubmissionWarning(config){
+    const el = document.getElementById('submissionConfigWarning');
+    if (!el) return;
+    el.classList.toggle('hidden', !isAudiobookshelfConfigMissing(config));
+}
+
+function setGlobalBusy(isBusy){
+    const dot = document.getElementById('apiActivityDot');
+    if (dot) dot.classList.toggle('active', isBusy);
+}
+
+function startPullProgress(){
+    const wrap = document.getElementById('ollamaPullProgressWrap');
+    const bar = document.getElementById('ollamaPullProgressBar');
+    const label = document.getElementById('ollamaPullProgressLabel');
+    if (!wrap || !bar || !label) return;
+    wrap.style.display = 'block';
+    bar.style.width = '5%';
+    label.textContent = 'Téléchargement du modèle en cours...';
+    clearInterval(ollamaPullTicker);
+    ollamaPullTicker = setInterval(() => {
+        const current = parseInt(bar.style.width || '5', 10) || 5;
+        const next = Math.min(current + Math.floor(Math.random() * 8) + 1, 92);
+        bar.style.width = `${next}%`;
+    }, 500);
+}
+
+function endPullProgress(success=true){
+    const wrap = document.getElementById('ollamaPullProgressWrap');
+    const bar = document.getElementById('ollamaPullProgressBar');
+    const label = document.getElementById('ollamaPullProgressLabel');
+    if (!wrap || !bar || !label) return;
+    clearInterval(ollamaPullTicker);
+    ollamaPullTicker = null;
+    bar.style.width = success ? '100%' : (bar.style.width || '0%');
+    label.textContent = success ? 'Téléchargement terminé.' : 'Échec du téléchargement.';
+    setTimeout(() => { wrap.style.display = 'none'; bar.style.width = '0%'; }, 1200);
+}
+
+function setRenameBusy(isBusy){
+    renameInProgress = isBusy;
+    const batchBtn = document.getElementById('renameSelectedBtn');
+    if (batchBtn) {
+        batchBtn.disabled = isBusy;
+        batchBtn.textContent = isBusy ? 'Renommage...' : 'Renommage batch';
+    }
+    document.querySelectorAll('[data-rename-btn="1"]').forEach(btn => {
+        btn.disabled = isBusy;
+        const defaultLabel = btn.dataset.defaultLabel || 'Renommer';
+        btn.textContent = isBusy ? 'Renommage...' : defaultLabel;
+    });
+}
+
+function fmtMb(v){ return (v/1024/1024).toFixed(1); }
+function fmtDateTime(ts){ if(!ts) return '-'; const d = new Date(ts * 1000); return Number.isNaN(d.getTime()) ? '-' : d.toLocaleString(); }
+function selectedValues(name){ return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value); }
+
+function setKpiValue(id, value){
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(value ?? 0);
+}
+
+function touchKpiRefresh(){
+    const el = document.getElementById('kpiLastRefresh');
+    if (!el) return;
+    el.textContent = new Date().toLocaleString();
+}
+function escapeHtml(value){
+    return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+function toJsString(value){
+    return String(value).replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+}
+
+function bindSelectionState(name, selectAllId){
+    const boxes = [...document.querySelectorAll(`input[name="${name}"]`)];
+    const selectAll = document.getElementById(selectAllId);
+    if (!selectAll) return;
+    if (!boxes.length) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        return;
+    }
+    const checked = boxes.filter(b => b.checked).length;
+    selectAll.checked = checked === boxes.length;
+    selectAll.indeterminate = checked > 0 && checked < boxes.length;
+}
+
+function toggleAllSelection(name, checked){
+    document.querySelectorAll(`input[name="${name}"]`).forEach(box => {
+        if (!box.disabled) box.checked = checked;
+    });
+    const selectAllId = name === 'folderSel' ? 'folderSelAll' : 'archiveSelAll';
+    bindSelectionState(name, selectAllId);
+}
+
+function archiveDuplicateHint(archive){
+    const reasons = archive?.duplicate_reasons || [];
+    if (!reasons.length) return '';
+    return `<div class="muted" style="font-size:12px">⚠️ Doublon possible (${escapeHtml(reasons.join(' | '))})</div>`;
+}
+
+function duplicateDeleteButton(archive){
+    const current = archive?.primary_name || archive?.name || '';
+    const peers = archive?.duplicate_peers || [];
+    if (!current || !peers.length || hiddenDuplicateDeleteTargets.has(current)) return '';
+    const jsName = toJsString(current);
+    return `<button class="danger" onclick="deleteDuplicateArchive('${jsName}')">Supprimer doublon</button>`;
+}
+
+function archiveValidationBadge(archive){
+    const validation = archive?.validation;
+    if (!validation || typeof validation.valid !== 'boolean') {
+        return '<span class="muted">⏺️</span>';
+    }
+    if (validation.valid) {
+        return `<span title="${escapeHtml(validation.message || 'Archive valide')}">🟢</span>`;
+    }
+    return `<span title="${escapeHtml(validation.message || 'Archive invalide')}">🔴</span>`;
+}
+
+
+function formatEtaFromSeconds(seconds){
+    if (!Number.isFinite(seconds) || seconds <= 0) return 'Calcul ETA...';
+    const totalSeconds = Math.round(seconds);
+    if (totalSeconds < 60) return `${totalSeconds}s restantes`;
+    const minutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
+    if (minutes < 60) return `${minutes}m ${remainingSeconds}s restantes`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes}m restantes`;
+}
+
+function computePhaseEta(job){
+    const phaseOrder = ['conversion', 'normalization', 'chapters', 'finalization'];
+    const phaseProgress = (job?.phase_progress && typeof job.phase_progress === 'object') ? job.phase_progress : {};
+    for (const phaseKey of phaseOrder) {
+        const phase = phaseProgress[phaseKey];
+        if (!phase || typeof phase !== 'object') continue;
+        const total = Math.max(0, parseInt(phase.total ?? 0, 10) || 0);
+        const processed = Math.max(0, parseInt(phase.processed ?? 0, 10) || 0);
+        const startedAt = Number(phase.started_at);
+        if (!total || processed <= 0 || processed >= total || !Number.isFinite(startedAt)) continue;
+        const elapsed = Math.max(1, Date.now() / 1000 - startedAt);
+        const speed = processed / elapsed;
+        if (speed <= 0) continue;
+        const remaining = Math.max(0, total - processed);
+        const etaSec = remaining / speed;
+        return formatEtaFromSeconds(etaSec);
+    }
+    if (job?.status === 'pending') return 'En attente de démarrage';
+    return 'Calcul ETA...';
+}
+
+function renderInlineJobProgress(job){
+    if (!job) return '';
+    const pct = Math.max(0, Math.min(100, parseInt(job.progress ?? 0, 10) || 0));
+    const statusLabel = job.status === 'pending' ? 'En file d\'attente' : 'Traitement en cours';
+    const stageRaw = String(job.stage || 'Traitement');
+    const normalizedStage = stageRaw.toLowerCase();
+    const phase = (() => {
+        if (job.status === 'pending' || normalizedStage.includes('préparation')) return 1;
+        if (normalizedStage.includes('métadonnées')) return 2;
+        if (normalizedStage.includes('analyse')) return 3;
+        if (normalizedStage.includes('conversion') || normalizedStage.includes('normalisation') || normalizedStage.includes('chapitres')) return 4;
+        if (normalizedStage.includes('finalisation')) return 5;
+        if (normalizedStage.includes('terminé') || normalizedStage.includes('erreur')) return 6;
+        return 4;
+    })();
+    const stage = escapeHtml(stageRaw);
+    const etaText = escapeHtml(computePhaseEta(job));
+    return `<div class="job-inline"><div class="meta">${statusLabel} · Phase ${phase}/6 · ${pct}% · ETA: ${etaText}</div><div class="muted" style="font-size:12px">${stage}</div><div class="track"><div class="bar" style="width:${pct}%"></div></div></div>`;
+}
+
+function notify(message, type='info', timeoutMs=3600){
+    const wrap = document.getElementById('toastWrap');
+    if (!wrap) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    wrap.appendChild(toast);
+    setTimeout(() => toast.remove(), timeoutMs);
+}
+
+function askConfirmation(message, {confirmText='Valider', cancelText='Annuler', type='warn'}={}){
+    return new Promise(resolve => {
+        const wrap = document.getElementById('toastWrap');
+        if (!wrap) { resolve(false); return; }
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.innerHTML = `<div>${escapeHtml(message)}</div>`;
+        const actions = document.createElement('div');
+        actions.className = 'toast-actions';
+        actions.innerHTML = `<button>${confirmText}</button><button class="secondary">${cancelText}</button>`;
+        toast.appendChild(actions);
+        wrap.appendChild(toast);
+
+        const [okBtn, cancelBtn] = actions.querySelectorAll('button');
+        okBtn.addEventListener('click', () => { toast.remove(); resolve(true); });
+        cancelBtn.addEventListener('click', () => { toast.remove(); resolve(false); });
+        setTimeout(() => {
+            if (toast.isConnected) {
+                toast.remove();
+                resolve(false);
+            }
+        }, 15000);
+    });
+}
+
+function enterManualRename(folder){
+    if (renameInProgress) return;
+    manualRenameRow = folder;
+    loadLibrary();
+}
+
+function cancelManualRename(){
+    manualRenameRow = null;
+    loadLibrary();
+}
+
+async function validateManualRename(folder){
+    if (renameInProgress) return;
+    const input = document.querySelector(`[data-manual-title="1"][data-folder="${CSS.escape(folder)}"]`);
+    const title = (input?.value || '').trim();
+    if (!title) {
+        notify('Saisir un titre manuel avant de valider.', 'warn');
+        return;
+    }
+
+    setRenameBusy(true);
+    try {
+        await api('/api/rename',{method:'POST', body: JSON.stringify({folders:[folder], overrides:{[folder]: title}})});
+        manualRenameRow = null;
+        notify('Renommage manuel effectué.', 'success');
+        await loadLibrary();
+    } finally {
+        setRenameBusy(false);
+    }
+}
+
+async function api(url, options={}) {
+    pendingApiCalls += 1;
+    setGlobalBusy(true);
+    try {
+        const r = await fetch(url, { headers: {'Content-Type':'application/json'}, ...options });
+        const raw = await r.text();
+        let data = null;
+        try { data = raw ? JSON.parse(raw) : null; }
+        catch (_) { data = null; }
+
+        if (!r.ok) {
+            const msg = data?.error || `Erreur API (${r.status})`;
+            throw new Error(msg);
+        }
+        if (!data) throw new Error('Réponse API invalide (JSON attendu)');
+        return data;
+    } finally {
+        pendingApiCalls = Math.max(0, pendingApiCalls - 1);
+        if (!pendingApiCalls) setGlobalBusy(false);
+    }
+}
+
+async function loadLibrary() {
+    const data = await api('/api/library');
+    libraryCache = data;
+    const fb = document.getElementById('foldersBody');
+    const ab = document.getElementById('archivesBody');
+    const hpb = document.getElementById('hiddenProcessedFoldersBody');
+    fb.innerHTML = '';
+    ab.innerHTML = '';
+    hpb.innerHTML = '';
+
+    data.folders.forEach(f => {
+        const jsFolder = toJsString(f.name);
+        const isManualMode = manualRenameRow === f.name;
+        const folderNameEscaped = escapeHtml(f.name);
+        const folderIcon = f.extracted_from_archive ? '📦 ' : '';
+        const job = f.job || null;
+        const hideActionsForJob = !!job;
+        const issues = (f.issues || []).length
+            ? `<div class="muted" style="font-size:12px">⚠️ ${(f.issues || []).join(' | ')}${f.suggest_delete ? ' — suppression suggérée' : ''}</div>`
+            : '';
+        const manualInput = isManualMode && !hideActionsForJob
+            ? `<div style="margin-top:6px"><input data-manual-title="1" data-folder="${folderNameEscaped}" type="text" style="min-width:260px" placeholder="Titre manuel" autofocus></div>`
+            : '';
+        const actionButtons = hideActionsForJob
+            ? renderInlineJobProgress(job)
+            : isManualMode
+                ? `<button data-rename-btn="1" data-default-label="Valider" ${renameInProgress ? 'disabled' : ''} onclick="validateManualRename('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Valider'}</button>
+                   <button class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="cancelManualRename()">Annuler</button>`
+                : `<button data-rename-btn="1" data-default-label="Renommer" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="renameOne('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
+                   <button data-rename-btn="1" data-default-label="Renommage manuel" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="enterManualRename('${jsFolder}')">Renommage manuel</button>
+                   ${f.can_ignore ? `<button class="secondary" onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
+                   ${f.suggest_delete ? `<button class="danger" onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
+                   <button onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>`;
+        fb.innerHTML += `<tr>
+            <td><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''} onchange="bindSelectionState('folderSel', 'folderSelAll')"></td>
+            <td>
+                ${folderIcon}${folderNameEscaped}${issues}
+                ${manualInput}
+            </td>
+            <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
+            <td>${fmtMb(f.size)}</td>
+            <td>${actionButtons}</td>
+        </tr>`;
+    });
+    if (!data.folders.length) fb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier</td></tr>';
+    const archivesPending = (data.archives || []).filter(a => !(a.validation && a.validation.valid === true)).length;
+    setKpiValue('kpiFolders', data.folders.length || 0);
+    setKpiValue('kpiArchivesPending', archivesPending);
+    touchKpiRefresh();
+
+    (data.hidden_processed_folders || []).forEach(f => {
+        const jsFolder = toJsString(f.name);
+        const folderNameEscaped = escapeHtml(f.name);
+        const outputFiles = Array.isArray(f.output_files) ? f.output_files.filter(Boolean) : [];
+        const outputName = outputFiles[0] || '';
+        const jsOutputName = toJsString(outputName);
+        const hasOutput = !!outputName;
+        const outputLabel = hasOutput ? escapeHtml(outputName) : '<span class="muted">Aucun M4B trouvé</span>';
+        hpb.innerHTML += `<tr>
+            <td>${folderNameEscaped}</td>
+            <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
+            <td>${fmtMb(f.size)}</td>
+            <td>${outputLabel}</td>
+            <td>
+                <button class="danger" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer dossier</button>
+                <button class="danger" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedOutput('${jsOutputName}','${jsFolder}')">Supprimer M4B</button>
+                <button class="danger" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedBoth('${jsFolder}','${jsOutputName}')">Supprimer les deux</button>
+            </td>
+        </tr>`;
+    });
+    if (!(data.hidden_processed_folders || []).length) {
+        hpb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier déjà traité caché</td></tr>';
+    }
+
+    data.archives.forEach(a => {
+        const archiveEscaped = escapeHtml(a.primary_name || a.name);
+        const archiveJs = toJsString(a.primary_name || a.name);
+        const isInvalid = a.validation && a.validation.valid === false;
+        const archiveLabel = escapeHtml(a.display_name || a.name);
+        const actionBtn = isInvalid
+            ? `<button class="danger" onclick="deleteArchive('${archiveJs}')">Supprimer</button>`
+            : `<button onclick="extractArchives(['${archiveJs}'])">Extraire</button>`;
+        const dupDeleteBtn = duplicateDeleteButton(a);
+        ab.innerHTML += `<tr><td><input type="checkbox" name="archiveSel" value="${archiveEscaped}" ${isInvalid ? 'disabled' : ''} onchange="bindSelectionState('archiveSel', 'archiveSelAll')"></td><td>${archiveValidationBadge(a)} ${archiveLabel}${archiveDuplicateHint(a)}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> ${actionBtn} ${dupDeleteBtn}</td></tr>`;
+    });
+    if (!data.archives.length) ab.innerHTML = '<tr><td colspan="4" class="muted">Aucune archive</td></tr>';
+    bindSelectionState('folderSel', 'folderSelAll');
+    bindSelectionState('archiveSel', 'archiveSelAll');
+}
+
+async function validateArchives(archives){
+    const data = await api('/api/archive/validate',{method:'POST', body: JSON.stringify({archives})});
+    if (data.results?.length) {
+        const invalid = data.results.filter(r => !r.valid);
+        const valid = data.results.filter(r => r.valid);
+        if (valid.length) notify(`${valid.length} archive(s) valide(s).`, 'success');
+        invalid.forEach(r => notify(`${r.archive}: ${r.message}`, 'warn', 6000));
+    }
+    (data.errors || []).forEach(e => notify(e, 'error', 7000));
+    await loadLibrary();
+}
+
+async function validateSelectedArchives(){
+    const archives = selectedValues('archiveSel');
+    if (!archives.length) return notify('Sélectionner des archives.', 'warn');
+    await validateArchives(archives);
+}
+
+async function extractArchives(archives){
+    const invalidArchives = new Set((libraryCache.archives || [])
+        .filter(a => a?.validation && a.validation.valid === false)
+        .map(a => a.name));
+    const eligible = archives.filter(name => !invalidArchives.has(name));
+    if (!eligible.length) {
+        notify('Aucune archive extractible (certaines sont invalides).', 'warn');
+        return;
+    }
+    if (eligible.length !== archives.length) {
+        notify('Archives invalides ignorées pour extraction.', 'warn');
+    }
+
+    const report = await api('/api/extract',{method:'POST', body: JSON.stringify({archives: eligible})});
+    (report.results || []).forEach(r => notify(`${r.archive} extraite vers ${r.folder} (${r.extracted_files} fichier(s)).`, 'success', 5000));
+    (report.errors || []).forEach(e => notify(e, 'error', 7000));
+    await loadLibrary();
+}
+
+async function extractSelected(){
+    const archives = selectedValues('archiveSel');
+    if (!archives.length) return notify('Sélectionner des archives.', 'warn');
+    await extractArchives(archives);
+}
+
+async function deleteArchive(archive, {suppressDuplicateButtons=false} = {}){
+    const confirmed = await askConfirmation(`Supprimer l'archive ${archive} ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
+
+    if (suppressDuplicateButtons) {
+        const selected = (libraryCache.archives || []).find(a => (a.primary_name || a.name) === archive);
+        const peers = selected?.duplicate_peers || [];
+        hiddenDuplicateDeleteTargets.add(archive);
+        peers.forEach(name => hiddenDuplicateDeleteTargets.add(name));
+    }
+
+    await api('/api/archive/delete',{method:'POST', body: JSON.stringify({archive})});
+    notify(`Archive ${archive} supprimée.`, 'success');
+    await loadLibrary();
+}
+
+async function deleteDuplicateArchive(archive){
+    await deleteArchive(archive, {suppressDuplicateButtons: true});
+}
+
+
+async function renameOne(folder){
+    if (renameInProgress) return;
+    setRenameBusy(true);
+    try {
+        await api('/api/rename',{method:'POST', body: JSON.stringify({folders:[folder]})});
+        notify('Renommage effectué.', 'success');
+        await loadLibrary();
+    } finally {
+        setRenameBusy(false);
+    }
+}
+
+async function renameSelected(){
+    if (renameInProgress) return;
+    const folders = selectedValues('folderSel');
+    if (!folders.length) return notify('Sélectionner des dossiers.', 'warn');
+    setRenameBusy(true);
+    try {
+        await api('/api/rename',{method:'POST', body: JSON.stringify({folders})});
+        notify('Renommage batch terminé.', 'success');
+        await loadLibrary();
+    } finally {
+        setRenameBusy(false);
+    }
+}
+
+async function ignoreOne(folder){
+    await api('/api/ignore',{method:'POST', body: JSON.stringify({folder})});
+    await loadLibrary();
+}
+
+async function deleteSuspectFolder(folder){
+    const confirmed = await askConfirmation(`Supprimer définitivement le dossier suspect "${folder}" ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
+    await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder})});
+    notify(`Dossier "${folder}" supprimé.`, 'success');
+    await loadLibrary();
+}
+
+async function deleteProcessedFolder(folder){
+    const confirmed = await askConfirmation(`Supprimer définitivement le dossier déjà traité "${folder}" ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
+    await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder, allow_hidden_processed: true})});
+    notify(`Dossier traité "${folder}" supprimé.`, 'success');
+    await loadLibrary();
+}
+
+async function deleteProcessedOutput(outputName, folder){
+    if (!outputName) return notify('Aucun fichier M4B associé.', 'warn');
+    const confirmed = await askConfirmation(`Supprimer le fichier M4B "${outputName}" ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
+    await api('/api/output/delete',{method:'POST', body: JSON.stringify({filename: outputName})});
+    notify(`M4B "${outputName}" supprimé${folder ? ` (source: ${folder})` : ''}.`, 'success');
+    await loadLibrary();
+}
+
+async function deleteProcessedBoth(folder, outputName){
+    const confirmed = await askConfirmation(`Supprimer le dossier "${folder}" et le M4B "${outputName}" ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
+    await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder, allow_hidden_processed: true})});
+    await api('/api/output/delete',{method:'POST', body: JSON.stringify({filename: outputName})});
+    notify(`Dossier "${folder}" et M4B "${outputName}" supprimés.`, 'success');
+    await loadLibrary();
+}
+
+async function enqueueFolders(folders){
+    const uniqueFolders = [...new Set((folders || []).filter(Boolean))].filter((folder) => !enqueueInFlight.has(folder));
+    if (!uniqueFolders.length) return notify("Ces dossiers sont déjà en file d'attente.", 'warn');
+
+    uniqueFolders.forEach((folder) => enqueueInFlight.add(folder));
+    try {
+        const result = await api('/api/jobs/enqueue',{method:'POST', body: JSON.stringify({folders: uniqueFolders})});
+        const skipped = result?.skipped || [];
+        if (skipped.length) notify(`${skipped.length} dossier(s) ignoré(s): déjà en attente/en cours.`, 'warn');
+        await refreshDashboardData({forceDoneRefresh: true});
+        await loadLibrary();
+    } finally {
+        uniqueFolders.forEach((folder) => enqueueInFlight.delete(folder));
+    }
+}
+async function enqueueSelected(){
+    const folders = selectedValues('folderSel');
+    if (!folders.length) return notify('Sélectionner des dossiers.', 'warn');
+    await enqueueFolders(folders);
+}
+
+function renderJobs(containerId, jobs, withActions=false){
+    const c = document.getElementById(containerId);
+    if (!jobs.length) { c.innerHTML = '<p class="muted">Vide</p>'; return; }
+    c.innerHTML = jobs.map(j => {
+        const pct = Math.max(0, Math.min(100, parseInt(j.progress ?? 0, 10) || 0));
+        const phaseOrder = ['conversion', 'normalization', 'chapters', 'finalization'];
+        const phaseProgress = (j.phase_progress && typeof j.phase_progress === 'object') ? j.phase_progress : {};
+        const phaseRows = phaseOrder.map((key) => {
+            const item = phaseProgress[key];
+            if (!item || typeof item !== 'object') return '';
+            const total = Math.max(0, parseInt(item.total ?? 0, 10) || 0);
+            const processed = Math.max(0, Math.min(total || 0, parseInt(item.processed ?? 0, 10) || 0));
+            const phasePct = total ? Math.round((processed / total) * 100) : 0;
+            const showPhaseBar = !(withActions && phasePct >= 100);
+            return `<div class="phase-item">
+                <div class="phase-meta"><span>${escapeHtml(item.label || key)} (${processed}/${total})</span><span>${phasePct}%</span></div>
+                ${showPhaseBar ? `<div class="phase-track"><div class="phase-bar" style="width:${phasePct}%"></div></div>` : ''}
+            </div>`;
+        }).filter(Boolean);
+        const completedPhases = phaseOrder.filter((key) => {
+            const item = phaseProgress[key];
+            const total = Math.max(0, parseInt(item?.total ?? 0, 10) || 0);
+            const processed = Math.max(0, parseInt(item?.processed ?? 0, 10) || 0);
+            return total > 0 && processed >= total;
+        }).length;
+        const totalPhases = phaseOrder.length;
+        const overallPhasePct = Math.round((completedPhases / totalPhases) * 100);
+        const showOverallBar = !(withActions && pct >= 100);
+        const showPhaseSummaryBar = !(withActions && overallPhasePct >= 100);
+        const phasesSummary = phaseRows.length
+            ? `<div class="muted" style="margin-top:8px">Phases terminées: ${completedPhases}/${totalPhases} (${overallPhasePct}%)</div>
+               ${showPhaseSummaryBar ? `<div class="progress-track" style="margin-top:6px;max-width:420px;"><div class="progress-determinate" style="width:${overallPhasePct}%"></div></div>` : ''}
+               <div class="phase-list">${phaseRows.join('')}</div>`
+            : '';
+        const canReprocess = withActions && String(j.status || '').toLowerCase() === 'failed' && !!j.folder;
+        return `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0;align-items:flex-start;">
+        <div style="min-width:320px;max-width:100%;">
+          <strong>${escapeHtml(j.folder || '-')}</strong> <span class="pill">${escapeHtml(j.stage || '-')}</span> ${j.error ? `<span class="muted">(${escapeHtml(j.error)})</span>`:''}
+          <div class="muted">Progression globale: ${pct}%</div>
+          ${showOverallBar ? `<div class="progress-track" style="margin-top:6px;max-width:420px;"><div class="progress-determinate" style="width:${pct}%"></div></div>` : ''}
+          ${phasesSummary}
+          ${j.output_file ? `<audio controls src="/api/stream/${encodeURIComponent(j.output_file)}" style="margin-top:8px"></audio>` : ''}
+        </div>
+        <div class="row">
+          ${canReprocess ? `<button class="secondary" onclick="enqueueFolders(['${toJsString(j.folder)}'])">Retraiter</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function selectedSubmissionFiles(){
+    return [...document.querySelectorAll('input[name="submissionSel"]:checked')].map((el) => el.value).filter(Boolean);
+}
+
+async function createPacketFromFiles(outputFiles){
+    const files = (outputFiles || []).filter(Boolean);
+    if (!files.length) {
+        notify('Sélectionnez au moins un fichier M4B.', 'warn');
+        return;
+    }
+    await api('/api/integrations/audiobookshelf/packets', {
+        method: 'POST',
+        body: JSON.stringify({ output_files: files }),
+    });
+    notify('Paquet créé avec succès.', 'success');
+    await loadPacketsSummary();
+}
+
+async function createPacketFromSelection(){
+    await createPacketFromFiles(selectedSubmissionFiles());
+}
+
+function renderSubmissionQueue(files){
+    const body = document.getElementById('submissionBody');
+    if (!body) return;
+    if (!files?.length) {
+        body.innerHTML = '<tr><td colspan="5" class="muted">Aucun fichier M4B en attente.</td></tr>';
+        return;
+    }
+    body.innerHTML = files.map(file => `
+        <tr>
+            <td><input type="checkbox" name="submissionSel" value="${escapeHtml(file.name || '')}"></td>
+            <td>${escapeHtml(file.name || '-')}</td>
+            <td>${fmtMb(file.size || 0)}</td>
+            <td>${fmtDateTime(file.created)}</td>
+            <td class="row">
+                <button class="secondary" onclick="createPacketFromFiles(['${toJsString(file.name || '')}'])">Créer paquet</button>
+                <button class="secondary" onclick="window.open('/api/download/${encodeURIComponent(file.name)}','_blank')">Télécharger</button>
+                <button class="secondary" onclick="window.open('/api/stream/${encodeURIComponent(file.name)}','_blank')">Écouter</button>
+            </td>
+        </tr>`).join('');
+}
+
+function renderPacketsSummary(packets){
+    const body = document.getElementById('packetsSummaryBody');
+    if (!body) return;
+    if (!packets?.length) {
+        body.innerHTML = '<tr><td colspan="6" class="muted">Aucun paquet créé pour le moment.</td></tr>';
+        return;
+    }
+    body.innerHTML = packets.map(packet => {
+        const status = escapeHtml(packet.status || '-');
+        const fileCount = Number(packet.file_count || 0);
+        const sizeMb = Number(packet.size_mb || 0);
+        const progress = Math.max(0, Math.min(100, Number(packet.progress || 0)));
+        return `<tr>
+            <td>${escapeHtml(packet.name || packet.id || '-')}</td>
+            <td><span class="pill">${status}</span></td>
+            <td>${fileCount}</td>
+            <td>${sizeMb.toFixed(2)}</td>
+            <td>${progress}%</td>
+            <td class="row">
+                <button class="secondary" onclick="window.open('/integrations/audiobookshelf/packets','_blank')">Gérer</button>
+                <button class="secondary" ${status === 'publie' ? 'disabled' : ''} onclick="submitPacket('${toJsString(packet.id || '')}')">Publier</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function submitPacket(packetId){
+    if (!packetId) return;
+    await api(`/api/integrations/audiobookshelf/packets/${encodeURIComponent(packetId)}/submit`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+    });
+    notify('Paquet marqué comme publié.', 'success');
+    await loadPacketsSummary();
+}
+
+async function loadPacketsSummary(){
+    try {
+        const data = await api('/api/integrations/audiobookshelf/packets');
+        packetsSummaryCache = data?.packets || [];
+        renderPacketsSummary(packetsSummaryCache);
+    } catch (err) {
+        const body = document.getElementById('packetsSummaryBody');
+        if (body) body.innerHTML = `<tr><td colspan="6" class="muted">Impossible de charger les paquets: ${escapeHtml(err.message || String(err))}</td></tr>`;
+    }
+}
+
+async function loadSubmissionQueue(){
+    try {
+        const files = await api('/api/outputs');
+        submissionFilesCache = files || [];
+        renderSubmissionQueue(submissionFilesCache);
+        await loadPacketsSummary();
+    } catch (err) {
+        const body = document.getElementById('submissionBody');
+        if (body) body.innerHTML = `<tr><td colspan="5" class="muted">Impossible de charger la file de soumission: ${escapeHtml(err.message || String(err))}</td></tr>`;
+    }
+}
+
+function applyProcessingPanelsVisibility(config){
+    const liveCard = document.getElementById('liveTrackingCard');
+    const logsCard = document.getElementById('debugLogsCard');
+    const showLive = !!config?.show_live_processing_tracking;
+    const showLogs = !!config?.show_backend_debug_logs;
+    if (liveCard) liveCard.style.display = showLive ? '' : 'none';
+    if (logsCard) logsCard.style.display = showLogs ? '' : 'none';
+    if (showLogs) loadDebugLogs();
+}
+
+function renderEvents(items){
+    const c = document.getElementById('liveEvents');
+    if (!c) return;
+    if (!items?.length) { c.innerHTML = '<p class="muted">Aucun événement.</p>'; return; }
+    c.innerHTML = items.slice().reverse().map(e => {
+        const when = new Date((e.timestamp || 0) * 1000).toLocaleTimeString();
+        const lvl = e.level === 'error' ? '❌' : (e.level === 'warning' ? '⚠️' : 'ℹ️');
+        const details = e.details && typeof e.details === 'object' ? e.details : {};
+        const detailsText = Object.keys(details).length
+            ? `<div class="muted" style="font-size:12px;margin-top:2px">${Object.entries(details).map(([k,v]) => `${escapeHtml(k)}: ${escapeHtml(v)}`).join(' · ')}</div>`
+            : '';
+        return `<div style="border-bottom:1px solid var(--border);padding:6px 0;">${lvl} <strong>${when}</strong> [${escapeHtml(e.stage || '-')}]
+            <strong>${escapeHtml(e.folder || '-')}</strong><br><span class="muted">${escapeHtml(e.message || '')}</span>${detailsText}</div>`;
+    }).join('');
+}
+
+async function loadDebugLogs(){
+    const pre = document.getElementById('debugLogs');
+    if (!pre) return;
+    try {
+        const data = await api('/api/logs?lines=120');
+        pre.textContent = (data.lines || []).join('\n') || 'Aucun log debug pour le moment.';
+        pre.scrollTop = pre.scrollHeight;
+    } catch (err) {
+        pre.textContent = `Impossible de charger les logs: ${err.message || err}`;
+    }
+}
+
+function hasActiveDoneAudioPlayback(){
+    return [...document.querySelectorAll('#doneList audio')].some((audio) => !audio.paused && !audio.ended);
+}
+
+async function loadJobs({forceDoneRefresh=false} = {}){
+    const data = await api('/api/jobs');
+    renderJobs('pendingList', data.pending);
+    renderJobs('runningList', data.running);
+    if (forceDoneRefresh || !hasActiveDoneAudioPlayback()) {
+        renderJobs('doneList', data.done, true);
+    }
+    renderEvents(data.events || []);
+
+    const review = document.getElementById('reviewList');
+    setKpiValue('kpiPending', (data.pending || []).length);
+    setKpiValue('kpiRunning', (data.running || []).length);
+    setKpiValue('kpiReview', (data.review || []).length);
+    touchKpiRefresh();
+
+    if (!data.review.length) review.innerHTML = '<p class="muted">Aucune entrée.</p>';
+    else review.innerHTML = data.review.map(r => `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0;">
+        <div><strong>${r.folder}</strong> - action: ${r.action}</div>
+        <div class="row">
+            ${r.action === 'reprocess' ? `<button onclick="enqueueFolders(['${r.folder.replaceAll("'", "\\'")}'])">Retraiter</button>`:''}
+            <button class="danger" onclick="clearReview('${r.folder.replaceAll("'", "\\'")}')">Retirer de la liste</button>
+        </div>
+    </div>`).join('');
+}
+
+async function markReview(jobId, action){
+    await api('/api/jobs/review',{method:'POST', body: JSON.stringify({job_id: jobId, action})});
+    notify(`Action ajoutée à la file d'attente (${action === 'delete' ? 'suppression' : 'retraitement'}).`, 'success');
+    await refreshDashboardData({forceDoneRefresh: true});
+}
+
+async function clearReview(folder){
+    await api('/api/review/clear',{method:'POST', body: JSON.stringify({folder})});
+    await refreshDashboardData();
+}
+
+async function refreshDashboardData({forceDoneRefresh=false} = {}){
+    await Promise.all([
+        loadJobs({forceDoneRefresh}),
+        loadSubmissionQueue(),
+    ]);
+}
+
+function shouldRefreshLibrary(){
+    if (renameInProgress || manualRenameRow) return false;
+    const active = document.activeElement;
+    if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) return false;
+    return true;
+}
+
+
+
+function hasLibrarySelection(){
+    return selectedValues('folderSel').length > 0 || selectedValues('archiveSel').length > 0;
+}
+
+function canPatchLibrarySafely(){
+    return shouldRefreshLibrary() && isLibraryTabActive() && !hasLibrarySelection();
+}
+
+async function monitorAndPatchDom(){
+    if (monitorState.inFlight) return;
+    monitorState.inFlight = true;
+    try {
+        const qs = new URLSearchParams({
+            source_sig: monitorState.sourceSig,
+            output_sig: monitorState.outputSig,
+            jobs_sig: monitorState.jobsSig,
+        });
+        const payload = await api(`/api/monitor?${qs.toString()}`);
+        const signs = payload?.signatures || {};
+        const changes = payload?.changes || {};
+
+        const firstSync = !monitorState.sourceSig && !monitorState.outputSig && !monitorState.jobsSig;
+        monitorState.sourceSig = signs.source_sig || monitorState.sourceSig;
+        monitorState.outputSig = signs.output_sig || monitorState.outputSig;
+        monitorState.jobsSig = signs.jobs_sig || monitorState.jobsSig;
+
+        if (firstSync) return;
+
+        if (changes.jobs) {
+            await loadJobs({forceDoneRefresh: false});
+        }
+        if (changes.outputs) {
+            await loadSubmissionQueue();
+        }
+        if (changes.library) {
+            monitorState.pendingLibraryRefresh = true;
+        }
+        if (monitorState.pendingLibraryRefresh && canPatchLibrarySafely()) {
+            await loadLibrary();
+            monitorState.pendingLibraryRefresh = false;
+        }
+    } catch (err) {
+        // On garde l'UI interactive; les actions utilisateur déclenchent déjà les updates AJAX directes.
+    } finally {
+        monitorState.inFlight = false;
+    }
+}
+
+const monitorState = {
+    sourceSig: '',
+    outputSig: '',
+    jobsSig: '',
+    pendingLibraryRefresh: false,
+    inFlight: false,
+};
+
+function isLibraryTabActive(){
+    const activeTab = document.querySelector('.tab.active');
+    return activeTab?.dataset?.page === 'library';
+}
+
+function hasLibrarySelection(){
+    return selectedValues('folderSel').length > 0 || selectedValues('archiveSel').length > 0;
+}
+
+function canPatchLibrarySafely(){
+    return shouldRefreshLibrary() && isLibraryTabActive() && !hasLibrarySelection();
+}
+
+async function monitorAndPatchDom(){
+    if (monitorState.inFlight) return;
+    monitorState.inFlight = true;
+    try {
+        const qs = new URLSearchParams({
+            source_sig: monitorState.sourceSig,
+            output_sig: monitorState.outputSig,
+            jobs_sig: monitorState.jobsSig,
+        });
+        const payload = await api(`/api/monitor?${qs.toString()}`);
+        const signs = payload?.signatures || {};
+        const changes = payload?.changes || {};
+
+        const firstSync = !monitorState.sourceSig && !monitorState.outputSig && !monitorState.jobsSig;
+        monitorState.sourceSig = signs.source_sig || monitorState.sourceSig;
+        monitorState.outputSig = signs.output_sig || monitorState.outputSig;
+        monitorState.jobsSig = signs.jobs_sig || monitorState.jobsSig;
+
+        if (firstSync) return;
+
+        if (changes.jobs) {
+            await loadJobs({forceDoneRefresh: false});
+        }
+        if (changes.outputs) {
+            await loadSubmissionQueue();
+        }
+        if (changes.library) {
+            monitorState.pendingLibraryRefresh = true;
+        }
+        if (monitorState.pendingLibraryRefresh && canPatchLibrarySafely()) {
+            await loadLibrary();
+            monitorState.pendingLibraryRefresh = false;
+        }
+    } catch (err) {
+        // On garde l'UI interactive; les actions utilisateur déclenchent déjà les updates AJAX directes.
+    } finally {
+        monitorState.inFlight = false;
+    }
+}
+
+function renderLlmResults(items){
+    const c = document.getElementById('llmResults');
+    if (!items?.length) { c.innerHTML = '<span class="muted">Aucun résultat.</span>'; return; }
+    c.innerHTML = items.map(r => `
+      <div style="border-bottom:1px solid var(--border);padding:8px 0;">
+        <strong>${r.folder || 'Dossier inconnu'}</strong><br>
+        ${r.error ? `<span class="muted">❌ ${r.error}</span>` : `
+            <span>Titre: <strong>${r.title || '-'}</strong></span> ·
+            <span>Auteur: <strong>${r.author || '-'}</strong></span> ·
+            <span>Confiance: ${r.confidence || '-'}</span>
+            <div class="muted">Source: ${r.source_url || 'n/a'} | Query: ${r.search_query || 'n/a'}</div>
+            <div class="muted">Notes: ${r.notes || '-'}</div>
+        `}
+      </div>`).join('');
+}
+
+async function searchFoldersWithLlm(folders){
+    if (!folders.length) return notify('Sélectionner des dossiers.', 'warn');
+    try {
+        const data = await api('/api/ollama/search',{method:'POST', body: JSON.stringify({folders})});
+        renderLlmResults(data.results || []);
+    } catch (err) {
+        renderLlmResults([{folder: folders.join(', '), error: err.message || 'Erreur LLM'}]);
+        notify(err.message || 'Erreur pendant la recherche LLM', 'error');
+    }
+}
+
+async function searchSelectedWithLlm(){
+    const folders = selectedValues('folderSel');
+    await searchFoldersWithLlm(folders);
+}
+
+async function searchOneWithLlm(folder){
+    await searchFoldersWithLlm([folder]);
+}
+
+async function loadOllamaStatus(){
+    const data = await api('/api/ollama/status');
+    const list = document.getElementById('ollamaModelsList');
+    const status = document.getElementById('ollamaStatus');
+    status.textContent = `Ollama ${data.enabled ? 'activé' : 'désactivé'} · endpoint: ${data.base_url || '-'} · modèle agent: ${data.selected_model || '-'} · extraction: ${data.extract_model || '-'}`;
+    list.innerHTML = (data.models || []).length
+      ? data.models.map(m => `<li>${m.name}</li>`).join('')
+      : '<li class="muted">Aucun modèle détecté (ou Ollama indisponible).</li>';
+}
+
+async function pullOllamaModel(){
+    const model = document.getElementById('ollamaModelToPull').value.trim();
+    if (!model) return notify('Nom du modèle requis.', 'warn');
+    startPullProgress();
+    try {
+        await api('/api/ollama/pull',{method:'POST', body: JSON.stringify({model})});
+        endPullProgress(true);
+        await loadOllamaStatus();
+        notify(`Modèle ${model} téléchargé.`, 'success');
+    } catch (err) {
+        endPullProgress(false);
+        notify(err.message || `Impossible de télécharger ${model}`, 'error');
+    }
+}
+
+async function deleteOllamaModel(){
+    const model = document.getElementById('ollamaModelToDelete').value.trim();
+    if (!model) return notify('Nom du modèle requis.', 'warn');
+    const confirmed = await askConfirmation(`Supprimer le modèle ${model} ?`, {confirmText: 'Supprimer'});
+    if (!confirmed) return;
+    try {
+        await api('/api/ollama/delete',{method:'POST', body: JSON.stringify({model})});
+        await loadOllamaStatus();
+        notify(`Modèle ${model} supprimé.`, 'success');
+    } catch (err) {
+        notify(err.message || `Impossible de supprimer ${model}`, 'error');
+    }
+}
+
+async function loadConfig(){
+    const c = await api('/api/config');
+    cfgBitrate.value = c.bitrate; cfgRate.value = c.sample_rate; cfgMode.value = c.processing_mode;
+    cfgGpu.checked = c.enable_gpu; cfgLoud.checked = c.enable_loudnorm; cfgComp.checked = c.enable_compressor;
+    cfgAutoExtract.checked = c.auto_extract_archives;
+    cfgShowLiveTracking.checked = !!c.show_live_processing_tracking;
+    cfgShowDebugLogs.checked = !!c.show_backend_debug_logs;
+    cfgAbsServerUrl.value = c.audiobookshelf_server_url || "";
+    cfgAbsUsername.value = c.audiobookshelf_username || "";
+    cfgAbsPassword.value = c.audiobookshelf_password || "";
+    cfgAbsApiKey.value = c.audiobookshelf_api_key || "";
+    cfgAbsLibraryId.value = c.audiobookshelf_library_id || "";
+    absSaveSignature = computeAudiobookshelfSignature(getAudiobookshelfConfigPayload());
+    setAudiobookshelfSaveStatus('Les champs sont sauvegardés automatiquement à la perte de focus.');
+    setAudiobookshelfTestStatus('Test de connexion non lancé.');
+    applyProcessingPanelsVisibility(c);
+    ollamaEnabled.checked = c.ollama_enabled;
+    ollamaModel.value = c.ollama_model || "";
+    ollamaExtractModel.value = c.ollama_extract_model || "";
+    ollamaPrompt.value = c.ollama_default_prompt || "";
+    ollamaTools.value = c.ollama_mcp_tools || "[]";
+    loadPluginConfigState(c);
+    updateSubmissionWarning(c);
+}
+
+async function saveOllamaConfig(){
+    await api('/api/config',{method:'POST', body: JSON.stringify({
+        ollama_enabled: ollamaEnabled.checked,
+        ollama_model: ollamaModel.value.trim(),
+        ollama_extract_model: ollamaExtractModel.value.trim(),
+        ollama_default_prompt: ollamaPrompt.value,
+        ollama_mcp_tools: ollamaTools.value
+    })});
+    await loadOllamaStatus();
+    notify('Configuration Ollama sauvegardée.', 'success');
+}
+
+async function saveConfig(){
+    const configPayload = {
+        bitrate: cfgBitrate.value,
+        sample_rate: parseInt(cfgRate.value,10),
+        processing_mode: cfgMode.value,
+        enable_gpu: cfgGpu.checked,
+        enable_loudnorm: cfgLoud.checked,
+        enable_compressor: cfgComp.checked,
+        auto_extract_archives: cfgAutoExtract.checked,
+        show_live_processing_tracking: cfgShowLiveTracking.checked,
+        show_backend_debug_logs: cfgShowDebugLogs.checked,
+        audiobookshelf_server_url: cfgAbsServerUrl.value.trim(),
+        audiobookshelf_username: cfgAbsUsername.value.trim(),
+        audiobookshelf_password: cfgAbsPassword.value,
+        audiobookshelf_api_key: cfgAbsApiKey.value.trim(),
+        audiobookshelf_library_id: cfgAbsLibraryId.value.trim()
+    };
+    await api('/api/config',{method:'POST', body: JSON.stringify(configPayload)});
+    absSaveSignature = computeAudiobookshelfSignature(getAudiobookshelfConfigPayload());
+    setAudiobookshelfSaveStatus('Connexion Audiobookshelf sauvegardée.');
+    applyProcessingPanelsVisibility({
+        show_live_processing_tracking: cfgShowLiveTracking.checked,
+        show_backend_debug_logs: cfgShowDebugLogs.checked
+    });
+    updateSubmissionWarning(configPayload);
+    notify('Configuration sauvegardée.', 'success');
+}
+
+let absSaveInFlight = false;
+let absSaveSignature = '';
+
+function getAudiobookshelfConfigPayload(){
+    return {
+        audiobookshelf_server_url: cfgAbsServerUrl.value.trim(),
+        audiobookshelf_username: cfgAbsUsername.value.trim(),
+        audiobookshelf_password: cfgAbsPassword.value,
+        audiobookshelf_api_key: cfgAbsApiKey.value.trim(),
+        audiobookshelf_library_id: cfgAbsLibraryId.value.trim(),
+    };
+}
+
+function setAudiobookshelfSaveStatus(message, tone='muted'){
+    const statusEl = document.getElementById('cfgAbsSaveStatus');
+    if (!statusEl) return;
+    statusEl.className = tone === 'error' ? 'muted danger' : 'muted';
+    statusEl.textContent = message;
+}
+
+function computeAudiobookshelfSignature(payload){
+    return JSON.stringify(payload);
+}
+
+function setAudiobookshelfTestStatus(message, tone='muted'){
+    const statusEl = document.getElementById('cfgAbsTestStatus');
+    if (!statusEl) return;
+    statusEl.className = tone === 'error' ? 'muted danger' : 'muted';
+    statusEl.textContent = message;
+}
+
+async function testAudiobookshelfConnection(){
+    const payload = getAudiobookshelfConfigPayload();
+    setAudiobookshelfTestStatus('Test de connexion en cours...');
+    try {
+        const result = await api('/api/audiobookshelf/test-connection',{
+            method:'POST',
+            body: JSON.stringify(payload),
+        });
+        const methodLabel = result.auth_method === 'api_key' ? 'API key' : 'login/mot de passe';
+        const userLabel = result.username ? ` · utilisateur: ${result.username}` : '';
+        setAudiobookshelfTestStatus(`Connexion réussie (${methodLabel})${userLabel}.`);
+        notify('Connexion Audiobookshelf valide.', 'success');
+    } catch (err) {
+        setAudiobookshelfTestStatus(`Échec test: ${err.message || err}`, 'error');
+        notify(err.message || 'Connexion Audiobookshelf invalide.', 'error');
+    }
+}
+
+async function saveAudiobookshelfConfig({showNotification=false, force=false} = {}){
+    if (absSaveInFlight) return;
+    const payload = getAudiobookshelfConfigPayload();
+    const nextSignature = computeAudiobookshelfSignature(payload);
+    if (!force && nextSignature === absSaveSignature) return;
+
+    absSaveInFlight = true;
+    setAudiobookshelfSaveStatus('Sauvegarde en cours...');
+    try {
+        await api('/api/config',{method:'POST', body: JSON.stringify(payload)});
+        absSaveSignature = nextSignature;
+        updateSubmissionWarning(payload);
+        setAudiobookshelfSaveStatus('Connexion Audiobookshelf sauvegardée.');
+        if (showNotification) notify('Connexion Audiobookshelf sauvegardée.', 'success');
+    } catch (err) {
+        setAudiobookshelfSaveStatus(`Échec sauvegarde: ${err.message || err}`, 'error');
+        if (showNotification) notify(err.message || 'Impossible de sauvegarder la connexion Audiobookshelf.', 'error');
+    } finally {
+        absSaveInFlight = false;
+    }
+}
+
+function setupAudiobookshelfAutosave(){
+    const absFields = [cfgAbsServerUrl, cfgAbsUsername, cfgAbsPassword, cfgAbsApiKey, cfgAbsLibraryId].filter(Boolean);
+    absFields.forEach((field) => {
+        field.addEventListener('blur', () => saveAudiobookshelfConfig());
+        field.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                saveAudiobookshelfConfig({showNotification:true});
+            }
+        });
+    });
+}
+
+function loadPluginConfigState(config){
+    const scraping = new Set(config.scraping_sources || []);
+    const covers = new Set(config.cover_sources || []);
+    const exports = new Set(config.export_plugins || []);
+
+    document.getElementById('plgMetaGoogle').checked = scraping.has('google_books');
+    document.getElementById('plgMetaAudible').checked = scraping.has('audible');
+    document.getElementById('plgMetaBabelio').checked = scraping.has('babelio');
+    document.getElementById('plgCoverExisting').checked = covers.has('existing_file');
+    document.getElementById('plgCoverUrl').checked = covers.has('url_download');
+    document.getElementById('plgExportAbs').checked = exports.has('audiobookshelf');
+}
+
+function getPluginConfigPayload(){
+    const scraping_sources = [];
+    const cover_sources = [];
+    const export_plugins = [];
+
+    if (document.getElementById('plgMetaGoogle').checked) scraping_sources.push('google_books');
+    if (document.getElementById('plgMetaAudible').checked) scraping_sources.push('audible');
+    if (document.getElementById('plgMetaBabelio').checked) scraping_sources.push('babelio');
+    if (document.getElementById('plgCoverExisting').checked) cover_sources.push('existing_file');
+    if (document.getElementById('plgCoverUrl').checked) cover_sources.push('url_download');
+    if (document.getElementById('plgExportAbs').checked) export_plugins.push('audiobookshelf');
+
+    return { scraping_sources, cover_sources, export_plugins };
+}
+
+async function savePluginConfig(){
+    const payload = getPluginConfigPayload();
+    await api('/api/config', { method:'POST', body: JSON.stringify(payload) });
+    const status = document.getElementById('pluginSaveStatus');
+    if (status) status.textContent = 'Configuration plugins sauvegardée.';
+    notify('Configuration plugins sauvegardée.', 'success');
+}
+
+function setupTabs(){
+    const setPage = (page, updateHash = true) => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.page === page));
+        document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === `page-${page}`));
+        if (updateHash && location.hash !== `#${page}`) {
+            history.replaceState(null, '', `#${page}`);
+        }
+        if (page === 'library' && monitorState.pendingLibraryRefresh && canPatchLibrarySafely()) {
+            loadLibrary().then(() => { monitorState.pendingLibraryRefresh = false; });
+        }
+    };
+
+    document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page)));
+
+    const hashPage = (location.hash || '').replace('#', '');
+    const defaultPage = document.querySelector(`.tab[data-page="${hashPage}"]`) ? hashPage : 'library';
+    setPage(defaultPage, false);
+
+    window.addEventListener('hashchange', () => {
+        const next = (location.hash || '').replace('#', '');
+        if (document.querySelector(`.tab[data-page="${next}"]`)) {
+            setPage(next, false);
+        }
+    });
+}
+
+function setupTheme(){
+    const val = localStorage.getItem('theme') || 'light';
+    if (val === 'dark') { document.body.classList.add('dark'); themeSwitch.checked = true; }
+    themeSwitch.addEventListener('change', () => {
+        document.body.classList.toggle('dark', themeSwitch.checked);
+        localStorage.setItem('theme', themeSwitch.checked ? 'dark' : 'light');
+    });
+}
+
+function setupUiSwitchLinks(){
+    const v1 = document.getElementById('uiSwitchV1');
+    const v2 = document.getElementById('uiSwitchV2');
+    if (!v1 || !v2) return;
+
+    const refreshLinks = () => {
+        const hash = window.location.hash || '';
+        v1.href = `/?ui=v1${hash}`;
+        v2.href = `/?ui=v2${hash}`;
+    };
+
+    refreshLinks();
+    window.addEventListener('hashchange', refreshLinks);
+}
+
+setupTabs();
+setupTheme();
+setupUiSwitchLinks();
+setupAudiobookshelfAutosave();
+loadLibrary();
+loadJobs();
+loadConfig();
+loadSubmissionQueue();
+loadOllamaStatus();
+setTimeout(() => monitorAndPatchDom(), 600);
+
+// Monitoring AJAX précis (sans rechargement de page):
+// - vérifie régulièrement les changements dossiers/jobs côté backend
+// - applique uniquement les patchs DOM nécessaires.
+setInterval(() => {
+    monitorAndPatchDom();
+}, 1500);
+</script>
+</body>
+</html>

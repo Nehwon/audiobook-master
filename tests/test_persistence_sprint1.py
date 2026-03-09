@@ -50,7 +50,15 @@ class TestSprint1Persistence(unittest.TestCase):
             self.assertEqual(job.status, "failed")
             errors = session.query(ProcessingError).all()
             self.assertEqual(len(errors), 1)
-            self.assertEqual(errors[0].retryable, "true")
+            self.assertTrue(errors[0].retryable)
+
+    def test_transition_rejects_unsupported_status(self) -> None:
+        with session_scope(self.session_factory) as session:
+            service = ProcessingStateService(session)
+            service.create_job(job_id="job-3", folder_id="folder-c")
+            with self.assertRaises(ValueError):
+                service.transition_job(job_id="job-3", folder_id="folder-c", status="retry_pending")
+
 
 
 if __name__ == "__main__":

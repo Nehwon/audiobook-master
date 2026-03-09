@@ -463,6 +463,34 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(mocked_persist.call_count, 1)
 
+    @mock.patch('web.app._persist_job_transition')
+    def test_cancel_job_marks_pending_job_as_cancelled(self, mocked_transition):
+        folder = self.media_dir / 'Livre Cancel'
+        folder.mkdir()
+        (folder / 'a.mp3').write_text('x')
+
+        enqueue = self.client.post('/api/jobs/enqueue', json={'folders': ['Livre Cancel']})
+        self.assertEqual(enqueue.status_code, 200)
+        job_id = enqueue.get_json()['queued'][0]['id']
+
+        resp = self.client.post('/api/jobs/cancel', json={'job_id': job_id})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['cancelled']['status'], 'cancelled')
+        self.assertEqual(mocked_transition.call_count, 1)
+
+    def test_cancel_job_rejects_unknown_job(self):
+        resp = self.client.post('/api/jobs/cancel', json={'job_id': 'job-missing'})
+        self.assertEqual(resp.status_code, 404)
+        payload = resp.get_json()
+        self.assertEqual(payload['code'], 'job_not_found')
+
+    def test_cancel_job_requires_job_id(self):
+        resp = self.client.post('/api/jobs/cancel', json={})
+        self.assertEqual(resp.status_code, 400)
+        payload = resp.get_json()
+        self.assertEqual(payload['code'], 'missing_job_id')
+
     def test_enqueue_rejects_non_list_payload(self):
         resp = self.client.post('/api/jobs/enqueue', json={'folders': 'not-a-list'})
         self.assertEqual(resp.status_code, 400)
@@ -482,6 +510,17 @@ class TestWebRenameApi(unittest.TestCase):
         payload = jobs.get_json()
         self.assertIn('events', payload)
         self.assertIsInstance(payload['events'], list)
+
+    def test_jobs_payload_includes_cancelled_in_done(self):
+        with web_app.jobs_lock:
+            web_app.jobs.clear()
+            web_app.jobs['job-cancel'] = web_app.Job(id='job-cancel', folder='Livre', status='cancelled', progress=100)
+
+        jobs = self.client.get('/api/jobs')
+        self.assertEqual(jobs.status_code, 200)
+        payload = jobs.get_json()
+        done_statuses = [entry['status'] for entry in payload['done']]
+        self.assertIn('cancelled', done_statuses)
 
     def test_push_job_event_does_not_deadlock_when_lock_is_held(self):
         done = threading.Event()

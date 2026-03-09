@@ -1,6 +1,6 @@
 # ADR-001 — Architecture cible React + PostgreSQL
 
-- **Statut**: Accepted (Sprint 0)
+- **Statut**: Accepted (validé pour lancement Sprint 1)
 - **Date**: 2026-03-09
 - **Contexte**: migration progressive de l'UI Flask actuelle vers React, avec persistance robuste des états de traitement et reprise automatique.
 
@@ -12,7 +12,7 @@ Le backend Flask gère déjà le pipeline de traitement et expose des routes API
 - l'état d'exécution n'est pas centralisé dans une base transactionnelle,
 - la reprise après incident doit être systématisée.
 
-Objectif: améliorer la fiabilité opérationnelle et l'expérience de suivi des traitements, sans big-bang risqué.
+Objectif: améliorer la fiabilité opérationnelle et l'expérience de suivi des traitements, avec bascule assumée vers la nouvelle architecture livrée par images Docker.
 
 ## Décision
 
@@ -67,7 +67,17 @@ Format standard JSON:
 ### Négatives / coûts
 
 - Complexité d'exploitation supplémentaire (PostgreSQL + migrations + SSE).
-- Double-run temporaire (UI legacy + UI React) durant la transition.
+- Effort de migration coordonnée backend/frontend sans phase de compatibilité legacy.
+
+## Validation produit
+
+Décisions explicitement validées:
+
+- ADR-001 validé.
+- Pas de préservation de compatibilité legacy (la publication par images Docker permet une bascule directe).
+- Migration des données validée.
+- Procédure de recovery validée.
+- Passage en **Sprint 1** autorisé.
 
 ## Alternatives évaluées
 

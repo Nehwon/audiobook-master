@@ -2661,7 +2661,7 @@ def api_jobs():
 
     pending = sorted([j for j in values if j["status"] == "pending"], key=sort_key)
     running = sorted([j for j in values if j["status"] == "running"], key=sort_key)
-    done = sorted([j for j in values if j["status"] in {"completed", "failed"}], key=sort_key, reverse=True)
+    done = sorted([j for j in values if j["status"] in {"completed", "failed", "cancelled"}], key=sort_key, reverse=True)
     processing_threads = len(running)
 
     return jsonify({
@@ -2672,6 +2672,32 @@ def api_jobs():
         "events": job_events[-100:],
         "processing_threads": processing_threads,
     })
+
+
+@app.route("/api/jobs/cancel", methods=["POST"])
+def api_cancel_job():
+    payload = request.get_json(silent=True) or {}
+    job_id = payload.get("job_id")
+    if not isinstance(job_id, str) or not job_id.strip():
+        return _api_error("job_id requis", code="missing_job_id")
+
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if not job:
+            return _api_error("Job introuvable", status=404, code="job_not_found")
+        if job.status == "running":
+            return _api_error("Impossible d'annuler un job déjà en cours", status=409, code="job_already_running")
+        if job.status in {"completed", "failed", "cancelled"}:
+            return _api_error("Job déjà terminé", status=409, code="job_already_finished")
+
+        job.status = "cancelled"
+        job.stage = "Annulé"
+        job.progress = 100
+        job.ended_at = time.time()
+        _push_job_event(job.id, job.folder, job.stage, "Job annulé par l'utilisateur", "warning")
+
+    _persist_job_transition(job, "cancelled")
+    return jsonify({"cancelled": asdict(job)})
 
 
 @app.route("/api/logs")

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import importlib.util
 import unittest
 
-from persistence.db import build_engine, build_session_factory, session_scope
-from persistence.models import Base, OutboxEvent, ProcessingError, ProcessingJob
-from persistence.service import ProcessingStateService
+HAS_SQLALCHEMY = importlib.util.find_spec("sqlalchemy") is not None
+
+if HAS_SQLALCHEMY:
+    from persistence.db import build_engine, build_session_factory, session_scope
+    from persistence.models import Base, OutboxEvent, ProcessingError, ProcessingJob
+    from persistence.service import ProcessingStateService
 
 
+@unittest.skipUnless(HAS_SQLALCHEMY, "sqlalchemy is required for persistence tests")
 class TestSprint1Persistence(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = build_engine("sqlite+pysqlite:///:memory:")

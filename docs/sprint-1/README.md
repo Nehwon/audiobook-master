@@ -13,6 +13,10 @@ Ce sprint introduit une base de persistance transactionnelle pour les états de 
 - Bootstrap local: `scripts/bootstrap_postgres.sh`.
 - Script d'init PostgreSQL Docker: `database/init.sql`.
 
+## Dépendances
+
+- Dépendances optionnelles PostgreSQL/ORM: `requirements_postgresql.txt`
+
 ## Variables d'environnement
 
 - `AUDIOBOOK_DATABASE_URL` (ex: `postgresql://audiobook:audiobook123@postgres:5432/audiobook_manager`)

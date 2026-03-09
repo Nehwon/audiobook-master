@@ -50,10 +50,9 @@ APP_ROOT = Path(__file__).resolve().parent.parent
 UI_VERSION_COOKIE = "audiobook_ui_version"
 UI_VERSION_QUERY_KEY = "ui"
 UI_VERSION_TEMPLATES = {
-    "v1": "index_v1.html",
     "v2": "index_v2.html",
 }
-UI_DEFAULT_VERSION = os.getenv("AUDIOBOOK_UI_DEFAULT", "v1").strip().lower() or "v1"
+UI_DEFAULT_VERSION = os.getenv("AUDIOBOOK_UI_DEFAULT", "v2").strip().lower() or "v2"
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}
 ARCHIVE_EXTENSIONS = {".zip", ".rar"}
@@ -1878,7 +1877,7 @@ def _resolve_ui_version() -> str:
         return cookie_version
     if UI_DEFAULT_VERSION in UI_VERSION_TEMPLATES:
         return UI_DEFAULT_VERSION
-    return "v1"
+    return "v2"
 
 
 
@@ -1915,7 +1914,7 @@ def api_ui_version():
     query_version = (request.args.get(UI_VERSION_QUERY_KEY) or "").strip().lower()
     payload = {
         "active": selected_ui,
-        "default": UI_DEFAULT_VERSION if UI_DEFAULT_VERSION in UI_VERSION_TEMPLATES else "v1",
+        "default": UI_DEFAULT_VERSION if UI_DEFAULT_VERSION in UI_VERSION_TEMPLATES else "v2",
         "available": list(UI_VERSION_TEMPLATES.keys()),
     }
     if query_version and query_version not in UI_VERSION_TEMPLATES:

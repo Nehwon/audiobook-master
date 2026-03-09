@@ -129,9 +129,6 @@
         }
         .footer-fixed a { color: var(--text); display:inline-flex; align-items:center; }
         .footer-fixed svg { width: 18px; height: 18px; fill: currentColor; }
-        .ui-switch { display:inline-flex; border:1px solid var(--border); border-radius:999px; overflow:hidden; margin-right:8px; }
-        .ui-switch a { text-decoration:none; color:var(--text); padding:4px 10px; font-size:12px; background:var(--card); }
-        .ui-switch a.active { background:var(--primary); color:#fff; }
 
         /* Dashboard V2 layout */
         body.v2-dashboard { background:#eef1f5; }
@@ -219,10 +216,6 @@
     </div>
     <div class="top-actions">
         <div class="search-pill">Search (Ctrl+Space / Ctrl+Shift+F)</div>
-        <nav class="ui-switch" aria-label="Version de l'interface">
-            <a id="uiSwitchV1" href="/?ui=v1" class="{{ 'active' if ui_version == 'v1' else '' }}" title="Basculer vers l'interface classique">UI v1</a>
-            <a id="uiSwitchV2" href="/?ui=v2" class="{{ 'active' if ui_version == 'v2' else '' }}" title="Basculer vers l'interface dashboard">UI v2</a>
-        </nav>
         <span id="apiActivityDot" class="status-dot" title="Activité API"></span>
         <label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label>
     </div>
@@ -636,34 +629,41 @@ function computePhaseEta(job){
     return 'Calcul ETA...';
 }
 
-function computePhasePoints(job){
-    const phaseOrder = ['conversion', 'normalization', 'chapters', 'finalization'];
+function computePhasePoints(job, audioCount=0){
     const phaseProgress = (job?.phase_progress && typeof job.phase_progress === 'object') ? job.phase_progress : {};
-    let total = 0;
-    let processed = 0;
-    phaseOrder.forEach((key) => {
-        const phase = phaseProgress[key];
-        const phaseTotal = Math.max(0, parseInt(phase?.total ?? 0, 10) || 0);
-        const phaseProcessed = Math.max(0, Math.min(phaseTotal || 0, parseInt(phase?.processed ?? 0, 10) || 0));
-        if (phaseTotal > 0) {
-            total += phaseTotal;
-            processed += phaseProcessed;
+    const convTotal = Math.max(0, parseInt(phaseProgress.conversion?.total ?? 0, 10) || 0);
+    const convProcessed = Math.max(0, parseInt(phaseProgress.conversion?.processed ?? 0, 10) || 0);
+    const normTotal = Math.max(0, parseInt(phaseProgress.normalization?.total ?? 0, 10) || 0);
+    const normProcessed = Math.max(0, parseInt(phaseProgress.normalization?.processed ?? 0, 10) || 0);
+    const finalTotal = Math.max(0, parseInt(phaseProgress.finalization?.total ?? 0, 10) || 0);
+    const finalProcessed = Math.max(0, parseInt(phaseProgress.finalization?.processed ?? 0, 10) || 0);
+
+    const expectedAudio = Math.max(0, parseInt(audioCount ?? 0, 10) || 0);
+    const inferredAudio = Math.max(convTotal, normTotal);
+    const baseAudio = expectedAudio || inferredAudio;
+    const total = baseAudio > 0 ? (baseAudio * 2 + 2) : (convTotal + normTotal + (finalTotal || 2));
+
+    let processed = convProcessed + normProcessed + Math.min(2, finalProcessed);
+    const status = String(job?.status || '').toLowerCase();
+    if (status === 'completed') processed = Math.max(processed, total);
+    if (processed <= 0) {
+        const pct = Math.max(0, Math.min(100, parseInt(job?.progress ?? 0, 10) || 0));
+        if (pct > 0 && total > 0 && status === 'running') {
+            processed = Math.round((pct / 100) * total);
         }
-    });
-    if (total <= 0) {
-        const status = String(job?.status || '').toLowerCase();
-        if (status === 'completed') return { total: 100, processed: 100 };
-        if (status === 'failed') return { total: 100, processed: Math.max(0, Math.min(100, parseInt(job?.progress ?? 0, 10) || 0)) };
-        return { total: 100, processed: 0 };
     }
-    return { total, processed };
+
+    processed = Math.max(0, Math.min(total, processed));
+    return { total: Math.max(1, total), processed };
 }
 
-function renderProcessingActionBand(job, folder){
-    const points = computePhasePoints(job);
+function renderProcessingActionBand(job, folder, audioCount=0){
+    const points = computePhasePoints(job, audioCount);
     const pct = points.total ? Math.round((points.processed / points.total) * 100) : 0;
     const folderJs = toJsString(folder || '');
-    return `<span class="band-status">Dossier en cours de traitement</span>
+    const isPending = String(job?.status || '').toLowerCase() === 'pending';
+    const statusLabel = isPending ? 'Dossier en attente de traitement' : 'Dossier en cours de traitement';
+    return `<span class="band-status">${statusLabel}</span>
         <div class="band-progress-track"><div class="band-progress-bar" style="width:${pct}%"></div></div>
         <span class="band-progress-label">${pct}% (${points.processed}/${points.total} étapes)</span>
         <button class="secondary" onclick="event.stopPropagation();openJobLightbox('${folderJs}')">Détail</button>`;
@@ -839,7 +839,7 @@ async function loadLibrary() {
                ${f.can_ignore ? `<button class="secondary" ${hideActionsForJob ? 'disabled' : ''} onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
                ${f.suggest_delete ? `<button class="danger" ${hideActionsForJob ? 'disabled' : ''} onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
                <button ${hideActionsForJob ? 'disabled' : ''} onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>`;
-        const bandInner = hideActionsForJob ? renderProcessingActionBand(job, f.name) : actionButtons;
+        const bandInner = hideActionsForJob ? renderProcessingActionBand(job, f.name, f.audio_count) : actionButtons;
         fb.innerHTML += `<tr class="row-main">
             <td class="checkbox-col"><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''} onchange="bindSelectionState('folderSel', 'folderSelAll')"></td>
             <td>
@@ -1700,20 +1700,16 @@ function setupTheme(){
     });
 }
 
-function setupUiSwitchLinks(){
-    const v1 = document.getElementById('uiSwitchV1');
-    const v2 = document.getElementById('uiSwitchV2');
-    if (!v1 || !v2) return;
 
-    const refreshLinks = () => {
-        const hash = window.location.hash || '';
-        v1.href = `/?ui=v1${hash}`;
-        v2.href = `/?ui=v2${hash}`;
-    };
-
-    refreshLinks();
-    window.addEventListener('hashchange', refreshLinks);
+const jobLightboxEl = document.getElementById('jobLightbox');
+if (jobLightboxEl) {
+    jobLightboxEl.addEventListener('click', (event) => {
+        if (event.target === jobLightboxEl) closeJobLightbox();
+    });
 }
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeJobLightbox();
+});
 
 const jobLightboxEl = document.getElementById('jobLightbox');
 if (jobLightboxEl) {
@@ -1727,7 +1723,6 @@ document.addEventListener('keydown', (event) => {
 
 setupTabs();
 setupTheme();
-setupUiSwitchLinks();
 setupAudiobookshelfAutosave();
 loadLibrary();
 loadJobs();

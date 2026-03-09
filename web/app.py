@@ -2591,8 +2591,16 @@ def api_jobs():
     pending = sorted([j for j in values if j["status"] == "pending"], key=sort_key)
     running = sorted([j for j in values if j["status"] == "running"], key=sort_key)
     done = sorted([j for j in values if j["status"] in {"completed", "failed"}], key=sort_key, reverse=True)
+    processing_threads = len(running)
 
-    return jsonify({"pending": pending, "running": running, "done": done, "review": review_bin, "events": job_events[-100:]})
+    return jsonify({
+        "pending": pending,
+        "running": running,
+        "done": done,
+        "review": review_bin,
+        "events": job_events[-100:],
+        "processing_threads": processing_threads,
+    })
 
 
 @app.route("/api/logs")

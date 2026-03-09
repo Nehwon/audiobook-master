@@ -129,9 +129,6 @@
         }
         .footer-fixed a { color: var(--text); display:inline-flex; align-items:center; }
         .footer-fixed svg { width: 18px; height: 18px; fill: currentColor; }
-        .ui-switch { display:inline-flex; border:1px solid var(--border); border-radius:999px; overflow:hidden; margin-right:8px; }
-        .ui-switch a { text-decoration:none; color:var(--text); padding:4px 10px; font-size:12px; background:var(--card); }
-        .ui-switch a.active { background:var(--primary); color:#fff; }
 
         /* Dashboard V2 layout */
         body.v2-dashboard { background:#eef1f5; }
@@ -151,6 +148,25 @@
         .panel-body table { width:100%; table-layout:fixed; min-width:0; }
         .panel-body th, .panel-body td { font-size:12px; padding:6px; overflow-wrap:anywhere; word-break:break-word; }
         .panel-body td button { font-size:11px; padding:3px 6px; line-height:1.2; max-width:100%; }
+        .checkbox-col { width:28px; min-width:28px; max-width:28px; text-align:center; padding-left:4px !important; padding-right:4px !important; }
+        .row-main td { border-bottom:none; }
+        .row-band td { padding:0 6px 6px; border-bottom:1px solid var(--border); }
+        .action-band { border-top:2px solid color-mix(in srgb, var(--border) 70%, transparent); padding:6px 0 0; display:flex; flex-wrap:wrap; gap:6px; align-items:center; background:transparent; }
+        .action-band.processing { border-top-color:#facc15; background:transparent; cursor:pointer; }
+        .action-band.processing:hover { border-top-color:#eab308; }
+        
+        .checkbox-slot { width:28px; min-width:28px; max-width:28px; }
+        .band-status { font-weight:600; color:#92400e; }
+        .band-progress-track { height:8px; border-radius:999px; overflow:hidden; background:#fef3c7; width:220px; }
+        .band-progress-bar { height:100%; background:#ca8a04; transition: width .25s ease; }
+        .band-progress-label { font-size:11px; color:#92400e; }
+        .file-btn-delete-folder { background:#b91c1c; }
+        .file-btn-delete-m4b { background:#dc2626; }
+        .file-btn-delete-both { background:#ef4444; }
+        .job-lightbox { position:fixed; inset:0; background:rgba(2,6,23,.58); display:none; align-items:center; justify-content:center; z-index:1400; }
+        .job-lightbox.open { display:flex; }
+        .job-lightbox-panel { width:min(880px, calc(100vw - 28px)); max-height:calc(100vh - 28px); overflow:auto; border-radius:10px; border:1px solid var(--border); background:var(--card); padding:14px; }
+        .job-lightbox-head { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; }
         .sidebar .tab.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
         .sidebar .tab.packet-tab,.sidebar .tab.plugin-tab,.sidebar .tab.config-tab { background:transparent; border-color:transparent; color:#cbd5e1; }
         .sidebar .tab.packet-tab.active,.sidebar .tab.plugin-tab.active,.sidebar .tab.config-tab.active { background:#2563eb; border-color:#2563eb; color:#fff; }
@@ -200,10 +216,6 @@
     </div>
     <div class="top-actions">
         <div class="search-pill">Search (Ctrl+Space / Ctrl+Shift+F)</div>
-        <nav class="ui-switch" aria-label="Version de l'interface">
-            <a id="uiSwitchV1" href="/?ui=v1" class="{{ 'active' if ui_version == 'v1' else '' }}" title="Basculer vers l'interface classique">UI v1</a>
-            <a id="uiSwitchV2" href="/?ui=v2" class="{{ 'active' if ui_version == 'v2' else '' }}" title="Basculer vers l'interface dashboard">UI v2</a>
-        </nav>
         <span id="apiActivityDot" class="status-dot" title="Activité API"></span>
         <label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label>
     </div>
@@ -212,7 +224,7 @@
     <section id="page-library" class="page active">
         <div class="kpi-grid">
             <article class="kpi-card"><p class="kpi-title">Dossiers détectés</p><p id="kpiFolders" class="kpi-value">0</p><div class="kpi-sub">dans la bibliothèque</div></article>
-            <article class="kpi-card"><p class="kpi-title">Jobs en cours</p><p id="kpiRunning" class="kpi-value">0</p><div class="kpi-sub">pipeline actif</div></article>
+            <article class="kpi-card"><p class="kpi-title">Jobs en cours</p><p id="kpiRunning" class="kpi-value">0</p><div id="kpiRunningSub" class="kpi-sub">pipeline actif · 0 thread</div></article>
             <article class="kpi-card"><p class="kpi-title">En attente</p><p id="kpiPending" class="kpi-value">0</p><div class="kpi-sub">avant traitement</div></article>
             <article class="kpi-card"><p class="kpi-title">À revoir</p><p id="kpiReview" class="kpi-value">0</p><div class="kpi-sub">suppression/retraitement</div></article>
             <article class="kpi-card"><p class="kpi-title">Archives en attente</p><p id="kpiArchivesPending" class="kpi-value">0</p><div class="kpi-sub">à valider / extraire</div></article>
@@ -230,7 +242,7 @@
                 </div>
                 <div class="panel-body">
                     <table>
-                        <thead><tr><th><input id="folderSelAll" type="checkbox" onchange="toggleAllSelection('folderSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                        <thead><tr><th class="checkbox-col"><input id="folderSelAll" type="checkbox" onchange="toggleAllSelection('folderSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th></tr></thead>
                         <tbody id="foldersBody"></tbody>
                     </table>
                 </div>
@@ -245,7 +257,7 @@
                 </div>
                 <div class="panel-body">
                     <table>
-                        <thead><tr><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>M4B lié</th><th>Actions</th></tr></thead>
+                        <thead><tr><th class="checkbox-col"><input id="fileSelAll" type="checkbox" onchange="toggleAllSelection('fileSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>M4B lié</th></tr></thead>
                         <tbody id="hiddenProcessedFoldersBody"></tbody>
                     </table>
                 </div>
@@ -262,7 +274,7 @@
                 </div>
                 <div class="panel-body">
                     <table>
-                        <thead><tr><th><input id="archiveSelAll" type="checkbox" onchange="toggleAllSelection('archiveSel', this.checked)"></th><th>Archive</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                        <thead><tr><th class="checkbox-col"><input id="archiveSelAll" type="checkbox" onchange="toggleAllSelection('archiveSel', this.checked)"></th><th>Archive</th><th>Taille MB</th><th>Actions</th></tr></thead>
                         <tbody id="archivesBody"></tbody>
                     </table>
                 </div>
@@ -419,6 +431,15 @@
 </div>
 </div>
 <div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
+<div id="jobLightbox" class="job-lightbox" role="dialog" aria-modal="true" aria-labelledby="jobLightboxTitle">
+    <div class="job-lightbox-panel">
+        <div class="job-lightbox-head">
+            <h3 id="jobLightboxTitle" style="margin:0">Détail du traitement</h3>
+            <button class="secondary" onclick="closeJobLightbox()">Fermer</button>
+        </div>
+        <div id="jobLightboxBody" class="muted">Aucun job sélectionné.</div>
+    </div>
+</div>
 <footer class="footer-fixed">
     <span>Licence 2026 - NehwonLM</span>
     <a href="https://github.com" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
@@ -436,6 +457,7 @@ let hiddenDuplicateDeleteTargets = new Set();
 let enqueueInFlight = new Set();
 let submissionFilesCache = [];
 let packetsSummaryCache = [];
+let latestJobsSnapshot = { pending: [], running: [], done: [] };
 
 function isAudiobookshelfConfigMissing(config){
     if (!config || typeof config !== 'object') return true;
@@ -545,8 +567,7 @@ function toggleAllSelection(name, checked){
     document.querySelectorAll(`input[name="${name}"]`).forEach(box => {
         if (!box.disabled) box.checked = checked;
     });
-    const selectAllId = name === 'folderSel' ? 'folderSelAll' : 'archiveSelAll';
-    bindSelectionState(name, selectAllId);
+    bindSelectionState(name, `${name}All`);
 }
 
 function archiveDuplicateHint(archive){
@@ -608,6 +629,55 @@ function computePhaseEta(job){
     return 'Calcul ETA...';
 }
 
+function computePhasePoints(job, audioCount=0){
+    const phaseProgress = (job?.phase_progress && typeof job.phase_progress === 'object') ? job.phase_progress : {};
+    const convTotal = Math.max(0, parseInt(phaseProgress.conversion?.total ?? 0, 10) || 0);
+    const convProcessed = Math.max(0, parseInt(phaseProgress.conversion?.processed ?? 0, 10) || 0);
+    const normTotal = Math.max(0, parseInt(phaseProgress.normalization?.total ?? 0, 10) || 0);
+    const normProcessed = Math.max(0, parseInt(phaseProgress.normalization?.processed ?? 0, 10) || 0);
+    const finalTotal = Math.max(0, parseInt(phaseProgress.finalization?.total ?? 0, 10) || 0);
+    const finalProcessed = Math.max(0, parseInt(phaseProgress.finalization?.processed ?? 0, 10) || 0);
+
+    const expectedAudio = Math.max(0, parseInt(audioCount ?? 0, 10) || 0);
+    const inferredAudio = Math.max(convTotal, normTotal);
+    const baseAudio = expectedAudio || inferredAudio;
+    const total = baseAudio > 0 ? (baseAudio * 2 + 2) : (convTotal + normTotal + (finalTotal || 2));
+
+    let processed = convProcessed + normProcessed + Math.min(2, finalProcessed);
+    const status = String(job?.status || '').toLowerCase();
+    if (status === 'completed') processed = Math.max(processed, total);
+    if (processed <= 0) {
+        const pct = Math.max(0, Math.min(100, parseInt(job?.progress ?? 0, 10) || 0));
+        if (pct > 0 && total > 0 && status === 'running') {
+            processed = Math.round((pct / 100) * total);
+        }
+    }
+
+    processed = Math.max(0, Math.min(total, processed));
+    return { total: Math.max(1, total), processed };
+}
+
+function renderProcessingActionBand(job, folder, audioCount=0){
+    const points = computePhasePoints(job, audioCount);
+    const pct = points.total ? Math.round((points.processed / points.total) * 100) : 0;
+    const folderJs = toJsString(folder || '');
+    const isPending = String(job?.status || '').toLowerCase() === 'pending';
+    const statusLabel = isPending ? 'Dossier en attente de traitement' : 'Dossier en cours de traitement';
+    return `<span class="band-status">${statusLabel}</span>
+        <div class="band-progress-track"><div class="band-progress-bar" style="width:${pct}%"></div></div>
+        <span class="band-progress-label">${pct}% (${points.processed}/${points.total} étapes)</span>
+        <button class="secondary" onclick="event.stopPropagation();openJobLightbox('${folderJs}')">Détail</button>`;
+}
+
+function renderFileActionBand(folder, outputName){
+    const jsFolder = toJsString(folder);
+    const jsOutput = toJsString(outputName || '');
+    const hasOutput = !!outputName;
+    return `<button class="file-btn-delete-folder" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer dossier</button>
+        <button class="file-btn-delete-m4b" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedOutput('${jsOutput}','${jsFolder}')">Supprimer M4B</button>
+        <button class="file-btn-delete-both" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedBoth('${jsFolder}','${jsOutput}')">Supprimer les deux</button>`;
+}
+
 function renderInlineJobProgress(job){
     if (!job) return '';
     const pct = Math.max(0, Math.min(100, parseInt(job.progress ?? 0, 10) || 0));
@@ -626,6 +696,28 @@ function renderInlineJobProgress(job){
     const stage = escapeHtml(stageRaw);
     const etaText = escapeHtml(computePhaseEta(job));
     return `<div class="job-inline"><div class="meta">${statusLabel} · Phase ${phase}/6 · ${pct}% · ETA: ${etaText}</div><div class="muted" style="font-size:12px">${stage}</div><div class="track"><div class="bar" style="width:${pct}%"></div></div></div>`;
+}
+
+function renderJobDetailCard(job){
+    const pct = Math.max(0, Math.min(100, parseInt(job?.progress ?? 0, 10) || 0));
+    const points = computePhasePoints(job || {});
+    const detail = renderJobsHtml([job], false);
+    return `<div><div class="muted" style="margin-bottom:8px">Progression générale: ${pct}% · ${points.processed}/${points.total} étapes</div>${detail}</div>`;
+}
+
+function openJobLightbox(folderName){
+    const lightbox = document.getElementById('jobLightbox');
+    const body = document.getElementById('jobLightboxBody');
+    if (!lightbox || !body) return;
+    const allJobs = [...(latestJobsSnapshot.pending || []), ...(latestJobsSnapshot.running || []), ...(latestJobsSnapshot.done || [])];
+    const target = allJobs.find((job) => String(job.folder || '') === String(folderName || ''));
+    body.innerHTML = target ? renderJobDetailCard(target) : '<p class="muted">Aucun détail trouvé pour ce dossier.</p>';
+    lightbox.classList.add('open');
+}
+
+function closeJobLightbox(){
+    const lightbox = document.getElementById('jobLightbox');
+    if (lightbox) lightbox.classList.remove('open');
 }
 
 function notify(message, type='info', timeoutMs=3600){
@@ -739,56 +831,50 @@ async function loadLibrary() {
         const manualInput = isManualMode && !hideActionsForJob
             ? `<div style="margin-top:6px"><input data-manual-title="1" data-folder="${folderNameEscaped}" type="text" style="min-width:260px" placeholder="Titre manuel" autofocus></div>`
             : '';
-        const actionButtons = hideActionsForJob
-            ? renderInlineJobProgress(job)
-            : isManualMode
-                ? `<button data-rename-btn="1" data-default-label="Valider" ${renameInProgress ? 'disabled' : ''} onclick="validateManualRename('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Valider'}</button>
-                   <button class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="cancelManualRename()">Annuler</button>`
-                : `<button data-rename-btn="1" data-default-label="Renommer" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="renameOne('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
-                   <button data-rename-btn="1" data-default-label="Renommage manuel" class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="enterManualRename('${jsFolder}')">Renommage manuel</button>
-                   ${f.can_ignore ? `<button class="secondary" onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
-                   ${f.suggest_delete ? `<button class="danger" onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
-                   <button onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>`;
-        fb.innerHTML += `<tr>
-            <td><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''} onchange="bindSelectionState('folderSel', 'folderSelAll')"></td>
+        const actionButtons = isManualMode
+            ? `<button data-rename-btn="1" data-default-label="Valider" ${renameInProgress ? 'disabled' : ''} onclick="validateManualRename('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Valider'}</button>
+               <button class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="cancelManualRename()">Annuler</button>`
+            : `<button data-rename-btn="1" data-default-label="Renommer" class="secondary" ${renameInProgress || hideActionsForJob ? 'disabled' : ''} onclick="renameOne('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
+               <button data-rename-btn="1" data-default-label="Renommage manuel" class="secondary" ${renameInProgress || hideActionsForJob ? 'disabled' : ''} onclick="enterManualRename('${jsFolder}')">Renommage manuel</button>
+               ${f.can_ignore ? `<button class="secondary" ${hideActionsForJob ? 'disabled' : ''} onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
+               ${f.suggest_delete ? `<button class="danger" ${hideActionsForJob ? 'disabled' : ''} onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
+               <button ${hideActionsForJob ? 'disabled' : ''} onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>`;
+        const bandInner = hideActionsForJob ? renderProcessingActionBand(job, f.name, f.audio_count) : actionButtons;
+        fb.innerHTML += `<tr class="row-main">
+            <td class="checkbox-col"><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''} onchange="bindSelectionState('folderSel', 'folderSelAll')"></td>
             <td>
                 ${folderIcon}${folderNameEscaped}${issues}
                 ${manualInput}
             </td>
             <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
             <td>${fmtMb(f.size)}</td>
-            <td>${actionButtons}</td>
-        </tr>`;
+        </tr>
+        <tr class="row-band"><td colspan="4"><div class="action-band${hideActionsForJob ? ' processing' : ''}" ${hideActionsForJob ? `onclick="openJobLightbox('${jsFolder}')"` : ''}><span class="checkbox-slot"></span>${bandInner}</div></td></tr>`;
     });
-    if (!data.folders.length) fb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier</td></tr>';
+    if (!data.folders.length) fb.innerHTML = '<tr><td colspan="4" class="muted">Aucun dossier</td></tr>';
     const archivesPending = (data.archives || []).filter(a => !(a.validation && a.validation.valid === true)).length;
     setKpiValue('kpiFolders', data.folders.length || 0);
     setKpiValue('kpiArchivesPending', archivesPending);
     touchKpiRefresh();
 
     (data.hidden_processed_folders || []).forEach(f => {
-        const jsFolder = toJsString(f.name);
         const folderNameEscaped = escapeHtml(f.name);
         const outputFiles = Array.isArray(f.output_files) ? f.output_files.filter(Boolean) : [];
         const outputName = outputFiles[0] || '';
-        const jsOutputName = toJsString(outputName);
-        const hasOutput = !!outputName;
-        const outputLabel = hasOutput ? escapeHtml(outputName) : '<span class="muted">Aucun M4B trouvé</span>';
-        hpb.innerHTML += `<tr>
+        const outputLabel = outputName ? escapeHtml(outputName) : '<span class="muted">Aucun M4B trouvé</span>';
+        hpb.innerHTML += `<tr class="row-main">
+            <td class="checkbox-col"><input type="checkbox" name="fileSel" value="${folderNameEscaped}" onchange="bindSelectionState('fileSel', 'fileSelAll')"></td>
             <td>${folderNameEscaped}</td>
             <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
             <td>${fmtMb(f.size)}</td>
             <td>${outputLabel}</td>
-            <td>
-                <button class="danger" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer dossier</button>
-                <button class="danger" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedOutput('${jsOutputName}','${jsFolder}')">Supprimer M4B</button>
-                <button class="danger" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedBoth('${jsFolder}','${jsOutputName}')">Supprimer les deux</button>
-            </td>
-        </tr>`;
+        </tr>
+        <tr class="row-band"><td colspan="5"><div class="action-band"><span class="checkbox-slot"></span>${renderFileActionBand(f.name, outputName)}</div></td></tr>`;
     });
     if (!(data.hidden_processed_folders || []).length) {
         hpb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier déjà traité caché</td></tr>';
     }
+    bindSelectionState('fileSel', 'fileSelAll');
 
     data.archives.forEach(a => {
         const archiveEscaped = escapeHtml(a.primary_name || a.name);
@@ -799,7 +885,7 @@ async function loadLibrary() {
             ? `<button class="danger" onclick="deleteArchive('${archiveJs}')">Supprimer</button>`
             : `<button onclick="extractArchives(['${archiveJs}'])">Extraire</button>`;
         const dupDeleteBtn = duplicateDeleteButton(a);
-        ab.innerHTML += `<tr><td><input type="checkbox" name="archiveSel" value="${archiveEscaped}" ${isInvalid ? 'disabled' : ''} onchange="bindSelectionState('archiveSel', 'archiveSelAll')"></td><td>${archiveValidationBadge(a)} ${archiveLabel}${archiveDuplicateHint(a)}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> ${actionBtn} ${dupDeleteBtn}</td></tr>`;
+        ab.innerHTML += `<tr><td class="checkbox-col"><input type="checkbox" name="archiveSel" value="${archiveEscaped}" ${isInvalid ? 'disabled' : ''} onchange="bindSelectionState('archiveSel', 'archiveSelAll')"></td><td>${archiveValidationBadge(a)} ${archiveLabel}${archiveDuplicateHint(a)}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> ${actionBtn} ${dupDeleteBtn}</td></tr>`;
     });
     if (!data.archives.length) ab.innerHTML = '<tr><td colspan="4" class="muted">Aucune archive</td></tr>';
     bindSelectionState('folderSel', 'folderSelAll');
@@ -956,10 +1042,9 @@ async function enqueueSelected(){
     await enqueueFolders(folders);
 }
 
-function renderJobs(containerId, jobs, withActions=false){
-    const c = document.getElementById(containerId);
-    if (!jobs.length) { c.innerHTML = '<p class="muted">Vide</p>'; return; }
-    c.innerHTML = jobs.map(j => {
+function renderJobsHtml(jobs, withActions=false){
+    if (!jobs.length) return '<p class="muted">Vide</p>';
+    return jobs.map(j => {
         const pct = Math.max(0, Math.min(100, parseInt(j.progress ?? 0, 10) || 0));
         const phaseOrder = ['conversion', 'normalization', 'chapters', 'finalization'];
         const phaseProgress = (j.phase_progress && typeof j.phase_progress === 'object') ? j.phase_progress : {};
@@ -1004,6 +1089,11 @@ function renderJobs(containerId, jobs, withActions=false){
         </div>
       </div>`;
     }).join('');
+}
+
+function renderJobs(containerId, jobs, withActions=false){
+    const c = document.getElementById(containerId);
+    c.innerHTML = renderJobsHtml(jobs, withActions);
 }
 
 function selectedSubmissionFiles(){
@@ -1152,6 +1242,7 @@ function hasActiveDoneAudioPlayback(){
 
 async function loadJobs({forceDoneRefresh=false} = {}){
     const data = await api('/api/jobs');
+    latestJobsSnapshot = { pending: data.pending || [], running: data.running || [], done: data.done || [] };
     renderJobs('pendingList', data.pending);
     renderJobs('runningList', data.running);
     if (forceDoneRefresh || !hasActiveDoneAudioPlayback()) {
@@ -1162,6 +1253,9 @@ async function loadJobs({forceDoneRefresh=false} = {}){
     const review = document.getElementById('reviewList');
     setKpiValue('kpiPending', (data.pending || []).length);
     setKpiValue('kpiRunning', (data.running || []).length);
+    const runningThreads = Math.max(0, parseInt(data.processing_threads ?? (data.running || []).length, 10) || 0);
+    const sub = document.getElementById('kpiRunningSub');
+    if (sub) sub.textContent = `pipeline actif · ${runningThreads} thread${runningThreads > 1 ? 's' : ''}`;
     setKpiValue('kpiReview', (data.review || []).length);
     touchKpiRefresh();
 
@@ -1606,24 +1700,19 @@ function setupTheme(){
     });
 }
 
-function setupUiSwitchLinks(){
-    const v1 = document.getElementById('uiSwitchV1');
-    const v2 = document.getElementById('uiSwitchV2');
-    if (!v1 || !v2) return;
 
-    const refreshLinks = () => {
-        const hash = window.location.hash || '';
-        v1.href = `/?ui=v1${hash}`;
-        v2.href = `/?ui=v2${hash}`;
-    };
-
-    refreshLinks();
-    window.addEventListener('hashchange', refreshLinks);
+const jobLightboxEl = document.getElementById('jobLightbox');
+if (jobLightboxEl) {
+    jobLightboxEl.addEventListener('click', (event) => {
+        if (event.target === jobLightboxEl) closeJobLightbox();
+    });
 }
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeJobLightbox();
+});
 
 setupTabs();
 setupTheme();
-setupUiSwitchLinks();
 setupAudiobookshelfAutosave();
 loadLibrary();
 loadJobs();

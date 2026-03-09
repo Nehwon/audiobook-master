@@ -80,6 +80,8 @@ Vous pouvez forcer une version explicite avec `AUDIOBOOK_MANAGER_VERSION`, ou pi
 - CI/CD : `docs/ci-cd.md`
 - Plugins : `docs/plugin-registry-spec.md`
 - Roadmap : `ROADMAP.md`
+- Plan de migration React + PostgreSQL : `docs/SPRINTS_REACT_POSTGRESQL.md`
+- Sprint 1 PostgreSQL (implémentation) : `docs/sprint-1/README.md`
 - Suivi de tâches : `TODO.md`
 
 ---

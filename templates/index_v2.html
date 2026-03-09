@@ -153,10 +153,12 @@
         .panel-body td button { font-size:11px; padding:3px 6px; line-height:1.2; max-width:100%; }
         .checkbox-col { width:28px; min-width:28px; max-width:28px; text-align:center; padding-left:4px !important; padding-right:4px !important; }
         .row-main td { border-bottom:none; }
-        .row-band td { padding:0 6px 8px; }
-        .action-band { border:1px solid var(--border); border-radius:8px; padding:6px 8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; background: color-mix(in srgb, var(--card) 90%, var(--bg)); }
-        .action-band.processing { background: #fff3bf; border-color: #facc15; cursor:pointer; }
-        .action-band.processing:hover { background: #fde68a; }
+        .row-band td { padding:0 6px 6px; border-bottom:1px solid var(--border); }
+        .action-band { border-top:2px solid color-mix(in srgb, var(--border) 70%, transparent); padding:6px 0 0; display:flex; flex-wrap:wrap; gap:6px; align-items:center; background:transparent; }
+        .action-band.processing { border-top-color:#facc15; background:transparent; cursor:pointer; }
+        .action-band.processing:hover { border-top-color:#eab308; }
+        
+        .checkbox-slot { width:28px; min-width:28px; max-width:28px; }
         .band-status { font-weight:600; color:#92400e; }
         .band-progress-track { height:8px; border-radius:999px; overflow:hidden; background:#fef3c7; width:220px; }
         .band-progress-bar { height:100%; background:#ca8a04; transition: width .25s ease; }
@@ -247,7 +249,7 @@
                 </div>
                 <div class="panel-body">
                     <table>
-                        <thead><tr><th class="checkbox-col"><input id="folderSelAll" type="checkbox" onchange="toggleAllSelection('folderSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                        <thead><tr><th class="checkbox-col"><input id="folderSelAll" type="checkbox" onchange="toggleAllSelection('folderSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th></tr></thead>
                         <tbody id="foldersBody"></tbody>
                     </table>
                 </div>
@@ -262,7 +264,7 @@
                 </div>
                 <div class="panel-body">
                     <table>
-                        <thead><tr><th class="checkbox-col"><input id="fileSelAll" type="checkbox" onchange="toggleAllSelection('fileSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>M4B lié</th><th>Actions</th></tr></thead>
+                        <thead><tr><th class="checkbox-col"><input id="fileSelAll" type="checkbox" onchange="toggleAllSelection('fileSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>M4B lié</th></tr></thead>
                         <tbody id="hiddenProcessedFoldersBody"></tbody>
                     </table>
                 </div>
@@ -649,8 +651,10 @@ function computePhasePoints(job){
         }
     });
     if (total <= 0) {
-        const fallbackPct = Math.max(0, Math.min(100, parseInt(job?.progress ?? 0, 10) || 0));
-        return { total: 100, processed: fallbackPct };
+        const status = String(job?.status || '').toLowerCase();
+        if (status === 'completed') return { total: 100, processed: 100 };
+        if (status === 'failed') return { total: 100, processed: Math.max(0, Math.min(100, parseInt(job?.progress ?? 0, 10) || 0)) };
+        return { total: 100, processed: 0 };
     }
     return { total, processed };
 }
@@ -659,23 +663,19 @@ function renderProcessingActionBand(job, folder){
     const points = computePhasePoints(job);
     const pct = points.total ? Math.round((points.processed / points.total) * 100) : 0;
     const folderJs = toJsString(folder || '');
-    return `<div class="action-band processing" onclick="openJobLightbox('${folderJs}')">
-        <span class="band-status">Dossier en cours de traitement</span>
+    return `<span class="band-status">Dossier en cours de traitement</span>
         <div class="band-progress-track"><div class="band-progress-bar" style="width:${pct}%"></div></div>
         <span class="band-progress-label">${pct}% (${points.processed}/${points.total} étapes)</span>
-        <button class="secondary" onclick="event.stopPropagation();openJobLightbox('${folderJs}')">Détail</button>
-    </div>`;
+        <button class="secondary" onclick="event.stopPropagation();openJobLightbox('${folderJs}')">Détail</button>`;
 }
 
 function renderFileActionBand(folder, outputName){
     const jsFolder = toJsString(folder);
     const jsOutput = toJsString(outputName || '');
     const hasOutput = !!outputName;
-    return `<div class="action-band">
-        <button class="file-btn-delete-folder" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer dossier</button>
+    return `<button class="file-btn-delete-folder" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer dossier</button>
         <button class="file-btn-delete-m4b" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedOutput('${jsOutput}','${jsFolder}')">Supprimer M4B</button>
-        <button class="file-btn-delete-both" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedBoth('${jsFolder}','${jsOutput}')">Supprimer les deux</button>
-    </div>`;
+        <button class="file-btn-delete-both" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedBoth('${jsFolder}','${jsOutput}')">Supprimer les deux</button>`;
 }
 
 function renderInlineJobProgress(job){
@@ -839,9 +839,7 @@ async function loadLibrary() {
                ${f.can_ignore ? `<button class="secondary" ${hideActionsForJob ? 'disabled' : ''} onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
                ${f.suggest_delete ? `<button class="danger" ${hideActionsForJob ? 'disabled' : ''} onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
                <button ${hideActionsForJob ? 'disabled' : ''} onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>`;
-        const rowBand = hideActionsForJob
-            ? renderProcessingActionBand(job, f.name)
-            : `<div class="action-band">${actionButtons}</div>`;
+        const bandInner = hideActionsForJob ? renderProcessingActionBand(job, f.name) : actionButtons;
         fb.innerHTML += `<tr class="row-main">
             <td class="checkbox-col"><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''} onchange="bindSelectionState('folderSel', 'folderSelAll')"></td>
             <td>
@@ -850,11 +848,10 @@ async function loadLibrary() {
             </td>
             <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
             <td>${fmtMb(f.size)}</td>
-            <td></td>
         </tr>
-        <tr class="row-band"><td class="checkbox-col"></td><td colspan="4">${rowBand}</td></tr>`;
+        <tr class="row-band"><td colspan="4"><div class="action-band${hideActionsForJob ? ' processing' : ''}" ${hideActionsForJob ? `onclick="openJobLightbox('${jsFolder}')"` : ''}><span class="checkbox-slot"></span>${bandInner}</div></td></tr>`;
     });
-    if (!data.folders.length) fb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier</td></tr>';
+    if (!data.folders.length) fb.innerHTML = '<tr><td colspan="4" class="muted">Aucun dossier</td></tr>';
     const archivesPending = (data.archives || []).filter(a => !(a.validation && a.validation.valid === true)).length;
     setKpiValue('kpiFolders', data.folders.length || 0);
     setKpiValue('kpiArchivesPending', archivesPending);
@@ -871,9 +868,8 @@ async function loadLibrary() {
             <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
             <td>${fmtMb(f.size)}</td>
             <td>${outputLabel}</td>
-            <td></td>
         </tr>
-        <tr class="row-band"><td class="checkbox-col"></td><td colspan="5">${renderFileActionBand(f.name, outputName)}</td></tr>`;
+        <tr class="row-band"><td colspan="5"><div class="action-band"><span class="checkbox-slot"></span>${renderFileActionBand(f.name, outputName)}</div></td></tr>`;
     });
     if (!(data.hidden_processed_folders || []).length) {
         hpb.innerHTML = '<tr><td colspan="6" class="muted">Aucun dossier déjà traité caché</td></tr>';

@@ -147,9 +147,10 @@
         .panel-head { display:flex; flex-direction:column; align-items:flex-start; gap:8px; margin-bottom:8px; }
         .panel-actions { display:flex; flex-wrap:wrap; gap:6px; }
         .panel-actions button { font-size:12px; padding:4px 8px; }
-        .panel-body { overflow:auto; min-height:0; border:1px solid var(--border); border-radius:8px; }
-        .panel-body table { min-width:520px; }
-        .panel-body th, .panel-body td { font-size:12px; padding:6px; }
+        .panel-body { overflow-y:auto; overflow-x:hidden; min-height:0; border:1px solid var(--border); border-radius:8px; }
+        .panel-body table { width:100%; table-layout:fixed; min-width:0; }
+        .panel-body th, .panel-body td { font-size:12px; padding:6px; overflow-wrap:anywhere; word-break:break-word; }
+        .panel-body td button { font-size:11px; padding:3px 6px; line-height:1.2; max-width:100%; }
         .sidebar .tab.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
         .sidebar .tab.packet-tab,.sidebar .tab.plugin-tab,.sidebar .tab.config-tab { background:transparent; border-color:transparent; color:#cbd5e1; }
         .sidebar .tab.packet-tab.active,.sidebar .tab.plugin-tab.active,.sidebar .tab.config-tab.active { background:#2563eb; border-color:#2563eb; color:#fff; }

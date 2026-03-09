@@ -872,7 +872,7 @@ async function loadLibrary() {
         <tr class="row-band"><td colspan="5"><div class="action-band"><span class="checkbox-slot"></span>${renderFileActionBand(f.name, outputName)}</div></td></tr>`;
     });
     if (!(data.hidden_processed_folders || []).length) {
-        hpb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier déjà traité caché</td></tr>';
+        hpb.innerHTML = '<tr><td colspan="6" class="muted">Aucun dossier déjà traité caché</td></tr>';
     }
     bindSelectionState('fileSel', 'fileSelAll');
 
@@ -1700,6 +1700,16 @@ function setupTheme(){
     });
 }
 
+
+const jobLightboxEl = document.getElementById('jobLightbox');
+if (jobLightboxEl) {
+    jobLightboxEl.addEventListener('click', (event) => {
+        if (event.target === jobLightboxEl) closeJobLightbox();
+    });
+}
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeJobLightbox();
+});
 
 const jobLightboxEl = document.getElementById('jobLightbox');
 if (jobLightboxEl) {

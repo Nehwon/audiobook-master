@@ -95,7 +95,7 @@ class TestWebApiSprint3(unittest.TestCase):
         self.assertEqual(response.mimetype, "text/event-stream")
         body = response.get_data(as_text=True)
 
-        self.assertIn("event: job.updated", body)
+        self.assertIn("\"event_type\": \"job.updated\"", body)
         self.assertIn('"aggregate_type": "job"', body)
         self.assertIn("event: heartbeat", body)
 

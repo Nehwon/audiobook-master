@@ -1479,6 +1479,7 @@ function connectLiveEvents(){
 
     source.addEventListener('heartbeat', () => {
         setLiveSyncStatus('live');
+        scheduleDebouncedFullRefresh();
     });
 
     source.onerror = () => {

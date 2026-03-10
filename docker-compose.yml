@@ -98,8 +98,6 @@ services:
       - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8080}
     networks:
       - audiobook-network
-    profiles:
-      - ${REACT_PROFILE:-frontend}
 
   # 📊 Monitoring optionnel avec Prometheus
   prometheus:
@@ -120,8 +118,6 @@ services:
       - '--web.enable-lifecycle'
     networks:
       - audiobook-network
-    profiles:
-      - ${PROMETHEUS_PROFILE:-monitoring}
 
   # 📈 Dashboard Grafana optionnel
   grafana:
@@ -139,8 +135,6 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=${GF_USERS_ALLOW_SIGN_UP:-false}
     networks:
       - audiobook-network
-    profiles:
-      - ${GRAFANA_PROFILE:-monitoring}
 
   # 🗄️ Base de données optionnelle (pour futures fonctionnalités)
   postgres:
@@ -164,8 +158,6 @@ services:
       retries: ${POSTGRES_HEALTHCHECK_RETRIES:-5}
     networks:
       - audiobook-network
-    profiles:
-      - ${POSTGRES_PROFILE:-database}
 
   # 🔄 Redis pour le cache et les queues
   redis:
@@ -179,8 +171,6 @@ services:
     command: ${REDIS_COMMAND:-redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru}
     networks:
       - audiobook-network
-    profiles:
-      - ${REDIS_PROFILE:-cache}
 
 # 🌐 Réseau partagé
 networks:

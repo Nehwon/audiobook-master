@@ -3,11 +3,8 @@
 ## Lancement rapide
 
 ```bash
-# Stack backend seule
+# Stack complète (tous les services)
 docker compose up -d
-
-# Stack avec PostgreSQL + UI React (profilée)
-docker compose --profile database --profile frontend up -d --build
 ```
 
 ## Services
@@ -40,8 +37,7 @@ curl -fsS http://localhost:5000/health
 
 Pour préparer une base PostgreSQL et une interface React de développement :
 
-- Activez le profil `database` pour démarrer `postgres`.
-- Activez le profil `frontend` pour démarrer `react-ui` (Vite sur le port `5173`).
+- `postgres` et `react-ui` sont démarrés par défaut avec `docker compose up -d`.
 - Configurez `AUDIOBOOK_DATABASE_URL` vers PostgreSQL, exemple :
 
 ```bash

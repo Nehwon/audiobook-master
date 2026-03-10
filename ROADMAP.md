@@ -17,6 +17,13 @@ Cette roadmap reflète l'état du dépôt tel qu'implémenté aujourd'hui, avec 
 - Endpoint admin `/api/recovery/status` pour visibilité exploitation.
 - Idempotence dossier logique pour limiter les doublons de traitement.
 
+## ✅ Sprint 3 finalisé
+
+- Endpoints frontend normalisés pour erreurs/validations (`ok`, `data`, `meta`).
+- Flux SSE `/api/events/stream` branché sur outbox events (avec fallback mémoire).
+- Pagination/filtrage API pour dossiers et historique.
+- Contrat OpenAPI minimal + tests de contrat API dédiés.
+
 ## 🎯 Court terme (0–1 mois)
 
 - **Stabiliser la CI sur un socle vert**

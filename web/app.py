@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import rarfile
-from flask import Flask, jsonify, make_response, render_template, request, send_file
+from flask import Flask, Response, jsonify, make_response, render_template, request, send_file
 
 from core.config import ProcessingConfig
 from core.metadata import BookScraper
@@ -213,6 +213,23 @@ def _api_error(message: str, status: int = 400, code: str = "bad_request", *, de
     if details:
         payload["details"] = details
     return jsonify(payload), status
+
+
+def _api_success(*, data=None, meta: Optional[Dict] = None, status: int = 200):
+    payload: Dict[str, object] = {"ok": True}
+    if data is not None:
+        payload["data"] = data
+    if meta:
+        payload["meta"] = meta
+    return jsonify(payload), status
+
+
+def _parse_positive_int(value: Optional[str], *, default: int, minimum: int = 0, maximum: int = 500) -> int:
+    try:
+        parsed = int(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, parsed))
 
 
 def _resolve_output_file(filename: str) -> Optional[Path]:
@@ -3053,6 +3070,135 @@ def api_recovery_status():
     payload["heartbeat_timeout_seconds"] = HEARTBEAT_TIMEOUT_SECONDS
     payload["max_retries"] = RECOVERY_MAX_RETRIES
     return jsonify(payload)
+
+
+@app.route("/api/folders/errors")
+def api_folder_errors():
+    folder_id = (request.args.get("folder_id") or "").strip() or None
+    offset = _parse_positive_int(request.args.get("offset"), default=0, minimum=0, maximum=100_000)
+    limit = _parse_positive_int(request.args.get("limit"), default=50, minimum=1, maximum=200)
+
+    session_factory = _get_persistence_session_factory()
+    if not session_factory:
+        return _api_success(data=[], meta={"offset": offset, "limit": limit, "total": 0})
+
+    from sqlalchemy import func, select
+    from persistence.models import ProcessingError
+
+    with session_scope(session_factory) as session:
+        filters = []
+        if folder_id:
+            filters.append(ProcessingError.folder_id == folder_id)
+
+        stmt = select(ProcessingError)
+        count_stmt = select(func.count()).select_from(ProcessingError)
+        if filters:
+            for cond in filters:
+                stmt = stmt.where(cond)
+                count_stmt = count_stmt.where(cond)
+
+        stmt = stmt.order_by(ProcessingError.created_at.desc()).offset(offset).limit(limit)
+        total = int(session.scalar(count_stmt) or 0)
+        rows = list(session.scalars(stmt))
+
+    data = [
+        {
+            "id": row.id,
+            "job_id": row.job_id,
+            "folder_id": row.folder_id,
+            "error_code": row.error_code,
+            "user_message": row.user_message,
+            "technical_message": row.technical_message,
+            "retryable": row.retryable,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]
+    return _api_success(data=data, meta={"offset": offset, "limit": limit, "total": total})
+
+
+@app.route("/api/folders/validations")
+def api_folder_validations():
+    folder_id = (request.args.get("folder_id") or "").strip() or None
+    validation_key = (request.args.get("validation_key") or "").strip() or None
+    offset = _parse_positive_int(request.args.get("offset"), default=0, minimum=0, maximum=100_000)
+    limit = _parse_positive_int(request.args.get("limit"), default=50, minimum=1, maximum=200)
+
+    session_factory = _get_persistence_session_factory()
+    if not session_factory:
+        return _api_success(data=[], meta={"offset": offset, "limit": limit, "total": 0})
+
+    from sqlalchemy import func, select
+    from persistence.models import ValidationResult
+
+    with session_scope(session_factory) as session:
+        filters = []
+        if folder_id:
+            filters.append(ValidationResult.folder_id == folder_id)
+        if validation_key:
+            filters.append(ValidationResult.validation_key == validation_key)
+
+        stmt = select(ValidationResult)
+        count_stmt = select(func.count()).select_from(ValidationResult)
+        if filters:
+            for cond in filters:
+                stmt = stmt.where(cond)
+                count_stmt = count_stmt.where(cond)
+
+        stmt = stmt.order_by(ValidationResult.created_at.desc(), ValidationResult.id.desc()).offset(offset).limit(limit)
+        total = int(session.scalar(count_stmt) or 0)
+        rows = list(session.scalars(stmt))
+
+    data = [
+        {
+            "id": row.id,
+            "folder_id": row.folder_id,
+            "validation_key": row.validation_key,
+            "status": row.status,
+            "payload": row.payload,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]
+    return _api_success(data=data, meta={"offset": offset, "limit": limit, "total": total})
+
+
+@app.route("/api/events/stream")
+def api_events_stream():
+    since_id = _parse_positive_int(request.args.get("since_id"), default=0, minimum=0, maximum=10_000_000)
+
+    def generate():
+        # Keep payload deterministic for frontend hydration/tests.
+        session_factory = _get_persistence_session_factory()
+        if session_factory:
+            from sqlalchemy import select
+            from persistence.models import OutboxEvent
+
+            with session_scope(session_factory) as session:
+                stmt = select(OutboxEvent).where(OutboxEvent.id > since_id).order_by(OutboxEvent.id.asc()).limit(200)
+                rows = list(session.scalars(stmt))
+            for row in rows:
+                payload = {
+                    "id": row.id,
+                    "event_type": row.event_type,
+                    "aggregate_type": row.aggregate_type,
+                    "aggregate_id": row.aggregate_id,
+                    "payload": row.payload,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                yield f"id: {row.id}\nevent: {row.event_type}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        else:
+            with jobs_lock:
+                snapshot = list(job_events[-100:])
+            for idx, evt in enumerate(snapshot, start=1):
+                if idx <= since_id:
+                    continue
+                payload = {"id": idx, "event_type": "job.updated", "payload": evt}
+                yield f"id: {idx}\nevent: job.updated\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        yield "event: heartbeat\ndata: {}\n\n"
+
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    return Response(generate(), mimetype="text/event-stream", headers=headers)
 
 
 @app.route("/api/monitor")

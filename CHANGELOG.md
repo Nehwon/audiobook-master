@@ -4,6 +4,11 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et v
 
 ## [Unreleased]
 
+### Added
+- Sprint 3 finalisé: nouveaux endpoints frontend `GET /api/folders/errors`, `GET /api/folders/validations` et flux SSE `GET /api/events/stream`.
+- Contrat OpenAPI minimal Sprint 3 (`docs/api/openapi-frontend-sprint3.yaml`).
+- Tests de contrat API Sprint 3 (`tests/test_web_api_sprint3.py`).
+
 ### Changed
 - Mise à jour de la documentation racine (`README.md`, `ROADMAP.md`, `TODO.md`) pour refléter l'état réel du projet.
 - Mise à jour des documents dans `docs/` (usage, installation, développeur, CI/CD, Docker, plugins, frontend).

@@ -71,6 +71,9 @@
             background: var(--primary);
             animation: softPulse 1.8s ease-in-out infinite;
         }
+        .live-badge { font-size: 12px; border-radius: 999px; padding: 5px 10px; border: 1px solid var(--border); background: var(--card); color: var(--muted); }
+        .live-badge.live { border-color: #059669; color: #059669; }
+        .live-badge.offline { border-color: #d97706; color: #d97706; }
         @keyframes softPulse {
             0% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.35); transform: scale(1); }
             70% { box-shadow: 0 0 0 9px rgba(79, 70, 229, 0); transform: scale(1.04); }
@@ -216,6 +219,7 @@
     </div>
     <div class="top-actions">
         <div class="search-pill">Search (Ctrl+Space / Ctrl+Shift+F)</div>
+        <span id="liveSyncBadge" class="live-badge offline" title="Synchronisation temps réel">Live sync: reconnexion…</span>
         <span id="apiActivityDot" class="status-dot" title="Activité API"></span>
         <label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label>
     </div>
@@ -1332,64 +1336,6 @@ function shouldRefreshLibrary(){
     return true;
 }
 
-
-
-function hasLibrarySelection(){
-    return selectedValues('folderSel').length > 0 || selectedValues('archiveSel').length > 0;
-}
-
-function canPatchLibrarySafely(){
-    return shouldRefreshLibrary() && isLibraryTabActive() && !hasLibrarySelection();
-}
-
-async function monitorAndPatchDom(){
-    if (monitorState.inFlight) return;
-    monitorState.inFlight = true;
-    try {
-        const qs = new URLSearchParams({
-            source_sig: monitorState.sourceSig,
-            output_sig: monitorState.outputSig,
-            jobs_sig: monitorState.jobsSig,
-        });
-        const payload = await api(`/api/monitor?${qs.toString()}`);
-        const signs = payload?.signatures || {};
-        const changes = payload?.changes || {};
-
-        const firstSync = !monitorState.sourceSig && !monitorState.outputSig && !monitorState.jobsSig;
-        monitorState.sourceSig = signs.source_sig || monitorState.sourceSig;
-        monitorState.outputSig = signs.output_sig || monitorState.outputSig;
-        monitorState.jobsSig = signs.jobs_sig || monitorState.jobsSig;
-
-        if (firstSync) return;
-
-        if (changes.jobs) {
-            await loadJobs({forceDoneRefresh: false});
-        }
-        if (changes.outputs) {
-            await loadSubmissionQueue();
-        }
-        if (changes.library) {
-            monitorState.pendingLibraryRefresh = true;
-        }
-        if (monitorState.pendingLibraryRefresh && canPatchLibrarySafely()) {
-            await loadLibrary();
-            monitorState.pendingLibraryRefresh = false;
-        }
-    } catch (err) {
-        // On garde l'UI interactive; les actions utilisateur déclenchent déjà les updates AJAX directes.
-    } finally {
-        monitorState.inFlight = false;
-    }
-}
-
-const monitorState = {
-    sourceSig: '',
-    outputSig: '',
-    jobsSig: '',
-    pendingLibraryRefresh: false,
-    inFlight: false,
-};
-
 function isLibraryTabActive(){
     const activeTab = document.querySelector('.tab.active');
     return activeTab?.dataset?.page === 'library';
@@ -1403,6 +1349,35 @@ function canPatchLibrarySafely(){
     return shouldRefreshLibrary() && isLibraryTabActive() && !hasLibrarySelection();
 }
 
+const monitorState = {
+    sourceSig: '',
+    outputSig: '',
+    jobsSig: '',
+    pendingLibraryRefresh: false,
+    inFlight: false,
+    eventSource: null,
+    retryTimer: null,
+    retryCount: 0,
+    fullRefreshDebounce: null,
+    didHydrateOnce: false,
+};
+
+function setLiveSyncStatus(state){
+    const badge = document.getElementById('liveSyncBadge');
+    if (!badge) return;
+    badge.classList.remove('live', 'offline');
+    if (state === 'live') {
+        badge.classList.add('live');
+        badge.textContent = 'Live sync: actif';
+    } else if (state === 'connecting') {
+        badge.classList.add('offline');
+        badge.textContent = 'Live sync: reconnexion…';
+    } else {
+        badge.classList.add('offline');
+        badge.textContent = 'Live sync: indisponible';
+    }
+}
+
 async function monitorAndPatchDom(){
     if (monitorState.inFlight) return;
     monitorState.inFlight = true;
@@ -1421,7 +1396,10 @@ async function monitorAndPatchDom(){
         monitorState.outputSig = signs.output_sig || monitorState.outputSig;
         monitorState.jobsSig = signs.jobs_sig || monitorState.jobsSig;
 
-        if (firstSync) return;
+        if (firstSync) {
+            monitorState.didHydrateOnce = true;
+            return;
+        }
 
         if (changes.jobs) {
             await loadJobs({forceDoneRefresh: false});
@@ -1436,11 +1414,58 @@ async function monitorAndPatchDom(){
             await loadLibrary();
             monitorState.pendingLibraryRefresh = false;
         }
+        monitorState.didHydrateOnce = true;
     } catch (err) {
         // On garde l'UI interactive; les actions utilisateur déclenchent déjà les updates AJAX directes.
     } finally {
         monitorState.inFlight = false;
     }
+}
+
+function scheduleDebouncedFullRefresh(){
+    clearTimeout(monitorState.fullRefreshDebounce);
+    monitorState.fullRefreshDebounce = setTimeout(async () => {
+        await monitorAndPatchDom();
+    }, 220);
+}
+
+function connectLiveEvents(){
+    if (!window.EventSource) {
+        setLiveSyncStatus('offline');
+        return;
+    }
+    if (monitorState.eventSource) {
+        monitorState.eventSource.close();
+    }
+    clearTimeout(monitorState.retryTimer);
+
+    setLiveSyncStatus('connecting');
+    const source = new EventSource('/api/events/stream');
+    monitorState.eventSource = source;
+
+    source.onopen = () => {
+        monitorState.retryCount = 0;
+        setLiveSyncStatus('live');
+    };
+
+    source.onmessage = () => {
+        scheduleDebouncedFullRefresh();
+    };
+
+    source.addEventListener('heartbeat', () => {
+        setLiveSyncStatus('live');
+    });
+
+    source.onerror = () => {
+        setLiveSyncStatus('connecting');
+        if (monitorState.eventSource) {
+            monitorState.eventSource.close();
+            monitorState.eventSource = null;
+        }
+        const retryDelay = Math.min(10000, 1000 * (2 ** Math.min(monitorState.retryCount, 4)));
+        monitorState.retryCount += 1;
+        monitorState.retryTimer = setTimeout(() => connectLiveEvents(), retryDelay);
+    };
 }
 
 function renderLlmResults(items){
@@ -1757,14 +1782,15 @@ loadJobs();
 loadConfig();
 loadSubmissionQueue();
 loadOllamaStatus();
-setTimeout(() => monitorAndPatchDom(), 600);
+setTimeout(async () => {
+    await monitorAndPatchDom();
+    connectLiveEvents();
+}, 350);
 
-// Monitoring AJAX précis (sans rechargement de page):
-// - vérifie régulièrement les changements dossiers/jobs côté backend
-// - applique uniquement les patchs DOM nécessaires.
+// Filet de sécurité : même en cas de coupure SSE, on garde une synchro périodique.
 setInterval(() => {
     monitorAndPatchDom();
-}, 1500);
+}, 10000);
 </script>
 </body>
 </html>

@@ -5,14 +5,12 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et v
 ## [Unreleased]
 
 ### Added
-- Sprint 3 finalisé: nouveaux endpoints frontend `GET /api/folders/errors`, `GET /api/folders/validations` et flux SSE `GET /api/events/stream`.
-- Contrat OpenAPI minimal Sprint 3 (`docs/api/openapi-frontend-sprint3.yaml`).
-- Tests de contrat API Sprint 3 (`tests/test_web_api_sprint3.py`).
+- Sprint 4 clôturé côté documentation: plan de migration UI React consolidé (`docs/sprint-4/README.md`, `docs/sprint-4/CLOTURE.md`).
+- Référencement du Sprint 4 dans la documentation racine (`README.md`, `ROADMAP.md`, `TODO.md`, `docs/SPRINTS_REACT_POSTGRESQL.md`).
 
 ### Changed
-- Mise à jour de la documentation racine (`README.md`, `ROADMAP.md`, `TODO.md`) pour refléter l'état réel du projet.
-- Mise à jour des documents dans `docs/` (usage, installation, développeur, CI/CD, Docker, plugins, frontend).
-- Harmonisation éditoriale (structure, tableaux, sections d'avancement, terminologie CLI/Web).
+- Mise à jour de l'état d'avancement des sprints: Sprint 4 est désormais marqué comme terminé (périmètre documentaire).
+- Harmonisation éditoriale des documents de pilotage produit et de migration frontend.
 
 ### Notes
 - Les wrappers `run.py` et `start_web.py` sont maintenus pour compatibilité, mais restent dépréciés.

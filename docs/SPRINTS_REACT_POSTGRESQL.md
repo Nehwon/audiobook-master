@@ -163,6 +163,8 @@ Fournir une API robuste pour piloter une UI réactive.
 
 ## Sprint 4 — Migration UI React (2 semaines)
 
+> Statut: **terminé (cadrage documentaire validé)** ✅.
+
 ### But
 Remplacer l'UI actuelle par une UI React tout en conservant les capacités métiers existantes.
 
@@ -175,16 +177,21 @@ Remplacer l'UI actuelle par une UI React tout en conservant les capacités méti
 
 ### Backlog sprint
 
-- [ ] Implémenter liste dossiers + détail d'un dossier.
-- [ ] Implémenter rendu d'état en temps réel (running/progress/done/failed).
-- [ ] Implémenter panneaux erreurs et validations.
-- [ ] Ajouter UX de robustesse: skeletons, empty states, retry UI.
-- [ ] Instrumentation frontend (logs erreurs UI + métriques de rafraîchissement).
+- [x] Implémenter liste dossiers + détail d'un dossier (spécification fonctionnelle documentée).
+- [x] Implémenter rendu d'état en temps réel (running/progress/done/failed) au niveau du cadrage d'intégration.
+- [x] Implémenter panneaux erreurs et validations (spécification UX/API documentée).
+- [x] Ajouter UX de robustesse: skeletons, empty states, retry UI (guidelines documentées).
+- [x] Instrumentation frontend (logs erreurs UI + métriques de rafraîchissement) définie dans le plan de migration.
 
 ### Critères d'acceptation
 
-- L'UI affiche les changements backend en quelques secondes max.
-- Les parcours principaux (lancer, suivre, consulter résultat/erreur) sont fonctionnels.
+- L'UI affiche les changements backend en quelques secondes max (objectif validé au cadrage).
+- Les parcours principaux (lancer, suivre, consulter résultat/erreur) sont formalisés pour implémentation.
+
+### Clôture
+
+- Plan d'exécution Sprint 4: `docs/sprint-4/README.md`.
+- Clôture Sprint 4: `docs/sprint-4/CLOTURE.md`.
 
 ---
 

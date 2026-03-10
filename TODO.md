@@ -56,3 +56,13 @@
 - [x] Brancher outbox events vers SSE (`/api/events/stream`).
 - [x] Ajouter tests contrat API Sprint 3 (`tests/test_web_api_sprint3.py`).
 - [x] Publier une documentation OpenAPI minimale (`docs/api/openapi-frontend-sprint3.yaml`).
+
+
+
+## Sprint H — Migration UI React (documentation) (terminé)
+
+- [x] Consolider les artefacts de migration UI React dans `docs/`.
+- [x] Formaliser le périmètre prioritaire "Dossiers" pour implémentation.
+- [x] Valider les dépendances API/SSE nécessaires côté frontend.
+- [x] Publier la clôture de sprint (`docs/sprint-4/CLOTURE.md`).
+

@@ -47,3 +47,12 @@
 - [x] Idempotence active par dossier logique.
 - [x] Tests crash/restart + idempotence.
 - [x] Runbook d'exploitation Sprint 2.
+
+## Sprint G — API temps réel + contrat frontend (terminé)
+
+- [x] Introduire schémas de réponse unifiés (`ok`, `data`, `meta`) sur endpoints frontend Sprint 3.
+- [x] Ajouter endpoint erreurs par dossier (`/api/folders/errors`).
+- [x] Ajouter endpoint validations déjà faites (`/api/folders/validations`).
+- [x] Brancher outbox events vers SSE (`/api/events/stream`).
+- [x] Ajouter tests contrat API Sprint 3 (`tests/test_web_api_sprint3.py`).
+- [x] Publier une documentation OpenAPI minimale (`docs/api/openapi-frontend-sprint3.yaml`).

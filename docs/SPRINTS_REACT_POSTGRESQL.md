@@ -140,16 +140,24 @@ Fournir une API robuste pour piloter une UI réactive.
 
 ### Backlog sprint
 
-- [ ] Introduire schémas de réponse unifiés.
-- [ ] Ajouter endpoint erreurs par dossier pour affichage ciblé en UI.
-- [ ] Ajouter endpoint « validations déjà faites » pour éviter recalcul.
-- [ ] Brancher l'outbox events vers SSE.
-- [ ] Ajouter tests contrat API (snapshot JSON / tests schéma).
+- [x] Introduire schémas de réponse unifiés.
+- [x] Ajouter endpoint erreurs par dossier pour affichage ciblé en UI.
+- [x] Ajouter endpoint « validations déjà faites » pour éviter recalcul.
+- [x] Brancher l'outbox events vers SSE.
+- [x] Ajouter tests contrat API (snapshot JSON / tests schéma).
 
 ### Critères d'acceptation
 
 - Le frontend peut se synchroniser sans polling agressif.
 - Tous les cas d'erreurs affichables disposent d'un message utilisateur clair.
+
+### Statut
+
+> **Sprint 3 terminé et validé**.
+
+- Plan d'exécution Sprint 3: `docs/sprint-3/README.md`.
+- Clôture Sprint 3: `docs/sprint-3/CLOTURE.md`.
+- Contrat OpenAPI Sprint 3: `docs/api/openapi-frontend-sprint3.yaml`.
 
 ---
 

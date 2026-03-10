@@ -1,0 +1,54 @@
+openapi: 3.0.3
+info:
+  title: Audiobook Manager - Frontend API Contract (Sprint 3)
+  version: 3.0.0
+paths:
+  /api/folders/errors:
+    get:
+      summary: Liste paginée des erreurs de traitement
+      parameters:
+        - in: query
+          name: folder_id
+          schema: { type: string }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: OK
+  /api/folders/validations:
+    get:
+      summary: Liste paginée des validations déjà calculées
+      parameters:
+        - in: query
+          name: folder_id
+          schema: { type: string }
+        - in: query
+          name: validation_key
+          schema: { type: string }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: OK
+  /api/events/stream:
+    get:
+      summary: Flux Server-Sent Events pour synchronisation frontend
+      parameters:
+        - in: query
+          name: since_id
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Flux SSE
+          content:
+            text/event-stream:
+              schema:
+                type: string

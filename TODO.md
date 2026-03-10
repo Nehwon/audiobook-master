@@ -66,3 +66,11 @@
 - [x] Valider les dépendances API/SSE nécessaires côté frontend.
 - [x] Publier la clôture de sprint (`docs/sprint-4/CLOTURE.md`).
 
+
+## Sprint I — Erreurs rouges + validation persistée (documentation) (terminé)
+
+- [x] Formaliser le mapping fonctionnel `error_code -> message utilisateur` dans la documentation de sprint.
+- [x] Spécifier le composant cible `FolderErrorBanner` et son comportement.
+- [x] Cadrer le tri/filtre « dossiers en erreur » pour implémentation frontend.
+- [x] Définir l’indicateur « validation réutilisée » dans le rendu dossier.
+- [x] Publier la clôture de sprint (`docs/sprint-5/CLOTURE.md`).

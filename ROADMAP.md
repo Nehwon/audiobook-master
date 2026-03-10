@@ -32,13 +32,20 @@ Cette roadmap reflète l'état du dépôt tel qu'implémenté aujourd'hui, avec 
 - Stratégie SSE retenue pour synchronisation temps réel frontend.
 - Passage vers Sprint 5 validé.
 
+## ✅ Sprint 5 clôturé (erreurs rouges + validation persistée — documentation)
+
+- Spécification UX validée pour signalisation rouge des dossiers en erreur.
+- Cadrage des messages d’erreur actionnables dans la zone « Dossiers ».
+- Réutilisation des validations persistées explicitée côté interface.
+- Passage vers Sprint 6 validé.
+
 ## 🎯 Court terme (0–1 mois)
 
 - **Stabiliser la CI sur un socle vert**
   - Maintenir `tests/test_smoke_suite.py` comme garde-fou.
   - Isoler les tests fragiles et normaliser les fixtures.
-- **Industrialiser l'implémentation React (Sprint 5)**
-  - Transformer le cadrage Sprint 4 en backlog UI exécutable.
+- **Industrialiser l'implémentation React (Sprint 6)**
+  - Transformer le cadrage Sprint 5 en backlog UI exécutable et stable.
   - Prioriser les composants "erreur visible" et "validation réutilisée".
 - **Durcir la couche API web**
   - Uniformiser les codes/structures d'erreurs sur tous les endpoints.

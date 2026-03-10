@@ -2483,10 +2483,14 @@ def api_integration_packet_remove_file(packet_id: str):
 def api_library():
     media = _list_media()
     with jobs_lock:
-        active_jobs = [asdict(j) for j in jobs.values() if j.status in {"pending", "running"}]
+        visible_jobs = [
+            asdict(j)
+            for j in jobs.values()
+            if j.status in {"pending", "running", "failed", "cancelled"}
+        ]
 
     by_folder: Dict[str, Dict] = {}
-    for job in sorted(active_jobs, key=lambda j: j.get("created_at", 0), reverse=True):
+    for job in sorted(visible_jobs, key=lambda j: j.get("created_at", 0), reverse=True):
         folder_name = job.get("folder")
         if isinstance(folder_name, str) and folder_name and folder_name not in by_folder:
             by_folder[folder_name] = {
@@ -2496,6 +2500,7 @@ def api_library():
                 "stage": job.get("stage", "En attente"),
                 "phase_progress": job.get("phase_progress", {}),
                 "started_at": job.get("started_at"),
+                "error": job.get("error"),
             }
 
     for folder in media["folders"]:

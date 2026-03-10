@@ -661,11 +661,26 @@ function renderProcessingActionBand(job, folder, audioCount=0){
     const points = computePhasePoints(job, audioCount);
     const pct = points.total ? Math.round((points.processed / points.total) * 100) : 0;
     const folderJs = toJsString(folder || '');
-    const isPending = String(job?.status || '').toLowerCase() === 'pending';
-    const statusLabel = isPending ? 'Dossier en attente de traitement' : 'Dossier en cours de traitement';
+    const status = String(job?.status || '').toLowerCase();
+    const isPending = status === 'pending';
+    const isFailed = status === 'failed';
+    const isCancelled = status === 'cancelled';
+    const statusLabel = isFailed
+        ? 'Erreur de traitement'
+        : isCancelled
+            ? 'Traitement annulé'
+            : isPending
+                ? 'Dossier en attente de traitement'
+                : 'Dossier en cours de traitement';
+    const detail = isFailed && job?.error
+        ? `<span class="band-progress-label" style="color:var(--danger)">❌ ${escapeHtml(job.error)}</span>`
+        : `<span class="band-progress-label">${pct}% (${points.processed}/${points.total} étapes)</span>`;
+    const track = isFailed || isCancelled
+        ? ''
+        : `<div class="band-progress-track"><div class="band-progress-bar" style="width:${pct}%"></div></div>`;
     return `<span class="band-status">${statusLabel}</span>
-        <div class="band-progress-track"><div class="band-progress-bar" style="width:${pct}%"></div></div>
-        <span class="band-progress-label">${pct}% (${points.processed}/${points.total} étapes)</span>
+        ${track}
+        ${detail}
         <button class="secondary" onclick="event.stopPropagation();openJobLightbox('${folderJs}')">Détail</button>`;
 }
 

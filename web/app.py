@@ -2762,13 +2762,32 @@ def api_jobs():
     pending = sorted([j for j in values if j["status"] == "pending"], key=sort_key)
     running = sorted([j for j in values if j["status"] == "running"], key=sort_key)
     done = sorted([j for j in values if j["status"] in {"completed", "failed", "cancelled"}], key=sort_key, reverse=True)
+    review_entries = list(review_bin)
+    tracked_review_folders = {
+        str(entry.get("folder") or "") for entry in review_entries if isinstance(entry, dict)
+    }
+    for job in done:
+        if job.get("status") != "failed":
+            continue
+        folder = str(job.get("folder") or "")
+        if not folder or folder in tracked_review_folders:
+            continue
+        review_entries.append({
+            "job_id": job.get("id"),
+            "folder": folder,
+            "output_file": job.get("output_file"),
+            "action": "delete",
+            "timestamp": job.get("ended_at") or job.get("updated_at") or time.time(),
+            "source": "auto_failed",
+        })
+        tracked_review_folders.add(folder)
     processing_threads = len(running)
 
     return jsonify({
         "pending": pending,
         "running": running,
         "done": done,
-        "review": review_bin,
+        "review": review_entries,
         "events": job_events[-100:],
         "processing_threads": processing_threads,
     })

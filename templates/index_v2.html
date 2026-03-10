@@ -678,10 +678,14 @@ function renderProcessingActionBand(job, folder, audioCount=0){
     const track = isFailed || isCancelled
         ? ''
         : `<div class="band-progress-track"><div class="band-progress-bar" style="width:${pct}%"></div></div>`;
+    const deleteBtn = isFailed
+        ? `<button class="danger" onclick="event.stopPropagation();deleteSuspectFolder('${folderJs}')">Supprimer</button>`
+        : '';
     return `<span class="band-status">${statusLabel}</span>
         ${track}
         ${detail}
-        <button class="secondary" onclick="event.stopPropagation();openJobLightbox('${folderJs}')">Détail</button>`;
+        <button class="secondary" onclick="event.stopPropagation();openJobLightbox('${folderJs}')">Détail</button>
+        ${deleteBtn}`;
 }
 
 function renderFileActionBand(folder, outputName){

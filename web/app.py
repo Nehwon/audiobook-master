@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import rarfile
-from flask import Flask, Response, jsonify, make_response, render_template, request, send_file
+from flask import Flask, Response, jsonify, make_response, render_template, request, send_file, stream_with_context
 
 from core.config import ProcessingConfig
 from core.metadata import BookScraper
@@ -3189,40 +3189,75 @@ def api_folder_validations():
 
 @app.route("/api/events/stream")
 def api_events_stream():
-    since_id = _parse_positive_int(request.args.get("since_id"), default=0, minimum=0, maximum=10_000_000)
+    query_since_id = _parse_positive_int(request.args.get("since_id"), default=0, minimum=0, maximum=10_000_000)
+    header_last_event_id = _parse_positive_int(request.headers.get("Last-Event-ID"), default=0, minimum=0, maximum=10_000_000)
+    since_id = max(query_since_id, header_last_event_id)
+    oneshot_raw = (request.args.get("oneshot") or "").strip().lower()
+    oneshot = oneshot_raw in {"1", "true", "yes"} or app.testing
 
     def generate():
-        # Keep payload deterministic for frontend hydration/tests.
+        # Keep connection open to avoid permanent EventSource reconnect loops in the UI.
+        # Emit standard SSE "message" events so frontend `onmessage` is triggered consistently.
+        last_sent_id = since_id
         session_factory = _get_persistence_session_factory()
-        if session_factory:
-            from sqlalchemy import select
-            from persistence.models import OutboxEvent
+        yield "retry: 2500\n\n"
 
-            with session_scope(session_factory) as session:
-                stmt = select(OutboxEvent).where(OutboxEvent.id > since_id).order_by(OutboxEvent.id.asc()).limit(200)
-                rows = list(session.scalars(stmt))
-            for row in rows:
-                payload = {
-                    "id": row.id,
-                    "event_type": row.event_type,
-                    "aggregate_type": row.aggregate_type,
-                    "aggregate_id": row.aggregate_id,
-                    "payload": row.payload,
-                    "created_at": row.created_at.isoformat() if row.created_at else None,
-                }
-                yield f"id: {row.id}\nevent: {row.event_type}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
-        else:
-            with jobs_lock:
-                snapshot = list(job_events[-100:])
-            for idx, evt in enumerate(snapshot, start=1):
-                if idx <= since_id:
-                    continue
-                payload = {"id": idx, "event_type": "job.updated", "payload": evt}
-                yield f"id: {idx}\nevent: job.updated\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
-        yield "event: heartbeat\ndata: {}\n\n"
+        while True:
+            emitted = False
+            try:
+                if session_factory:
+                    from sqlalchemy import select
+                    from persistence.models import OutboxEvent
 
-    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-    return Response(generate(), mimetype="text/event-stream", headers=headers)
+                    with session_scope(session_factory) as session:
+                        stmt = (
+                            select(OutboxEvent)
+                            .where(OutboxEvent.id > last_sent_id)
+                            .order_by(OutboxEvent.id.asc())
+                            .limit(200)
+                        )
+                        rows = list(session.scalars(stmt))
+                    for row in rows:
+                        payload = {
+                            "id": row.id,
+                            "event_type": row.event_type,
+                            "aggregate_type": row.aggregate_type,
+                            "aggregate_id": row.aggregate_id,
+                            "payload": row.payload,
+                            "created_at": row.created_at.isoformat() if row.created_at else None,
+                        }
+                        last_sent_id = row.id
+                        emitted = True
+                        yield f"id: {row.id}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                else:
+                    with jobs_lock:
+                        snapshot = list(job_events[-100:])
+                    for idx, evt in enumerate(snapshot, start=1):
+                        if idx <= last_sent_id:
+                            continue
+                        payload = {"id": idx, "event_type": "job.updated", "payload": evt}
+                        last_sent_id = idx
+                        emitted = True
+                        yield f"id: {idx}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            except GeneratorExit:
+                return
+            except Exception:
+                app.logger.exception("SSE stream loop error")
+
+            if not emitted:
+                yield "event: heartbeat\ndata: {}\n\n"
+
+            if oneshot:
+                return
+
+            time.sleep(2)
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
+    }
+    return Response(stream_with_context(generate()), mimetype="text/event-stream", headers=headers)
 
 
 @app.route("/api/monitor")

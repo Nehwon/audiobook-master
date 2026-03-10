@@ -11,6 +11,8 @@ docker compose up -d
 
 Le `docker-compose.yml` du dépôt définit l'environnement applicatif (web + volumes de données) pour exécution locale.
 
+- Image React par défaut : `ghcr.io/nehwon/audiobook-master-frontend:latest` (surcharge possible via `REACT_IMAGE`).
+
 ## Variables importantes
 
 - `HOST` / `PORT` (runtime web)
@@ -37,7 +39,7 @@ curl -fsS http://localhost:5000/health
 
 Pour préparer une base PostgreSQL et une interface React de développement :
 
-- `postgres` et `react-ui` sont démarrés par défaut avec `docker compose up -d`.
+- `postgres` et `react-ui` sont démarrés par défaut avec `docker compose up -d` via des images publiées (aucun build local requis).
 - Configurez `AUDIOBOOK_DATABASE_URL` vers PostgreSQL, exemple :
 
 ```bash

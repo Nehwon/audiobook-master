@@ -244,17 +244,22 @@ Sécuriser la bascule finale et garantir l'exploitabilité en production.
 
 ### Backlog sprint
 
-- [ ] Tests de charge API + DB (volumétrie dossiers).
-- [ ] Tests E2E UI (flux nominal + cas erreurs).
-- [ ] Vérifier sauvegardes/restauration PostgreSQL.
-- [ ] Former les utilisateurs internes sur la nouvelle UI.
-- [ ] Finaliser la suppression des templates Flask non utilisés après cutover Docker.
+- [x] Tests de charge API + DB (volumétrie dossiers).
+- [x] Tests E2E UI (flux nominal + cas erreurs).
+- [x] Vérifier sauvegardes/restauration PostgreSQL.
+- [x] Former les utilisateurs internes sur la nouvelle UI.
+- [x] Finaliser la suppression des templates Flask non utilisés après cutover Docker.
 
 ### Critères d'acceptation
 
 - Déploiement prod sans interruption majeure.
 - Reprise incident documentée et testée.
 - Objectifs de performance et fiabilité atteints.
+
+### Clôture
+
+- Plan d'exécution Sprint 6: `docs/sprint-6/README.md`.
+- Clôture Sprint 6: `docs/sprint-6/CLOTURE.md`.
 
 ---
 

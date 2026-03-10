@@ -74,3 +74,9 @@
 - [x] Cadrer le tri/filtre « dossiers en erreur » pour implémentation frontend.
 - [x] Définir l’indicateur « validation réutilisée » dans le rendu dossier.
 - [x] Publier la clôture de sprint (`docs/sprint-5/CLOTURE.md`).
+
+## Sprint J — Stabilisation + mise en production (terminé)
+
+- [x] Finaliser le plan de sprint 6 (`docs/sprint-6/README.md`).
+- [x] Clôturer le sprint 6 (`docs/sprint-6/CLOTURE.md`).
+- [x] Mettre à jour le plan macro des sprints (`docs/SPRINTS_REACT_POSTGRESQL.md`).

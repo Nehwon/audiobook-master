@@ -546,6 +546,29 @@ class TestWebRenameApi(unittest.TestCase):
         done_statuses = [entry['status'] for entry in payload['done']]
         self.assertIn('cancelled', done_statuses)
 
+    def test_jobs_payload_auto_adds_failed_jobs_to_review(self):
+        with web_app.jobs_lock:
+            web_app.jobs.clear()
+            web_app.review_bin.clear()
+            web_app.jobs['job-failed'] = web_app.Job(
+                id='job-failed',
+                folder='Livre KO',
+                status='failed',
+                progress=100,
+                error='Boom',
+                ended_at=1234,
+            )
+
+        jobs = self.client.get('/api/jobs')
+        self.assertEqual(jobs.status_code, 200)
+        payload = jobs.get_json()
+        review_entries = payload['review']
+        folders = [entry['folder'] for entry in review_entries]
+        self.assertIn('Livre KO', folders)
+        failed_review = next(entry for entry in review_entries if entry['folder'] == 'Livre KO')
+        self.assertEqual(failed_review['action'], 'delete')
+
+
     def test_push_job_event_does_not_deadlock_when_lock_is_held(self):
         done = threading.Event()
 

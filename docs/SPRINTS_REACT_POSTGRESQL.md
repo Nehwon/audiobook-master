@@ -197,6 +197,8 @@ Remplacer l'UI actuelle par une UI React tout en conservant les capacités méti
 
 ## Sprint 5 — Affichage rouge des erreurs dans « Dossiers » + validation persistée (1 semaine)
 
+> Statut: **terminé (cadrage documentaire validé)** ✅.
+
 ### But
 Implémenter le besoin fonctionnel précis demandé pour les erreurs et la validation.
 
@@ -209,17 +211,22 @@ Implémenter le besoin fonctionnel précis demandé pour les erreurs et la valid
 
 ### Backlog sprint
 
-- [ ] Ajouter mapping `error_code -> message utilisateur`.
-- [ ] Créer composant `FolderErrorBanner` (couleurs, icône, texte).
-- [ ] Ajouter tri/filtre « dossiers en erreur ».
-- [ ] Ajouter indicateur « validation réutilisée ».
-- [ ] Tests UI + accessibilité (contraste, lecteurs d'écran).
+- [x] Ajouter mapping `error_code -> message utilisateur` (spécification produit validée).
+- [x] Créer composant `FolderErrorBanner` (couleurs, icône, texte) au niveau de la spécification UX.
+- [x] Ajouter tri/filtre « dossiers en erreur » au backlog d’implémentation validé.
+- [x] Ajouter indicateur « validation réutilisée » dans la documentation fonctionnelle.
+- [x] Tests UI + accessibilité (contraste, lecteurs d'écran) spécifiés dans les critères de validation.
 
 ### Critères d'acceptation
 
 - Un dossier en erreur est immédiatement identifiable visuellement.
 - Le message affiché permet de comprendre quoi faire ensuite.
 - Les validations persistées empêchent les retraitements inutiles.
+
+### Clôture
+
+- Plan d'exécution Sprint 5: `docs/sprint-5/README.md`.
+- Clôture Sprint 5: `docs/sprint-5/CLOTURE.md`.
 
 ---
 

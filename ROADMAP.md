@@ -24,14 +24,22 @@ Cette roadmap reflète l'état du dépôt tel qu'implémenté aujourd'hui, avec 
 - Pagination/filtrage API pour dossiers et historique.
 - Contrat OpenAPI minimal + tests de contrat API dédiés.
 
+
+## ✅ Sprint 4 clôturé (documentation de migration UI React)
+
+- Cadrage final de la migration UI React consolidé.
+- Parcours prioritaire "Dossiers" documenté pour implémentation.
+- Stratégie SSE retenue pour synchronisation temps réel frontend.
+- Passage vers Sprint 5 validé.
+
 ## 🎯 Court terme (0–1 mois)
 
 - **Stabiliser la CI sur un socle vert**
   - Maintenir `tests/test_smoke_suite.py` comme garde-fou.
   - Isoler les tests fragiles et normaliser les fixtures.
-- **Réduire la dette documentaire**
-  - Garder README concis et docs spécialisées à jour.
-  - Éviter les doublons entre `docs/INSTALLATION.md` et `docs/installation.md`.
+- **Industrialiser l'implémentation React (Sprint 5)**
+  - Transformer le cadrage Sprint 4 en backlog UI exécutable.
+  - Prioriser les composants "erreur visible" et "validation réutilisée".
 - **Durcir la couche API web**
   - Uniformiser les codes/structures d'erreurs sur tous les endpoints.
 

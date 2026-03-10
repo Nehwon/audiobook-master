@@ -89,6 +89,8 @@ Vous pouvez forcer une version explicite avec `AUDIOBOOK_MANAGER_VERSION`, ou pi
 - Clôture Sprint 2 : `docs/sprint-2/CLOTURE.md`
 - Sprint 3 (API temps réel) : `docs/sprint-3/README.md`
 - Clôture Sprint 3 : `docs/sprint-3/CLOTURE.md`
+- Sprint 4 (migration UI React — documentation) : `docs/sprint-4/README.md`
+- Clôture Sprint 4 : `docs/sprint-4/CLOTURE.md`
 - Contrat frontend Sprint 3 (OpenAPI) : `docs/api/openapi-frontend-sprint3.yaml`
 - Suivi de tâches : `TODO.md`
 

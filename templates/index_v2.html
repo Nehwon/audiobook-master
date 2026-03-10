@@ -851,6 +851,7 @@ async function api(url, options={}) {
 }
 
 async function loadLibrary() {
+    const previousSelection = snapshotLibrarySelection();
     const data = await api('/api/library');
     libraryCache = data;
     const fb = document.getElementById('foldersBody');
@@ -930,6 +931,7 @@ async function loadLibrary() {
         ab.innerHTML += `<tr><td class="checkbox-col"><input type="checkbox" name="archiveSel" value="${archiveEscaped}" ${isInvalid ? 'disabled' : ''} onchange="bindSelectionState('archiveSel', 'archiveSelAll')"></td><td>${archiveValidationBadge(a)} ${archiveLabel}${archiveDuplicateHint(a)}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> ${actionBtn} ${dupDeleteBtn}</td></tr>`;
     });
     if (!data.archives.length) ab.innerHTML = '<tr><td colspan="4" class="muted">Aucune archive</td></tr>';
+    restoreLibrarySelection(previousSelection);
     bindSelectionState('folderSel', 'folderSelAll');
     bindSelectionState('archiveSel', 'archiveSelAll');
 }
@@ -1346,7 +1348,30 @@ function hasLibrarySelection(){
 }
 
 function canPatchLibrarySafely(){
-    return shouldRefreshLibrary() && isLibraryTabActive() && !hasLibrarySelection();
+    return shouldRefreshLibrary() && isLibraryTabActive();
+}
+
+function snapshotLibrarySelection(){
+    const values = (name) => new Set(
+        [...document.querySelectorAll(`input[name="${name}"]:checked`)].map((el) => el.value)
+    );
+    return {
+        folders: values('folderSel'),
+        archives: values('archiveSel'),
+        files: values('fileSel'),
+    };
+}
+
+function restoreLibrarySelection(snapshot){
+    if (!snapshot) return;
+    const restore = (name, selected) => {
+        document.querySelectorAll(`input[name="${name}"]`).forEach((el) => {
+            if (selected.has(el.value) && !el.disabled) el.checked = true;
+        });
+    };
+    restore('folderSel', snapshot.folders || new Set());
+    restore('archiveSel', snapshot.archives || new Set());
+    restore('fileSel', snapshot.files || new Set());
 }
 
 const monitorState = {

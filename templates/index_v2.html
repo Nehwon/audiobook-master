@@ -657,8 +657,25 @@ function computePhasePoints(job, audioCount=0){
     return { total: Math.max(1, total), processed };
 }
 
+function getCurrentPhaseStep(job){
+    const phaseOrder = ['conversion', 'normalization', 'chapters', 'finalization'];
+    const phaseProgress = (job?.phase_progress && typeof job.phase_progress === 'object') ? job.phase_progress : {};
+    for (const key of phaseOrder) {
+        const phase = phaseProgress[key];
+        if (!phase || typeof phase !== 'object') continue;
+        const total = Math.max(0, parseInt(phase.total ?? 0, 10) || 0);
+        if (!total) continue;
+        const processed = Math.max(0, Math.min(total, parseInt(phase.processed ?? 0, 10) || 0));
+        if (processed < total) {
+            return { label: String(phase.label || key), processed, total };
+        }
+    }
+    return null;
+}
+
 function renderProcessingActionBand(job, folder, audioCount=0){
     const points = computePhasePoints(job, audioCount);
+    const currentPhaseStep = getCurrentPhaseStep(job);
     const pct = points.total ? Math.round((points.processed / points.total) * 100) : 0;
     const folderJs = toJsString(folder || '');
     const status = String(job?.status || '').toLowerCase();
@@ -674,7 +691,9 @@ function renderProcessingActionBand(job, folder, audioCount=0){
                 : 'Dossier en cours de traitement';
     const detail = isFailed && job?.error
         ? `<span class="band-progress-label" style="color:var(--danger)">❌ ${escapeHtml(job.error)}</span>`
-        : `<span class="band-progress-label">${pct}% (${points.processed}/${points.total} étapes)</span>`;
+        : currentPhaseStep
+            ? `<span class="band-progress-label">${pct}% · ${escapeHtml(currentPhaseStep.label)} (${currentPhaseStep.processed}/${currentPhaseStep.total})</span>`
+            : `<span class="band-progress-label">${pct}% (${points.processed}/${points.total} étapes)</span>`;
     const track = isFailed || isCancelled
         ? ''
         : `<div class="band-progress-track"><div class="band-progress-bar" style="width:${pct}%"></div></div>`;

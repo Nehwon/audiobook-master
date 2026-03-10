@@ -44,4 +44,4 @@ python -m web.app
 
 ## Docker
 
-Voir `docs/docker-setup.md` pour la configuration complète (`docker compose up -d`) et la stack React + PostgreSQL (`docker compose --profile database --profile frontend up -d --build`).
+Voir `docs/docker-setup.md` pour la configuration complète (`docker compose up -d`) et la stack React + PostgreSQL (`docker compose --profile database --profile frontend up -d`).

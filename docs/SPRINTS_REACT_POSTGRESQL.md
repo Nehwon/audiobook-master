@@ -89,7 +89,7 @@ Mettre en place PostgreSQL et enregistrer toutes les informations minimales néc
 
 ## Sprint 2 — Reprise automatique et résilience des traitements (2 semaines)
 
-> Statut: **prêt à démarrer** 🚀 (backlog détaillé + plan d'exécution publiés).
+> Statut: **terminé et validé** ✅ (implémentation, tests ciblés et documentation d'exploitation livrés).
 
 ### But
 Automatiser la reprise des traitements interrompus et sécuriser l'exécution.
@@ -105,11 +105,11 @@ Automatiser la reprise des traitements interrompus et sécuriser l'exécution.
 
 ### Backlog sprint
 
-- [ ] Ajouter un `heartbeat` sur jobs en exécution.
-- [ ] Définir timeout d'abandon d'un job sans heartbeat.
-- [ ] Implémenter stratégie de reprise par type d'étape (safe retry / manual intervention).
-- [ ] Exposer endpoint admin `/api/recovery/status`.
-- [ ] Tests d'intégration crash/restart (killed worker puis relance).
+- [x] Ajouter un `heartbeat` sur jobs en exécution.
+- [x] Définir timeout d'abandon d'un job sans heartbeat.
+- [x] Implémenter stratégie de reprise initiale (safe retry / manual intervention).
+- [x] Exposer endpoint admin `/api/recovery/status`.
+- [x] Tests d'intégration crash/restart (killed worker puis relance simulée).
 
 ### Critères d'acceptation
 
@@ -119,6 +119,8 @@ Automatiser la reprise des traitements interrompus et sécuriser l'exécution.
 ### Préparation de sprint
 
 - Plan d'exécution Sprint 2: `docs/sprint-2/README.md`.
+- Clôture Sprint 2: `docs/sprint-2/CLOTURE.md`.
+- Runbook Sprint 2: `docs/sprint-2/RUNBOOK.md`.
 - Découpage en lots techniques: heartbeat, recovery bootstrap, retries, observabilité admin.
 - Stratégie de validation prête (tests intégration crash/restart + assertions d'idempotence).
 

@@ -17,6 +17,10 @@ class ProcessingJob(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     folder_id: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recovery_status: Mapped[str | None] = mapped_column(String(32))
+    idempotency_key: Mapped[str | None] = mapped_column(String(255))
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -82,11 +86,24 @@ class OutboxEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
 
+class RecoveryAudit(Base):
+    __tablename__ = "recovery_audit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[str] = mapped_column(ForeignKey("processing_job.id", ondelete="CASCADE"), nullable=False)
+    decision: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+
+
 Index("idx_processing_job_status_updated_at", ProcessingJob.status, ProcessingJob.updated_at)
 Index("idx_processing_job_folder_id", ProcessingJob.folder_id)
+Index("idx_processing_job_last_heartbeat_at", ProcessingJob.last_heartbeat_at)
+Index("idx_processing_job_idempotency_key", ProcessingJob.idempotency_key)
 Index("idx_processing_step_job_id_status", ProcessingStep.job_id, ProcessingStep.status)
 Index("idx_folder_state_status_updated_at", FolderState.status, FolderState.updated_at)
 Index("idx_validation_result_folder_id", ValidationResult.folder_id)
 Index("idx_processing_error_job_id", ProcessingError.job_id)
 Index("idx_processing_error_folder_id", ProcessingError.folder_id)
 Index("idx_outbox_event_created_at", OutboxEvent.created_at)
+Index("idx_recovery_audit_job_id_created_at", RecoveryAudit.job_id, RecoveryAudit.created_at)

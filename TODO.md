@@ -37,3 +37,13 @@
 - [x] Tests API web ciblés.
 - [ ] Pipeline CI strictement vert sur toute la suite.
 - [ ] Normalisation lint/typecheck et seuils couverture.
+
+
+## Sprint F — Résilience & recovery (terminé)
+
+- [x] Heartbeat et timeout d'orphelin.
+- [x] Recovery bootstrap (`retry_pending` / `manual_intervention`).
+- [x] Endpoint `/api/recovery/status`.
+- [x] Idempotence active par dossier logique.
+- [x] Tests crash/restart + idempotence.
+- [x] Runbook d'exploitation Sprint 2.

@@ -6,7 +6,7 @@ Automatiser la reprise après interruption, éviter les doubles traitements et a
 
 ## Statut
 
-Prêt à démarrer.
+Terminé.
 
 ## Périmètre
 
@@ -52,14 +52,14 @@ Prêt à démarrer.
 
 ## Backlog détaillé
 
-- [ ] Implémenter heartbeat périodique côté worker/job runner.
-- [ ] Ajouter colonnes de suivi (`last_heartbeat_at`, `retry_count`, `recovery_status`) si nécessaire.
-- [ ] Mettre à jour la couche de persistance et migrations associées.
-- [ ] Implémenter le service de recovery au démarrage applicatif.
-- [ ] Ajouter endpoint `/api/recovery/status`.
-- [ ] Écrire tests d'intégration crash/restart.
-- [ ] Écrire tests d'idempotence (pas de doublon d'outputs).
-- [ ] Documenter runbook de reprise manuelle minimale.
+- [x] Implémenter heartbeat périodique côté worker/job runner.
+- [x] Ajouter colonnes de suivi (`last_heartbeat_at`, `retry_count`, `recovery_status`) si nécessaire.
+- [x] Mettre à jour la couche de persistance et migrations associées.
+- [x] Implémenter le service de recovery au démarrage applicatif.
+- [x] Ajouter endpoint `/api/recovery/status`.
+- [x] Écrire tests d'intégration crash/restart.
+- [x] Écrire tests d'idempotence (pas de doublon d'outputs).
+- [x] Documenter runbook de reprise manuelle minimale.
 
 ## Critères d'acceptation
 
@@ -82,3 +82,9 @@ Prêt à démarrer.
 - Code, migration et tests d'intégration mergés.
 - Documentation API et exploitation mises à jour.
 - Démonstration crash/restart validée sur environnement Docker local.
+
+
+## Artefacts de clôture
+
+- Runbook: `docs/sprint-2/RUNBOOK.md`
+- Clôture: `docs/sprint-2/CLOTURE.md`

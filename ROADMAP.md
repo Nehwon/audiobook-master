@@ -10,6 +10,13 @@ Cette roadmap reflète l'état du dépôt tel qu'implémenté aujourd'hui, avec 
 - Architecture plugins (metadata, covers, exports).
 - Base de tests étendue + smoke suite dédiée.
 
+## ✅ Sprint 2 finalisé
+
+- Reprise automatique au démarrage avec audit des décisions.
+- Heartbeat jobs + timeout de détection d'orphelins.
+- Endpoint admin `/api/recovery/status` pour visibilité exploitation.
+- Idempotence dossier logique pour limiter les doublons de traitement.
+
 ## 🎯 Court terme (0–1 mois)
 
 - **Stabiliser la CI sur un socle vert**

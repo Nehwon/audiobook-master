@@ -57,7 +57,7 @@ class TestSprint1Persistence(unittest.TestCase):
             service = ProcessingStateService(session)
             service.create_job(job_id="job-3", folder_id="folder-c")
             with self.assertRaises(ValueError):
-                service.transition_job(job_id="job-3", folder_id="folder-c", status="retry_pending")
+                service.transition_job(job_id="job-3", folder_id="folder-c", status="unknown_status")
 
 
 

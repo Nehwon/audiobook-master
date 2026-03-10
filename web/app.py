@@ -38,7 +38,7 @@ from core.versioning import get_project_version
 HAS_SQLALCHEMY = importlib.util.find_spec("sqlalchemy") is not None
 if HAS_SQLALCHEMY:
     from persistence.db import build_engine, build_session_factory, get_database_url, session_scope
-    from persistence.service import ProcessingStateService
+    from persistence.service import ProcessingStateService, RecoveryService
 
 app = Flask(__name__, template_folder="../templates")
 app.config["SECRET_KEY"] = "audiobook_manager_2024"
@@ -97,6 +97,9 @@ PACKET_STATUSES = ["en_attente", "en_preparation", "pret", "planifie", "publie",
 PACKET_CHANNELS = {"discord", "telegram", "whatsapp", "email"}
 _persistence_session_factory = None
 _persistence_bootstrap_done = False
+HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("AUDIOBOOK_HEARTBEAT_INTERVAL_SECONDS", "15"))
+HEARTBEAT_TIMEOUT_SECONDS = int(os.getenv("AUDIOBOOK_HEARTBEAT_TIMEOUT_SECONDS", "90"))
+RECOVERY_MAX_RETRIES = int(os.getenv("AUDIOBOOK_RECOVERY_MAX_RETRIES", "3"))
 
 
 def _get_persistence_session_factory():
@@ -114,13 +117,27 @@ def _get_persistence_session_factory():
     return _persistence_session_factory
 
 
-def _persist_job_created(job: Job) -> None:
+def _is_folder_locked_in_persistence(folder_name: str) -> bool:
     session_factory = _get_persistence_session_factory()
     if not session_factory:
-        return
+        return False
     with session_scope(session_factory) as session:
         service = ProcessingStateService(session)
-        service.create_job(job_id=job.id, folder_id=job.folder)
+        return service.jobs.get_active_by_idempotency_key(folder_name) is not None
+
+
+def _persist_job_created(job: Job) -> bool:
+    session_factory = _get_persistence_session_factory()
+    if not session_factory:
+        return True
+    try:
+        with session_scope(session_factory) as session:
+            service = ProcessingStateService(session)
+            service.create_job(job_id=job.id, folder_id=job.folder, idempotency_key=job.folder)
+    except ValueError as exc:
+        logger.warning("Job persistence ignored for %s: %s", job.folder, exc)
+        return False
+    return True
 
 
 def _persist_job_transition(job: Job, status: str) -> None:
@@ -130,6 +147,45 @@ def _persist_job_transition(job: Job, status: str) -> None:
     with session_scope(session_factory) as session:
         service = ProcessingStateService(session)
         service.transition_job(job_id=job.id, folder_id=job.folder, status=status)
+
+
+def _persist_job_heartbeat(job: Job) -> None:
+    session_factory = _get_persistence_session_factory()
+    if not session_factory:
+        return
+    with session_scope(session_factory) as session:
+        service = ProcessingStateService(session)
+        service.touch_heartbeat(job_id=job.id)
+
+
+def _run_recovery_bootstrap() -> None:
+    session_factory = _get_persistence_session_factory()
+    if not session_factory:
+        return
+    with session_scope(session_factory) as session:
+        service = RecoveryService(session)
+        summary = service.bootstrap_recovery(
+            heartbeat_timeout_seconds=HEARTBEAT_TIMEOUT_SECONDS,
+            max_retries=RECOVERY_MAX_RETRIES,
+        )
+    if summary.get("orphan_detected", 0) > 0:
+        logger.warning("Recovery bootstrap: %s", summary)
+
+
+def _get_recovery_status() -> Dict[str, int]:
+    session_factory = _get_persistence_session_factory()
+    if not session_factory:
+        return {
+            "auto_retried": 0,
+            "manual_intervention": 0,
+            "retry_pending": 0,
+            "running": 0,
+            "audit_auto_retried": 0,
+            "audit_manual_intervention": 0,
+        }
+    with session_scope(session_factory) as session:
+        service = RecoveryService(session)
+        return service.get_recovery_status()
 
 
 def _persist_job_error(job: Job, *, user_message: str, technical_message: Optional[str] = None) -> None:
@@ -1809,6 +1865,8 @@ def _worker_loop() -> None:
             _push_job_event(job.id, job.folder, job.stage, "Job démarré")
         if job:
             _persist_job_transition(job, "running")
+            _persist_job_heartbeat(job)
+            last_heartbeat_ts = time.time()
 
         try:
             folder_path = MEDIA_DIR / job.folder
@@ -1871,6 +1929,11 @@ def _worker_loop() -> None:
 
                         current_job.stage = str(phase_label)
 
+                    nonlocal last_heartbeat_ts
+                    now_ts = time.time()
+                    if now_ts - last_heartbeat_ts >= HEARTBEAT_INTERVAL_SECONDS:
+                        _persist_job_heartbeat(current_job)
+                        last_heartbeat_ts = now_ts
                     _push_job_event(current_job.id, current_job.folder, stage, message, event_level, details)
 
             processor.progress_callback = _on_processor_progress
@@ -1929,6 +1992,7 @@ def _ensure_worker() -> None:
     global worker_started
     if worker_started:
         return
+    _run_recovery_bootstrap()
     thread = threading.Thread(target=_worker_loop, daemon=True)
     thread.start()
     worker_started = True
@@ -2637,6 +2701,9 @@ def api_enqueue_jobs():
             if folder_name in active_folders:
                 skipped.append({"folder": folder_name, "reason": "déjà en attente/en cours"})
                 continue
+            if _is_folder_locked_in_persistence(folder_name):
+                skipped.append({"folder": folder_name, "reason": "déjà verrouillé (idempotence)"})
+                continue
             jid = f"job-{int(time.time() * 1000)}-{len(jobs)}"
             job = Job(id=jid, folder=folder_name)
             jobs[jid] = job
@@ -2645,8 +2712,19 @@ def api_enqueue_jobs():
             queued_jobs.append(job)
             active_folders.add(folder_name)
 
+    persisted_queued = []
     for job in queued_jobs:
-        _persist_job_created(job)
+        if _persist_job_created(job):
+            persisted_queued.append(job.id)
+
+    if len(persisted_queued) != len(queued_jobs):
+        with jobs_lock:
+            for job in queued_jobs:
+                if job.id in persisted_queued:
+                    continue
+                jobs.pop(job.id, None)
+                skipped.append({"folder": job.folder, "reason": "déjà verrouillé (idempotence)"})
+        queued = [entry for entry in queued if entry.get("id") in set(persisted_queued)]
 
     return jsonify({"queued": queued, "skipped": skipped})
 
@@ -2747,13 +2825,18 @@ def api_reprocess():
         return _api_error("dossier introuvable", status=404, code="folder_not_found")
 
     _ensure_worker()
+    if _is_folder_locked_in_persistence(folder):
+        return _api_error("job déjà actif pour ce dossier (idempotence)", status=409, code="job_already_active")
     with jobs_lock:
         jid = f"job-{int(time.time() * 1000)}-{len(jobs)}"
         job = Job(id=jid, folder=folder)
         jobs[jid] = job
         job_queue.put(jid)
 
-    _persist_job_created(job)
+    if not _persist_job_created(job):
+        with jobs_lock:
+            jobs.pop(job.id, None)
+        return _api_error("job déjà actif pour ce dossier (idempotence)", status=409, code="job_already_active")
 
     return jsonify({"queued": asdict(job)})
 
@@ -2961,6 +3044,15 @@ def api_ollama_search_metadata():
 
 
 
+
+
+@app.route("/api/recovery/status")
+def api_recovery_status():
+    _ensure_worker()
+    payload = _get_recovery_status()
+    payload["heartbeat_timeout_seconds"] = HEARTBEAT_TIMEOUT_SECONDS
+    payload["max_retries"] = RECOVERY_MAX_RETRIES
+    return jsonify(payload)
 
 
 @app.route("/api/monitor")

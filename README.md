@@ -84,7 +84,9 @@ Vous pouvez forcer une version explicite avec `AUDIOBOOK_MANAGER_VERSION`, ou pi
 - Plan de migration React + PostgreSQL : `docs/SPRINTS_REACT_POSTGRESQL.md`
 - Sprint 1 PostgreSQL (implémentation) : `docs/sprint-1/README.md`
 - Clôture Sprint 1 : `docs/sprint-1/CLOTURE.md`
-- Préparation Sprint 2 : `docs/sprint-2/README.md`
+- Sprint 2 (résilience) : `docs/sprint-2/README.md`
+- Runbook Sprint 2 : `docs/sprint-2/RUNBOOK.md`
+- Clôture Sprint 2 : `docs/sprint-2/CLOTURE.md`
 - Suivi de tâches : `TODO.md`
 
 ---

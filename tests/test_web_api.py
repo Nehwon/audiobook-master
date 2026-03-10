@@ -443,6 +443,30 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(len(payload2['skipped']), 1)
         self.assertEqual(payload2['skipped'][0]['reason'], 'déjà en attente/en cours')
 
+
+    @mock.patch('web.app._is_folder_locked_in_persistence', return_value=True)
+    def test_enqueue_respects_persistence_idempotency_lock(self, _mocked_lock):
+        folder = self.media_dir / 'Livre Verrouille'
+        folder.mkdir()
+        (folder / 'a.mp3').write_text('x')
+
+        resp = self.client.post('/api/jobs/enqueue', json={'folders': ['Livre Verrouille']})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['queued'], [])
+        self.assertEqual(payload['skipped'][0]['reason'], 'déjà verrouillé (idempotence)')
+
+    @mock.patch('web.app._is_folder_locked_in_persistence', return_value=True)
+    def test_reprocess_rejects_persistence_idempotency_lock(self, _mocked_lock):
+        folder = self.media_dir / 'Livre Reprocess Verrouille'
+        folder.mkdir()
+        (folder / 'a.mp3').write_text('x')
+
+        resp = self.client.post('/api/jobs/reprocess', json={'folder': 'Livre Reprocess Verrouille'})
+        self.assertEqual(resp.status_code, 409)
+        payload = resp.get_json()
+        self.assertEqual(payload['code'], 'job_already_active')
+
     @mock.patch('web.app._persist_job_created')
     def test_enqueue_persists_created_jobs(self, mocked_persist):
         folder = self.media_dir / 'Livre Persisté'
@@ -962,3 +986,30 @@ class TestSprint3PlanningAndBroadcastApi(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestRecoveryApi(unittest.TestCase):
+    def setUp(self):
+        self.client = web_app.app.test_client()
+
+    def test_recovery_status_endpoint_returns_payload(self):
+        with mock.patch.object(web_app, "_ensure_worker"):
+            with mock.patch.object(
+                web_app,
+                "_get_recovery_status",
+                return_value={
+                    "auto_retried": 2,
+                    "manual_intervention": 1,
+                    "retry_pending": 3,
+                    "running": 0,
+                    "audit_auto_retried": 2,
+                    "audit_manual_intervention": 1,
+                },
+            ):
+                resp = self.client.get('/api/recovery/status')
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['auto_retried'], 2)
+        self.assertIn('heartbeat_timeout_seconds', payload)
+        self.assertIn('max_retries', payload)

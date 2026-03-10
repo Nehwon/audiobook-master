@@ -22,6 +22,7 @@ services:
       - PORT=${PORT:-8080}
       - APP_PORT=${APP_PORT:-5001}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - AUDIOBOOK_DATABASE_URL=${AUDIOBOOK_DATABASE_URL:-sqlite+pysqlite:///:memory:}
 
       # 🚀 Performance
       - GUNICORN_WORKERS=${GUNICORN_WORKERS:-1}
@@ -84,6 +85,22 @@ services:
       retries: ${OLLAMA_HEALTHCHECK_RETRIES:-10}
       start_period: ${OLLAMA_HEALTHCHECK_START_PERIOD:-30s}
 
+  # ⚛️ Interface React (Vite) pour la migration frontend
+  react-ui:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ${REACT_CONTAINER_NAME:-audiobook-react-ui}
+    restart: ${REACT_RESTART_POLICY:-unless-stopped}
+    ports:
+      - "${REACT_PORT:-5173}:5173"
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8080}
+    networks:
+      - audiobook-network
+    profiles:
+      - ${REACT_PROFILE:-frontend}
+
   # 📊 Monitoring optionnel avec Prometheus
   prometheus:
     image: ${PROMETHEUS_IMAGE:-prom/prometheus:latest}
@@ -140,6 +157,11 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-audiobook}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-audiobook123}
       - POSTGRES_INITDB_ARGS=${POSTGRES_INITDB_ARGS:---encoding=UTF-8 --lc-collate=C --lc-ctype=C}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-audiobook} -d ${POSTGRES_DB:-audiobook_manager}"]
+      interval: ${POSTGRES_HEALTHCHECK_INTERVAL:-10s}
+      timeout: ${POSTGRES_HEALTHCHECK_TIMEOUT:-5s}
+      retries: ${POSTGRES_HEALTHCHECK_RETRIES:-5}
     networks:
       - audiobook-network
     profiles:

@@ -775,7 +775,7 @@ def _default_config() -> Dict:
     return {
         "bitrate": "128k",
         "sample_rate": 44100,
-        "processing_mode": "final_m4b",
+        "processing_mode": "encode_aac",
         "enable_gpu": True,
         "enable_loudnorm": True,
         "enable_compressor": True,

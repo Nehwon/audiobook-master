@@ -182,7 +182,8 @@
         .search-pill { background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:7px 10px; min-width:240px; color:#64748b; font-size:13px; }
         main { padding: 18px 20px 76px; }
         .kpi-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
-        .kpi-card { border:2px solid var(--border); border-radius:10px; padding:10px 12px; box-shadow:0 1px 2px rgba(15,23,42,.06); }
+        .kpi-card { border:2px solid var(--border); border-radius:10px; padding:10px 12px; box-shadow:0 1px 2px rgba(15,23,42,.06); transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; }
+        .kpi-card.updated { box-shadow:0 0 0 3px rgba(34,197,94,.22), 0 10px 18px rgba(15,23,42,.12); transform:translateY(-1px) scale(1.02); border-color:#22c55e !important; }
         .kpi-card--folders { background:#eef2ff; border-color:#a5b4fc; }
         .kpi-card--running { background:#ecfeff; border-color:#67e8f9; }
         .kpi-card--pending { background:#fff7ed; border-color:#fdba74; }
@@ -473,6 +474,8 @@ let enqueueInFlight = new Set();
 let submissionFilesCache = [];
 let packetsSummaryCache = [];
 let latestJobsSnapshot = { pending: [], running: [], done: [] };
+let liveRefreshTimer = null;
+let liveRefreshQueued = false;
 
 function isAudiobookshelfConfigMissing(config){
     if (!config || typeof config !== 'object') return true;
@@ -543,7 +546,14 @@ function selectedValues(name){ return [...document.querySelectorAll(`input[name=
 
 function setKpiValue(id, value){
     const el = document.getElementById(id);
-    if (el) el.textContent = String(value ?? 0);
+    if (!el) return;
+    const nextValue = String(value ?? 0);
+    if (el.textContent === nextValue) return;
+    el.textContent = nextValue;
+    const card = el.closest('.kpi-card');
+    if (!card) return;
+    card.classList.add('updated');
+    setTimeout(() => card.classList.remove('updated'), 260);
 }
 
 function touchKpiRefresh(){
@@ -1463,7 +1473,21 @@ function scheduleDebouncedFullRefresh(){
     clearTimeout(monitorState.fullRefreshDebounce);
     monitorState.fullRefreshDebounce = setTimeout(async () => {
         await monitorAndPatchDom();
-    }, 220);
+    }, 120);
+}
+
+function scheduleLiveInstantRefresh(){
+    liveRefreshQueued = true;
+    clearTimeout(liveRefreshTimer);
+    liveRefreshTimer = setTimeout(async () => {
+        if (!liveRefreshQueued) return;
+        liveRefreshQueued = false;
+        await refreshDashboardData();
+        if (monitorState.pendingLibraryRefresh && canPatchLibrarySafely()) {
+            await loadLibrary();
+            monitorState.pendingLibraryRefresh = false;
+        }
+    }, 90);
 }
 
 function connectLiveEvents(){
@@ -1486,6 +1510,8 @@ function connectLiveEvents(){
     };
 
     source.onmessage = () => {
+        setLiveSyncStatus('live');
+        scheduleLiveInstantRefresh();
         scheduleDebouncedFullRefresh();
     };
 
@@ -1828,7 +1854,7 @@ setTimeout(async () => {
 // Filet de sécurité : même en cas de coupure SSE, on garde une synchro périodique.
 setInterval(() => {
     monitorAndPatchDom();
-}, 10000);
+}, 5000);
 </script>
 </body>
 </html>

@@ -1519,6 +1519,7 @@ def _list_media() -> Dict:
         "folders": folders,
         "hidden_processed_folders": hidden_processed_folders,
         "archives": grouped_archives,
+        "ready_for_audiobookshelf": len(output_files),
     }
 
 

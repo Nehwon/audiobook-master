@@ -1890,6 +1890,8 @@ class AudiobookProcessor:
             self._emit_progress("Conversion", "Préparation du pipeline FFmpeg en plusieurs étapes", 35)
 
             config = getattr(self, 'config', ProcessingConfig())
+            available_cores = os.cpu_count() or 1
+            ffmpeg_threads = max(2, available_cores - 2)
             metadata_dict = metadata.get_metadata_dict()
             metadata_args = []
             for key, value in metadata_dict.items():
@@ -1940,6 +1942,7 @@ class AudiobookProcessor:
                     '-b:a', config.audio_bitrate,
                     '-ac', str(config.audio_channels),
                     '-ar', str(config.sample_rate),
+                    '-threads', str(ffmpeg_threads),
                     '-aac_coder', config.aac_coder,
                     '-profile:a', config.aac_profile,
                     str(encoded_file)
@@ -1985,6 +1988,7 @@ class AudiobookProcessor:
                     '-b:a', config.audio_bitrate,
                     '-ac', str(config.audio_channels),
                     '-ar', str(config.sample_rate),
+                    '-threads', str(ffmpeg_threads),
                     '-aac_coder', config.aac_coder,
                     '-profile:a', config.aac_profile,
                     str(normalized_file),

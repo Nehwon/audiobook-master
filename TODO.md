@@ -1,82 +1,70 @@
-# ✅ TODO d'avancement (état actuel)
+# ✅ TODO — UI v3 from scratch (plan atomique)
 
-## Sprint A — Socle runtime & diagnostics (terminé)
+> Référence d’architecture : `FastAPI (API/WebSockets) + PostgreSQL (asyncpg + triggers) + React/Svelte + Tailwind/CoreUI + WebSocket client`.
 
-- [x] Entrées officielles module (`core.main`, `web.app`) documentées.
-- [x] Wrapper legacy `run.py`/`start_web.py` maintenus.
-- [x] Commandes diagnostics CLI (`--diagnostic`, `--diagnostic-json`).
-- [x] Profil de logs `debug-conversion` activable par option ou variable env.
+## Phase 0 — Cadrage produit et standards
 
-## Sprint B — Flux web opérationnel (terminé)
+- [ ] Valider formellement la stack cible (backend, frontend, design system, auth).
+- [ ] Définir le périmètre MVP (écrans, actions, flux critiques).
+- [ ] Écrire l’ADR architecture v3 (principes, conventions, exclusions du legacy).
+- [ ] Écrire le contrat d’événements temps réel v1 (schéma JSON versionné).
+- [ ] Définir la stratégie de qualité (tests, observabilité, critères Go/No-Go).
 
-- [x] Inventaire bibliothèque source (`/api/library`).
-- [x] Validation/extraction archives (`/api/archive/validate`, `/api/extract`).
-- [x] Renommage avec protections collisions (`/api/rename`).
-- [x] Enqueue + suivi jobs (`/api/jobs/enqueue`, `/api/jobs`).
-- [x] Gestion review bin/reprocess (`/api/jobs/review`, `/api/jobs/reprocess`).
+## Phase 1 — Bootstrap backend FastAPI
 
-## Sprint C — Intégration Audiobookshelf (terminé)
+- [ ] Créer l’arborescence backend v3 isolée (`app/api`, `app/services`, `app/db`).
+- [ ] Mettre en place la configuration centralisée (env, settings, secrets).
+- [ ] Initialiser PostgreSQL async (`SQLAlchemy async` + `asyncpg`).
+- [ ] Créer les endpoints de base (`/health`, `/api/v3/*`).
+- [ ] Mettre en place Alembic et la première migration de schéma.
+- [ ] Ajouter les tests API CRUD fondamentaux.
 
-- [x] CRUD packets Audiobookshelf.
-- [x] Édition/scraping metadata packet.
-- [x] Changelog draft + édition manuelle.
-- [x] Planification publication (`/schedule`) + exécution immédiate.
-- [x] Diffusion canaux (Discord, Telegram, WhatsApp, email).
-- [x] Nettoyage post-publication.
+## Phase 2 — Pipeline PostgreSQL -> WebSocket
 
-## Sprint D — Plugins (en cours)
+- [ ] Implémenter les triggers `INSERT/UPDATE/DELETE` avec `pg_notify`.
+- [ ] Créer le listener `asyncpg` côté FastAPI.
+- [ ] Implémenter `ConnectionManager` WebSocket (connexion, déconnexion, broadcast).
+- [ ] Ajouter heartbeat + gestion reconnexion côté serveur.
+- [ ] Brancher la transformation DB event -> contrat événement v1.
+- [ ] Écrire les tests d’intégration DB -> WS.
 
-- [x] Contrat plugins metadata/covers/exports en place.
-- [x] Tests plugins metadata/covers/export présents.
-- [ ] Marketplace plugins complet (UX + sécurité + signature).
-- [ ] Documentation d'exploitation plugin multi-environnements.
+## Phase 3 — Frontend v3 (React ou Svelte)
 
-## Sprint E — Qualité continue (en cours)
+- [ ] Initialiser l’application frontend v3 (Vite, structure modulaire).
+- [ ] Intégrer le design system choisi (Tailwind ou CoreUI).
+- [ ] Implémenter le client WebSocket (connexion, retry exponentiel, reprise).
+- [ ] Connecter les appels REST (`GET/POST/PUT/DELETE`) et le cache applicatif.
+- [ ] Construire les écrans MVP (dashboard, liste, détail, erreurs).
+- [ ] Ajouter les tests unitaires UI des composants critiques.
 
-- [x] Smoke suite dédiée.
-- [x] Tests API web ciblés.
-- [ ] Pipeline CI strictement vert sur toute la suite.
-- [ ] Normalisation lint/typecheck et seuils couverture.
+## Phase 4 — Sécurité et observabilité
 
+- [ ] Mettre en place l’authentification JWT pour REST et WebSocket.
+- [ ] Appliquer CORS strict + rate limiting.
+- [ ] Structurer les logs backend/frontend en JSON corrélable.
+- [ ] Exposer les métriques techniques (API, WS, DB).
+- [ ] Activer le suivi d’erreurs frontend/backend (Sentry ou équivalent).
+- [ ] Définir et publier les SLO/SLA opérationnels.
 
-## Sprint F — Résilience & recovery (terminé)
+## Phase 5 — Validation système et robustesse
 
-- [x] Heartbeat et timeout d'orphelin.
-- [x] Recovery bootstrap (`retry_pending` / `manual_intervention`).
-- [x] Endpoint `/api/recovery/status`.
-- [x] Idempotence active par dossier logique.
-- [x] Tests crash/restart + idempotence.
-- [x] Runbook d'exploitation Sprint 2.
+- [ ] Écrire les scénarios E2E critiques (Playwright).
+- [ ] Exécuter les tests de charge API + WebSocket (k6/Locust).
+- [ ] Valider les scénarios de panne (DB indisponible, coupure réseau, backlog).
+- [ ] Ajuster indexes/pooling/taille payload selon résultats.
+- [ ] Formaliser le rapport Go/No-Go de validation.
 
-## Sprint G — API temps réel + contrat frontend (terminé)
+## Phase 6 — Mise en production v3
 
-- [x] Introduire schémas de réponse unifiés (`ok`, `data`, `meta`) sur endpoints frontend Sprint 3.
-- [x] Ajouter endpoint erreurs par dossier (`/api/folders/errors`).
-- [x] Ajouter endpoint validations déjà faites (`/api/folders/validations`).
-- [x] Brancher outbox events vers SSE (`/api/events/stream`).
-- [x] Ajouter tests contrat API Sprint 3 (`tests/test_web_api_sprint3.py`).
-- [x] Publier une documentation OpenAPI minimale (`docs/api/openapi-frontend-sprint3.yaml`).
+- [ ] Préparer les manifests de déploiement (Docker/infra cible).
+- [ ] Mettre en place le reverse proxy et le routage de la v3.
+- [ ] Définir la stratégie de déploiement progressif (interne, pilote, général).
+- [ ] Documenter le runbook incident et rollback.
+- [ ] Exécuter la checklist post-release et valider les KPI de réussite.
 
+## Règles d’exécution (non négociables)
 
-
-## Sprint H — Migration UI React (documentation) (terminé)
-
-- [x] Consolider les artefacts de migration UI React dans `docs/`.
-- [x] Formaliser le périmètre prioritaire "Dossiers" pour implémentation.
-- [x] Valider les dépendances API/SSE nécessaires côté frontend.
-- [x] Publier la clôture de sprint (`docs/sprint-4/CLOTURE.md`).
-
-
-## Sprint I — Erreurs rouges + validation persistée (documentation) (terminé)
-
-- [x] Formaliser le mapping fonctionnel `error_code -> message utilisateur` dans la documentation de sprint.
-- [x] Spécifier le composant cible `FolderErrorBanner` et son comportement.
-- [x] Cadrer le tri/filtre « dossiers en erreur » pour implémentation frontend.
-- [x] Définir l’indicateur « validation réutilisée » dans le rendu dossier.
-- [x] Publier la clôture de sprint (`docs/sprint-5/CLOTURE.md`).
-
-## Sprint J — Stabilisation + mise en production (terminé)
-
-- [x] Finaliser le plan de sprint 6 (`docs/sprint-6/README.md`).
-- [x] Clôturer le sprint 6 (`docs/sprint-6/CLOTURE.md`).
-- [x] Mettre à jour le plan macro des sprints (`docs/SPRINTS_REACT_POSTGRESQL.md`).
+- [ ] Aucun couplage fonctionnel avec les templates Flask legacy.
+- [ ] Toute évolution temps réel doit respecter le contrat d’événements versionné.
+- [ ] Toute fonctionnalité livrée doit avoir au minimum un test automatisé associé.
+- [ ] Toute régression critique bloque la phase suivante tant qu’elle n’est pas corrigée.

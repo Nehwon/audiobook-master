@@ -142,7 +142,8 @@
 
         .sidebar .tab { width:100%; text-align:left; background:transparent; color:#cbd5e1; border:1px solid transparent; margin-bottom:6px; border-radius:6px; padding:10px 12px; }
         .library-panels { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; align-items:start; }
-        .panel-card { display:flex; flex-direction:column; min-height:0; max-height:calc(100vh - 300px); }
+        .panel-card { display:flex; flex-direction:column; min-height:0; max-height:calc(100vh - 300px); transition: box-shadow .25s ease, border-color .25s ease; }
+        .panel-card.updated-zone { box-shadow:0 0 0 3px rgba(59,130,246,.18), 0 10px 20px rgba(15,23,42,.12); border-color:#3b82f6; }
         .panel-card h3 { margin:0; font-size:14px; }
         .panel-head { display:flex; flex-direction:column; align-items:flex-start; gap:8px; margin-bottom:8px; }
         .panel-actions { display:flex; flex-wrap:wrap; gap:6px; }
@@ -155,8 +156,9 @@
         .row-main td { border-bottom:none; }
         .row-band td { padding:0 6px 6px; border-bottom:1px solid var(--border); }
         .action-band { border-top:2px solid color-mix(in srgb, var(--border) 70%, transparent); padding:6px 0 0; display:flex; flex-wrap:wrap; gap:6px; align-items:center; background:transparent; }
-        .action-band.processing { border-top-color:#facc15; background:transparent; cursor:pointer; }
+        .action-band.processing { border-top-color:#facc15; background:transparent; cursor:pointer; transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease; }
         .action-band.processing:hover { border-top-color:#eab308; }
+        .action-band.processing.live-updated { border-top-color:#22c55e; box-shadow:0 0 0 2px rgba(34,197,94,.2); transform:translateY(-1px); }
         
         .checkbox-slot { width:28px; min-width:28px; max-width:28px; }
         .band-status { font-weight:600; color:#92400e; }
@@ -476,6 +478,7 @@ let packetsSummaryCache = [];
 let latestJobsSnapshot = { pending: [], running: [], done: [] };
 let liveRefreshTimer = null;
 let liveRefreshQueued = false;
+let libraryVisualState = { foldersSig: '', filesSig: '', archivesSig: '', processingSig: '' };
 
 function isAudiobookshelfConfigMissing(config){
     if (!config || typeof config !== 'object') return true;
@@ -560,6 +563,31 @@ function touchKpiRefresh(){
     const el = document.getElementById('kpiLastRefresh');
     if (!el) return;
     el.textContent = new Date().toLocaleString();
+}
+
+function computeLibraryVisualSignatures(data){
+    const folders = Array.isArray(data?.folders) ? data.folders : [];
+    const hiddenFiles = Array.isArray(data?.hidden_processed_folders) ? data.hidden_processed_folders : [];
+    const archives = Array.isArray(data?.archives) ? data.archives : [];
+    const foldersSig = JSON.stringify(folders.map(f => [f.name, f.audio_count, f.file_count, f.size, !!f.extracted_from_archive, (f.issues || []).join('|')]));
+    const filesSig = JSON.stringify(hiddenFiles.map(f => [f.name, f.audio_count, f.file_count, f.size, (f.output_files || []).join('|')]));
+    const archivesSig = JSON.stringify(archives.map(a => [a.primary_name || a.name, a.display_name || a.name, a.size, a.validation?.valid, a.validation?.message || '', (a.duplicate_reasons || []).join('|')]));
+    const processingSig = JSON.stringify(folders.filter(f => !!f.job).map(f => [f.name, f.job?.id, f.job?.status, f.job?.progress, f.job?.stage]));
+    return { foldersSig, filesSig, archivesSig, processingSig };
+}
+
+function flashZone(panelSelector){
+    const panel = document.querySelector(panelSelector);
+    if (!panel) return;
+    panel.classList.add('updated-zone');
+    setTimeout(() => panel.classList.remove('updated-zone'), 320);
+}
+
+function flashProcessingBands(){
+    document.querySelectorAll('#foldersBody .action-band.processing').forEach((band) => {
+        band.classList.add('live-updated');
+        setTimeout(() => band.classList.remove('live-updated'), 360);
+    });
 }
 function escapeHtml(value){
     return String(value)
@@ -874,6 +902,15 @@ async function api(url, options={}) {
 async function loadLibrary() {
     const previousSelection = snapshotLibrarySelection();
     const data = await api('/api/library');
+    const nextVisualState = computeLibraryVisualSignatures(data);
+    const hadVisualState = !!(libraryVisualState.foldersSig || libraryVisualState.filesSig || libraryVisualState.archivesSig || libraryVisualState.processingSig);
+    const changedZones = {
+        folders: hadVisualState && libraryVisualState.foldersSig !== nextVisualState.foldersSig,
+        files: hadVisualState && libraryVisualState.filesSig !== nextVisualState.filesSig,
+        archives: hadVisualState && libraryVisualState.archivesSig !== nextVisualState.archivesSig,
+        processing: hadVisualState && libraryVisualState.processingSig !== nextVisualState.processingSig,
+    };
+    libraryVisualState = nextVisualState;
     libraryCache = data;
     const fb = document.getElementById('foldersBody');
     const ab = document.getElementById('archivesBody');
@@ -956,6 +993,11 @@ async function loadLibrary() {
     restoreLibrarySelection(previousSelection);
     bindSelectionState('folderSel', 'folderSelAll');
     bindSelectionState('archiveSel', 'archiveSelAll');
+
+    if (changedZones.folders) flashZone('#page-library .panel-card:nth-of-type(1)');
+    if (changedZones.files) flashZone('#page-library .panel-card:nth-of-type(2)');
+    if (changedZones.archives) flashZone('#page-library .panel-card:nth-of-type(3)');
+    if (changedZones.processing) flashProcessingBands();
 }
 
 async function validateArchives(archives){

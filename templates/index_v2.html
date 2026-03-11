@@ -218,7 +218,6 @@
 <aside class="sidebar">
     <div class="brand"><img src="/assets/audiobook-manager.jpg" alt="Audiobook Manager"></div>
     <button class="tab active" data-page="library">📚 Dashboard bibliothèque</button>
-    <button class="tab" data-page="processing">⚙️ Traitements</button>
     <div class="sidebar-divider"></div>
     <button class="tab packet-tab" data-page="submission">📦 Paquets</button>
     <button class="tab plugin-tab" data-page="plugins">🧩 Plugins</button>
@@ -295,22 +294,6 @@
             </article>
         </div>
     </section>
-
-    <section id="page-processing" class="page">
-        <div class="card"><button onclick="loadJobs()">Rafraîchir statuts</button></div>
-        <div class="card"><h3>En attente</h3><div id="pendingList"></div></div>
-        <div class="card"><h3>En cours</h3><div id="runningList"></div></div>
-        <div class="card"><h3>Terminés</h3><div id="doneList"></div></div>
-        <div class="card"><h3>En attente de suppression / retraitement</h3><div id="reviewList"></div></div>
-        <div id="liveTrackingCard" class="card" style="display:none"><h3>Suivi traitement (temps réel)</h3><div id="liveEvents" class="muted events-scroll">Aucun événement.</div></div>
-        <div id="debugLogsCard" class="card" style="display:none">
-            <h3>Logs debug backend (web)</h3>
-            <div class="row" style="margin-bottom:8px"><button class="secondary" onclick="loadDebugLogs()">Rafraîchir logs</button></div>
-            <pre id="debugLogs" style="white-space:pre-wrap;max-height:260px;overflow:auto;background:var(--bg);border:1px solid var(--border);padding:8px;border-radius:8px" class="muted">Chargement...</pre>
-        </div>
-    </section>
-
-
 
     <section id="page-submission" class="page">
         <div class="card">
@@ -1218,6 +1201,7 @@ function renderJobsHtml(jobs, withActions=false){
 
 function renderJobs(containerId, jobs, withActions=false){
     const c = document.getElementById(containerId);
+    if (!c) return;
     c.innerHTML = renderJobsHtml(jobs, withActions);
 }
 
@@ -1384,14 +1368,16 @@ async function loadJobs({forceDoneRefresh=false} = {}){
     setKpiValue('kpiReview', (data.review || []).length);
     touchKpiRefresh();
 
-    if (!data.review.length) review.innerHTML = '<p class="muted">Aucune entrée.</p>';
-    else review.innerHTML = data.review.map(r => `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0;">
-        <div><strong>${r.folder}</strong> - action: ${r.action}</div>
-        <div class="row">
-            ${r.action === 'reprocess' ? `<button onclick="enqueueFolders(['${r.folder.replaceAll("'", "\\'")}'])">Retraiter</button>`:''}
-            <button class="danger" onclick="clearReview('${r.folder.replaceAll("'", "\\'")}')">Retirer de la liste</button>
-        </div>
-    </div>`).join('');
+    if (review) {
+        if (!data.review.length) review.innerHTML = '<p class="muted">Aucune entrée.</p>';
+        else review.innerHTML = data.review.map(r => `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0;">
+            <div><strong>${r.folder}</strong> - action: ${r.action}</div>
+            <div class="row">
+                ${r.action === 'reprocess' ? `<button onclick="enqueueFolders(['${r.folder.replaceAll("'", "\\'")}'])">Retraiter</button>`:''}
+                <button class="danger" onclick="clearReview('${r.folder.replaceAll("'", "\\'")}')">Retirer de la liste</button>
+            </div>
+        </div>`).join('');
+    }
 }
 
 async function markReview(jobId, action){

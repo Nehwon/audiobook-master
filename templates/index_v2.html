@@ -1437,10 +1437,16 @@ const libraryRefreshState = {
     inFlight: false,
 };
 
+function getFoldersRefreshIntervalMs(){
+    const hasRunningJobs = (latestJobsSnapshot.running || []).length > 0;
+    return hasRunningJobs ? 1000 : 15000;
+}
+
 async function runAutoLibraryRefreshTick(){
     if (!isLibraryTabActive() || !shouldRefreshLibrary() || libraryRefreshState.inFlight) return;
     const now = Date.now();
-    const wantFolders = now - libraryRefreshState.foldersAt >= 5000;
+    const foldersRefreshIntervalMs = getFoldersRefreshIntervalMs();
+    const wantFolders = now - libraryRefreshState.foldersAt >= foldersRefreshIntervalMs;
     const wantFiles = now - libraryRefreshState.filesAt >= 15000;
     const wantArchives = now - libraryRefreshState.archivesAt >= 15000;
     if (!wantFolders && !wantFiles && !wantArchives) return;

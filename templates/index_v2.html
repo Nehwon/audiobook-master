@@ -231,8 +231,7 @@
         <div class="meta">Dernière vue: <span id="kpiLastRefresh">-</span></div>
     </div>
     <div class="top-actions">
-        <div class="search-pill">Search (Ctrl+Space / Ctrl+Shift+F)</div>
-        <span id="liveSyncBadge" class="live-badge offline" title="Synchronisation temps réel">Live sync: reconnexion…</span>
+        <button onclick="refreshLibraryPanelsNow()">Rafraîchir</button>
         <span id="apiActivityDot" class="status-dot" title="Activité API"></span>
         <label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label>
     </div>
@@ -249,11 +248,26 @@
         </div>
 
         <div class="library-panels">
-            <article class="card panel-card">
+            <article class="card panel-card" data-zone="archives">
+                <div class="panel-head">
+                    <h3>Archives</h3>
+                    <div class="panel-actions">
+                        <button class="secondary" onclick="validateSelectedArchives()">Valider sélection</button>
+                        <button class="secondary" onclick="extractSelected()">Extraire sélection</button>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <table>
+                        <thead><tr><th class="checkbox-col"><input id="archiveSelAll" type="checkbox" onchange="toggleAllSelection('archiveSel', this.checked)"></th><th>Archive</th><th>Taille MB</th><th>Actions</th></tr></thead>
+                        <tbody id="archivesBody"></tbody>
+                    </table>
+                </div>
+            </article>
+
+            <article class="card panel-card" data-zone="folders">
                 <div class="panel-head">
                     <h3>Dossiers</h3>
                     <div class="panel-actions">
-                        <button onclick="loadLibrary()">Rafraîchir</button>
                         <button id="renameSelectedBtn" class="secondary" onclick="renameSelected()">Renommage batch</button>
                         <button onclick="enqueueSelected()">Traiter sélection M4B</button>
                     </div>
@@ -266,34 +280,16 @@
                 </div>
             </article>
 
-            <article class="card panel-card">
+            <article class="card panel-card" data-zone="files">
                 <div class="panel-head">
                     <h3>Fichiers</h3>
                     <div class="panel-actions">
-                        <button class="secondary" onclick="loadLibrary()">Rafraîchir</button>
                     </div>
                 </div>
                 <div class="panel-body">
                     <table>
                         <thead><tr><th class="checkbox-col"><input id="fileSelAll" type="checkbox" onchange="toggleAllSelection('fileSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>M4B lié</th></tr></thead>
                         <tbody id="hiddenProcessedFoldersBody"></tbody>
-                    </table>
-                </div>
-            </article>
-
-            <article class="card panel-card">
-                <div class="panel-head">
-                    <h3>Archives</h3>
-                    <div class="panel-actions">
-                        <button class="secondary" onclick="validateSelectedArchives()">Valider sélection</button>
-                        <button class="secondary" onclick="extractSelected()">Extraire sélection</button>
-                        <button class="secondary" onclick="loadLibrary()">Rafraîchir</button>
-                    </div>
-                </div>
-                <div class="panel-body">
-                    <table>
-                        <thead><tr><th class="checkbox-col"><input id="archiveSelAll" type="checkbox" onchange="toggleAllSelection('archiveSel', this.checked)"></th><th>Archive</th><th>Taille MB</th><th>Actions</th></tr></thead>
-                        <tbody id="archivesBody"></tbody>
                     </table>
                 </div>
             </article>
@@ -899,106 +895,127 @@ async function api(url, options={}) {
     }
 }
 
-async function loadLibrary() {
+async function loadLibrary({folders=true, files=true, archives=true} = {}) {
     const previousSelection = snapshotLibrarySelection();
     const data = await api('/api/library');
     const nextVisualState = computeLibraryVisualSignatures(data);
     const hadVisualState = !!(libraryVisualState.foldersSig || libraryVisualState.filesSig || libraryVisualState.archivesSig || libraryVisualState.processingSig);
     const changedZones = {
-        folders: hadVisualState && libraryVisualState.foldersSig !== nextVisualState.foldersSig,
-        files: hadVisualState && libraryVisualState.filesSig !== nextVisualState.filesSig,
-        archives: hadVisualState && libraryVisualState.archivesSig !== nextVisualState.archivesSig,
-        processing: hadVisualState && libraryVisualState.processingSig !== nextVisualState.processingSig,
+        folders: folders && hadVisualState && libraryVisualState.foldersSig !== nextVisualState.foldersSig,
+        files: files && hadVisualState && libraryVisualState.filesSig !== nextVisualState.filesSig,
+        archives: archives && hadVisualState && libraryVisualState.archivesSig !== nextVisualState.archivesSig,
+        processing: folders && hadVisualState && libraryVisualState.processingSig !== nextVisualState.processingSig,
     };
-    libraryVisualState = nextVisualState;
+    if (folders) libraryVisualState.foldersSig = nextVisualState.foldersSig;
+    if (files) libraryVisualState.filesSig = nextVisualState.filesSig;
+    if (archives) libraryVisualState.archivesSig = nextVisualState.archivesSig;
+    if (folders) libraryVisualState.processingSig = nextVisualState.processingSig;
     libraryCache = data;
-    const fb = document.getElementById('foldersBody');
-    const ab = document.getElementById('archivesBody');
-    const hpb = document.getElementById('hiddenProcessedFoldersBody');
-    fb.innerHTML = '';
-    ab.innerHTML = '';
-    hpb.innerHTML = '';
 
-    data.folders.forEach(f => {
-        const jsFolder = toJsString(f.name);
-        const isManualMode = manualRenameRow === f.name;
-        const folderNameEscaped = escapeHtml(f.name);
-        const folderIcon = f.extracted_from_archive ? '📦 ' : '';
-        const job = f.job || null;
-        const hideActionsForJob = !!job;
-        const issues = (f.issues || []).length
-            ? `<div class="muted" style="font-size:12px">⚠️ ${(f.issues || []).join(' | ')}${f.suggest_delete ? ' — suppression suggérée' : ''}</div>`
-            : '';
-        const manualInput = isManualMode && !hideActionsForJob
-            ? `<div style="margin-top:6px"><input data-manual-title="1" data-folder="${folderNameEscaped}" type="text" style="min-width:260px" placeholder="Titre manuel" autofocus></div>`
-            : '';
-        const actionButtons = isManualMode
-            ? `<button data-rename-btn="1" data-default-label="Valider" ${renameInProgress ? 'disabled' : ''} onclick="validateManualRename('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Valider'}</button>
-               <button class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="cancelManualRename()">Annuler</button>`
-            : `<button data-rename-btn="1" data-default-label="Renommer" class="secondary" ${renameInProgress || hideActionsForJob ? 'disabled' : ''} onclick="renameOne('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
-               <button data-rename-btn="1" data-default-label="Renommage manuel" class="secondary" ${renameInProgress || hideActionsForJob ? 'disabled' : ''} onclick="enterManualRename('${jsFolder}')">Renommage manuel</button>
-               ${f.can_ignore ? `<button class="secondary" ${hideActionsForJob ? 'disabled' : ''} onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
-               ${f.suggest_delete ? `<button class="danger" ${hideActionsForJob ? 'disabled' : ''} onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
-               <button ${hideActionsForJob ? 'disabled' : ''} onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>`;
-        const bandInner = hideActionsForJob ? renderProcessingActionBand(job, f.name, f.audio_count) : actionButtons;
-        fb.innerHTML += `<tr class="row-main">
-            <td class="checkbox-col"><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''} onchange="bindSelectionState('folderSel', 'folderSelAll')"></td>
-            <td>
-                ${folderIcon}${folderNameEscaped}${issues}
-                ${manualInput}
-            </td>
-            <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
-            <td>${fmtMb(f.size)}</td>
-        </tr>
-        <tr class="row-band"><td colspan="4"><div class="action-band${hideActionsForJob ? ' processing' : ''}" ${hideActionsForJob ? `onclick="openJobLightbox('${jsFolder}')"` : ''}><span class="checkbox-slot"></span>${bandInner}</div></td></tr>`;
-    });
-    if (!data.folders.length) fb.innerHTML = '<tr><td colspan="4" class="muted">Aucun dossier</td></tr>';
+    if (folders) {
+        const fb = document.getElementById('foldersBody');
+        fb.innerHTML = '';
+        data.folders.forEach(f => {
+            const jsFolder = toJsString(f.name);
+            const isManualMode = manualRenameRow === f.name;
+            const folderNameEscaped = escapeHtml(f.name);
+            const folderIcon = f.extracted_from_archive ? '📦 ' : '';
+            const job = f.job || null;
+            const hideActionsForJob = !!job;
+            const issues = (f.issues || []).length
+                ? `<div class="muted" style="font-size:12px">⚠️ ${(f.issues || []).join(' | ')}${f.suggest_delete ? ' — suppression suggérée' : ''}</div>`
+                : '';
+            const manualInput = isManualMode && !hideActionsForJob
+                ? `<div style="margin-top:6px"><input data-manual-title="1" data-folder="${folderNameEscaped}" type="text" style="min-width:260px" placeholder="Titre manuel" autofocus></div>`
+                : '';
+            const actionButtons = isManualMode
+                ? `<button data-rename-btn="1" data-default-label="Valider" ${renameInProgress ? 'disabled' : ''} onclick="validateManualRename('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Valider'}</button>
+                   <button class="secondary" ${renameInProgress ? 'disabled' : ''} onclick="cancelManualRename()">Annuler</button>`
+                : `<button data-rename-btn="1" data-default-label="Renommer" class="secondary" ${renameInProgress || hideActionsForJob ? 'disabled' : ''} onclick="renameOne('${jsFolder}')">${renameInProgress ? 'Renommage...' : 'Renommer'}</button>
+                   <button data-rename-btn="1" data-default-label="Renommage manuel" class="secondary" ${renameInProgress || hideActionsForJob ? 'disabled' : ''} onclick="enterManualRename('${jsFolder}')">Renommage manuel</button>
+                   ${f.can_ignore ? `<button class="secondary" ${hideActionsForJob ? 'disabled' : ''} onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
+                   ${f.suggest_delete ? `<button class="danger" ${hideActionsForJob ? 'disabled' : ''} onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
+                   <button ${hideActionsForJob ? 'disabled' : ''} onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>`;
+            const bandInner = hideActionsForJob ? renderProcessingActionBand(job, f.name, f.audio_count) : actionButtons;
+            fb.innerHTML += `<tr class="row-main">
+                <td class="checkbox-col"><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''} onchange="bindSelectionState('folderSel', 'folderSelAll')"></td>
+                <td>
+                    ${folderIcon}${folderNameEscaped}${issues}
+                    ${manualInput}
+                </td>
+                <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
+                <td>${fmtMb(f.size)}</td>
+            </tr>
+            <tr class="row-band"><td colspan="4"><div class="action-band${hideActionsForJob ? ' processing' : ''}" ${hideActionsForJob ? `onclick="openJobLightbox('${jsFolder}')"` : ''}><span class="checkbox-slot"></span>${bandInner}</div></td></tr>`;
+        });
+        if (!data.folders.length) fb.innerHTML = '<tr><td colspan="4" class="muted">Aucun dossier</td></tr>';
+        bindSelectionState('folderSel', 'folderSelAll');
+    }
+
     const archivesPending = (data.archives || []).filter(a => !(a.validation && a.validation.valid === true)).length;
     setKpiValue('kpiFolders', data.folders.length || 0);
     setKpiValue('kpiArchivesPending', archivesPending);
     setKpiValue('kpiReadyAudiobookshelf', data.ready_for_audiobookshelf || 0);
     touchKpiRefresh();
 
-    (data.hidden_processed_folders || []).forEach(f => {
-        const folderNameEscaped = escapeHtml(f.name);
-        const outputFiles = Array.isArray(f.output_files) ? f.output_files.filter(Boolean) : [];
-        const outputName = outputFiles[0] || '';
-        const outputLabel = outputName ? escapeHtml(outputName) : '<span class="muted">Aucun M4B trouvé</span>';
-        hpb.innerHTML += `<tr class="row-main">
-            <td class="checkbox-col"><input type="checkbox" name="fileSel" value="${folderNameEscaped}" onchange="bindSelectionState('fileSel', 'fileSelAll')"></td>
-            <td>${folderNameEscaped}</td>
-            <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
-            <td>${fmtMb(f.size)}</td>
-            <td>${outputLabel}</td>
-        </tr>
-        <tr class="row-band"><td colspan="5"><div class="action-band"><span class="checkbox-slot"></span>${renderFileActionBand(f.name, outputName)}</div></td></tr>`;
-    });
-    if (!(data.hidden_processed_folders || []).length) {
-        hpb.innerHTML = '<tr><td colspan="6" class="muted">Aucun dossier déjà traité caché</td></tr>';
+    if (files) {
+        const hpb = document.getElementById('hiddenProcessedFoldersBody');
+        hpb.innerHTML = '';
+        (data.hidden_processed_folders || []).forEach(f => {
+            const folderNameEscaped = escapeHtml(f.name);
+            const outputFiles = Array.isArray(f.output_files) ? f.output_files.filter(Boolean) : [];
+            const outputName = outputFiles[0] || '';
+            const outputLabel = outputName ? escapeHtml(outputName) : '<span class="muted">Aucun M4B trouvé</span>';
+            hpb.innerHTML += `<tr class="row-main">
+                <td class="checkbox-col"><input type="checkbox" name="fileSel" value="${folderNameEscaped}" onchange="bindSelectionState('fileSel', 'fileSelAll')"></td>
+                <td>${folderNameEscaped}</td>
+                <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
+                <td>${fmtMb(f.size)}</td>
+                <td>${outputLabel}</td>
+            </tr>
+            <tr class="row-band"><td colspan="5"><div class="action-band"><span class="checkbox-slot"></span>${renderFileActionBand(f.name, outputName)}</div></td></tr>`;
+        });
+        if (!(data.hidden_processed_folders || []).length) {
+            hpb.innerHTML = '<tr><td colspan="6" class="muted">Aucun dossier déjà traité caché</td></tr>';
+        }
+        bindSelectionState('fileSel', 'fileSelAll');
     }
-    bindSelectionState('fileSel', 'fileSelAll');
 
-    data.archives.forEach(a => {
-        const archiveEscaped = escapeHtml(a.primary_name || a.name);
-        const archiveJs = toJsString(a.primary_name || a.name);
-        const isInvalid = a.validation && a.validation.valid === false;
-        const archiveLabel = escapeHtml(a.display_name || a.name);
-        const actionBtn = isInvalid
-            ? `<button class="danger" onclick="deleteArchive('${archiveJs}')">Supprimer</button>`
-            : `<button onclick="extractArchives(['${archiveJs}'])">Extraire</button>`;
-        const dupDeleteBtn = duplicateDeleteButton(a);
-        ab.innerHTML += `<tr><td class="checkbox-col"><input type="checkbox" name="archiveSel" value="${archiveEscaped}" ${isInvalid ? 'disabled' : ''} onchange="bindSelectionState('archiveSel', 'archiveSelAll')"></td><td>${archiveValidationBadge(a)} ${archiveLabel}${archiveDuplicateHint(a)}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> ${actionBtn} ${dupDeleteBtn}</td></tr>`;
-    });
-    if (!data.archives.length) ab.innerHTML = '<tr><td colspan="4" class="muted">Aucune archive</td></tr>';
+    if (archives) {
+        const ab = document.getElementById('archivesBody');
+        ab.innerHTML = '';
+        data.archives.forEach(a => {
+            const archiveEscaped = escapeHtml(a.primary_name || a.name);
+            const archiveJs = toJsString(a.primary_name || a.name);
+            const isInvalid = a.validation && a.validation.valid === false;
+            const archiveLabel = escapeHtml(a.display_name || a.name);
+            const actionBtn = isInvalid
+                ? `<button class="danger" onclick="deleteArchive('${archiveJs}')">Supprimer</button>`
+                : `<button onclick="extractArchives(['${archiveJs}'])">Extraire</button>`;
+            const dupDeleteBtn = duplicateDeleteButton(a);
+            ab.innerHTML += `<tr><td class="checkbox-col"><input type="checkbox" name="archiveSel" value="${archiveEscaped}" ${isInvalid ? 'disabled' : ''} onchange="bindSelectionState('archiveSel', 'archiveSelAll')"></td><td>${archiveValidationBadge(a)} ${archiveLabel}${archiveDuplicateHint(a)}</td><td>${fmtMb(a.size)}</td><td><button class="secondary" onclick="validateArchives(['${archiveJs}'])">Valider</button> ${actionBtn} ${dupDeleteBtn}</td></tr>`;
+        });
+        if (!data.archives.length) ab.innerHTML = '<tr><td colspan="4" class="muted">Aucune archive</td></tr>';
+        bindSelectionState('archiveSel', 'archiveSelAll');
+    }
+
     restoreLibrarySelection(previousSelection);
-    bindSelectionState('folderSel', 'folderSelAll');
-    bindSelectionState('archiveSel', 'archiveSelAll');
 
-    if (changedZones.folders) flashZone('#page-library .panel-card:nth-of-type(1)');
-    if (changedZones.files) flashZone('#page-library .panel-card:nth-of-type(2)');
-    if (changedZones.archives) flashZone('#page-library .panel-card:nth-of-type(3)');
+    if (changedZones.folders) flashZone('[data-zone="folders"]');
+    if (changedZones.files) flashZone('[data-zone="files"]');
+    if (changedZones.archives) flashZone('[data-zone="archives"]');
     if (changedZones.processing) flashProcessingBands();
+
+    const refreshedAt = Date.now();
+    if (folders) libraryRefreshState.foldersAt = refreshedAt;
+    if (files) libraryRefreshState.filesAt = refreshedAt;
+    if (archives) libraryRefreshState.archivesAt = refreshedAt;
 }
+
+function refreshLibraryPanelsNow(){
+    return loadLibrary();
+}
+
 
 async function validateArchives(archives){
     const data = await api('/api/archive/validate',{method:'POST', body: JSON.stringify({archives})});
@@ -1397,9 +1414,21 @@ async function refreshDashboardData({forceDoneRefresh=false} = {}){
 
 function shouldRefreshLibrary(){
     if (renameInProgress || manualRenameRow) return false;
+    if (isTextEditingActive()) return false;
     const active = document.activeElement;
-    if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) return false;
+    if (active && active.tagName === 'SELECT') return false;
     return true;
+}
+
+function isTextEditingActive(){
+    const active = document.activeElement;
+    if (!active) return false;
+    if (active.tagName === 'TEXTAREA') return true;
+    if (active.tagName === 'INPUT') {
+        const inputType = (active.type || 'text').toLowerCase();
+        return ['text', 'search', 'url', 'tel', 'email', 'password', 'number'].includes(inputType);
+    }
+    return active.isContentEditable === true;
 }
 
 function isLibraryTabActive(){
@@ -1413,6 +1442,33 @@ function hasLibrarySelection(){
 
 function canPatchLibrarySafely(){
     return shouldRefreshLibrary() && isLibraryTabActive();
+}
+
+const libraryRefreshState = {
+    foldersAt: 0,
+    filesAt: 0,
+    archivesAt: 0,
+    inFlight: false,
+};
+
+async function runAutoLibraryRefreshTick(){
+    if (!isLibraryTabActive() || !shouldRefreshLibrary() || libraryRefreshState.inFlight) return;
+    const now = Date.now();
+    const wantFolders = now - libraryRefreshState.foldersAt >= 5000;
+    const wantFiles = now - libraryRefreshState.filesAt >= 15000;
+    const wantArchives = now - libraryRefreshState.archivesAt >= 15000;
+    if (!wantFolders && !wantFiles && !wantArchives) return;
+
+    libraryRefreshState.inFlight = true;
+    try {
+        await loadLibrary({folders: wantFolders, files: wantFiles, archives: wantArchives});
+        const refreshedAt = Date.now();
+        if (wantFolders) libraryRefreshState.foldersAt = refreshedAt;
+        if (wantFiles) libraryRefreshState.filesAt = refreshedAt;
+        if (wantArchives) libraryRefreshState.archivesAt = refreshedAt;
+    } finally {
+        libraryRefreshState.inFlight = false;
+    }
 }
 
 function snapshotLibrarySelection(){
@@ -1897,6 +1953,10 @@ setTimeout(async () => {
 setInterval(() => {
     monitorAndPatchDom();
 }, 5000);
+
+setInterval(() => {
+    runAutoLibraryRefreshTick();
+}, 1000);
 </script>
 </body>
 </html>

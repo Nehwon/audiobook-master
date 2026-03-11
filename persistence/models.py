@@ -1,109 +1,107 @@
-from __future__ import annotations
+#!/usr/bin/env python3
 
-import uuid
 from datetime import datetime
+from enum import Enum
+from sqlalchemy import Column, Integer, String, DateTime, Enum as SQLEnum, ForeignKey, Text, Boolean
+from sqlalchemy.orm import relationship
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from .db import Base
 
-
-class Base(DeclarativeBase):
-    pass
-
+class ProcessingJobStatus(Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    RETRY_PENDING = "retry_pending"
+    FAILED = "failed"
+    DONE = "done"
+    CANCELLED = "cancelled"
 
 class ProcessingJob(Base):
     __tablename__ = "processing_job"
+    
+    id = Column(Integer, primary_key=True)
+    status = Column(SQLEnum(ProcessingJobStatus), default=ProcessingJobStatus.QUEUED)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_heartbeat = Column(DateTime, default=datetime.utcnow)
+    retry_count = Column(Integer, default=0)
+    error_text = Column(Text, nullable=True)
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    folder_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
-    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    recovery_status: Mapped[str | None] = mapped_column(String(32))
-    idempotency_key: Mapped[str | None] = mapped_column(String(255))
-    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    steps: Mapped[list[ProcessingStep]] = relationship(back_populates="job", cascade="all, delete-orphan")
-
+    # Relations
+    steps = relationship("ProcessingStep", back_populates="job")
+    
+    def __repr__(self):
+        return f"<ProcessingJob {self.id} status={self.status} retries={self.retry_count}>"
 
 class ProcessingStep(Base):
     __tablename__ = "processing_step"
+    
+    id = Column(Integer, primary_key=True)
+    job_id = Column(Integer, ForeignKey("processing_job.id"))
+    name = Column(String(100))
+    status = Column(SQLEnum(ProcessingJobStatus), default=ProcessingJobStatus.QUEUED)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    
+    # Relations
+    job = relationship("ProcessingJob", back_populates="steps")
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    job_id: Mapped[str] = mapped_column(ForeignKey("processing_job.id", ondelete="CASCADE"), nullable=False)
-    name: Mapped[str] = mapped_column(String(120), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    details: Mapped[dict | None] = mapped_column(JSON)
-
-    job: Mapped[ProcessingJob] = relationship(back_populates="steps")
-
+    def __repr__(self):
+        return f"<ProcessingStep {self.id} name={self.name} status={self.status}>"
 
 class FolderState(Base):
     __tablename__ = "folder_state"
-
-    folder_id: Mapped[str] = mapped_column(String(255), primary_key=True)
-    status: Mapped[str] = mapped_column(String(32), nullable=False)
-    last_job_id: Mapped[str | None] = mapped_column(ForeignKey("processing_job.id", ondelete="SET NULL"))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-
+    
+    id = Column(Integer, primary_key=True)
+    path = Column(String(500), unique=True)
+    status = Column(String(50))
+    last_processed = Column(DateTime, nullable=True)
+    error_count = Column(Integer, default=0)
+    
+    def __repr__(self):
+        return f"<FolderState {self.path} status={self.status}>"
 
 class ValidationResult(Base):
     __tablename__ = "validation_result"
+    
+    id = Column(Integer, primary_key=True)
+    folder_id = Column(Integer, ForeignKey("folder_state.id"))
+    validator_name = Column(String(100))
+    is_valid = Column(Boolean)
+    validation_time = Column(DateTime, default=datetime.utcnow)
+    details = Column(Text, nullable=True)
+    
+    # Relations
+    folder = relationship("FolderState", backref="validations")
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    folder_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    validation_key: Mapped[str] = mapped_column(String(120), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False)
-    payload: Mapped[dict | None] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-
+    def __repr__(self):
+        return f"<ValidationResult {self.id} valid={self.is_valid}>"
 
 class ProcessingError(Base):
     __tablename__ = "processing_error"
+    
+    id = Column(Integer, primary_key=True)
+    job_id = Column(Integer, ForeignKey("processing_job.id"), nullable=True)
+    folder_id = Column(Integer, ForeignKey("folder_state.id"), nullable=True)
+    error_code = Column(String(50))
+    message = Column(Text)
+    stack_trace = Column(Text, nullable=True)
+    occurred_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relations
+    job = relationship("ProcessingJob", backref="errors")
+    folder = relationship("FolderState", backref="errors")
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    job_id: Mapped[str | None] = mapped_column(ForeignKey("processing_job.id", ondelete="SET NULL"))
-    folder_id: Mapped[str | None] = mapped_column(String(255))
-    error_code: Mapped[str] = mapped_column(String(80), nullable=False)
-    user_message: Mapped[str] = mapped_column(Text, nullable=False)
-    technical_message: Mapped[str | None] = mapped_column(Text)
-    stacktrace: Mapped[str | None] = mapped_column(Text)
-    retryable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-
+    def __repr__(self):
+        return f"<ProcessingError {self.error_code} at {self.occurred_at}>"
 
 class OutboxEvent(Base):
     __tablename__ = "outbox_event"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    aggregate_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    aggregate_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-
-
-class RecoveryAudit(Base):
-    __tablename__ = "recovery_audit"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    job_id: Mapped[str] = mapped_column(ForeignKey("processing_job.id", ondelete="CASCADE"), nullable=False)
-    decision: Mapped[str] = mapped_column(String(64), nullable=False)
-    reason: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-
-
-Index("idx_processing_job_status_updated_at", ProcessingJob.status, ProcessingJob.updated_at)
-Index("idx_processing_job_folder_id", ProcessingJob.folder_id)
-Index("idx_processing_job_last_heartbeat_at", ProcessingJob.last_heartbeat_at)
-Index("idx_processing_job_idempotency_key", ProcessingJob.idempotency_key)
-Index("idx_processing_step_job_id_status", ProcessingStep.job_id, ProcessingStep.status)
-Index("idx_folder_state_status_updated_at", FolderState.status, FolderState.updated_at)
-Index("idx_validation_result_folder_id", ValidationResult.folder_id)
-Index("idx_processing_error_job_id", ProcessingError.job_id)
-Index("idx_processing_error_folder_id", ProcessingError.folder_id)
-Index("idx_outbox_event_created_at", OutboxEvent.created_at)
-Index("idx_recovery_audit_job_id_created_at", RecoveryAudit.job_id, RecoveryAudit.created_at)
+    
+    id = Column(Integer, primary_key=True)
+    event_type = Column(String(100))
+    payload = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    published_at = Column(DateTime, nullable=True)
+    
+    def __repr__(self):
+        return f"<OutboxEvent {self.event_type} at {self.created_at}>"

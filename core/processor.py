@@ -1895,6 +1895,7 @@ class AudiobookProcessor:
             for key, value in metadata_dict.items():
                 metadata_args.extend(['-metadata', f'{key}={value}'])
 
+
             work_dir = self.temp_dir / f"m4b_build_{int(time.time())}_{os.getpid()}"
             work_dir.mkdir(parents=True, exist_ok=True)
 

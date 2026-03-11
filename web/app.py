@@ -90,6 +90,7 @@ upload_packets: Dict[str, Dict[str, object]] = {}
 packet_schedule_jobs: Dict[str, Dict[str, object]] = {}
 review_bin: List[Dict] = []
 worker_started = False
+worker_threads: List[threading.Thread] = []
 MAX_JOB_EVENTS = 500
 job_events: List[Dict] = []
 archive_validation_cache: Dict[str, Dict[str, object]] = {}
@@ -1868,6 +1869,12 @@ def _push_job_event(
     log_fn("[%s] %s - %s", job_id, stage, message)
 
 
+def _compute_job_worker_count(total_cores: Optional[int] = None) -> int:
+    """Nombre de workers de job parallèle (CPU threads / 4, minimum 1)."""
+    cores = total_cores or os.cpu_count() or 1
+    return max(1, cores // 4)
+
+
 def _worker_loop() -> None:
     while True:
         job_id = job_queue.get()
@@ -2011,8 +2018,14 @@ def _ensure_worker() -> None:
     if worker_started:
         return
     _run_recovery_bootstrap()
-    thread = threading.Thread(target=_worker_loop, daemon=True)
-    thread.start()
+
+    worker_count = _compute_job_worker_count()
+    for idx in range(worker_count):
+        thread = threading.Thread(target=_worker_loop, daemon=True, name=f"job-worker-{idx + 1}")
+        thread.start()
+        worker_threads.append(thread)
+
+    logger.info("⚙️ Workers de traitement démarrés: %s (règle CPU/4)", worker_count)
     worker_started = True
 
 

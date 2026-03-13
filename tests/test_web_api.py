@@ -221,6 +221,40 @@ class TestWebRenameApi(unittest.TestCase):
             ).fetchone()
         self.assertIsNotNone(row)
 
+    def test_library_reindex_rebuilds_three_tables_and_links(self):
+        folder_linked = self.media_dir / 'Livre Lie'
+        folder_linked.mkdir()
+        (folder_linked / 'track1.mp3').write_text('x')
+
+        folder_orphan = self.media_dir / 'Livre Orphelin'
+        folder_orphan.mkdir()
+        (folder_orphan / 'track1.mp3').write_text('x')
+
+        (self.output_dir / 'Livre Lie.m4b').write_text('m4b')
+        (self.output_dir / 'Fichier Orphelin.m4b').write_text('m4b')
+
+        resp = self.client.post('/api/library/reindex')
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertTrue(payload['ok'])
+        self.assertTrue(payload['schema']['media_folders'])
+        self.assertTrue(payload['schema']['output_files'])
+        self.assertTrue(payload['schema']['folder_output_links'])
+        self.assertTrue(payload['schema']['ok'])
+
+        with sqlite3.connect(web_app._state_db_path()) as conn:
+            folder_count = conn.execute('SELECT COUNT(*) FROM media_folders').fetchone()[0]
+            output_count = conn.execute('SELECT COUNT(*) FROM output_files').fetchone()[0]
+            linked_count = conn.execute("SELECT COUNT(*) FROM folder_output_links WHERE sync_status = 'linked'").fetchone()[0]
+            orphan_folder_count = conn.execute("SELECT COUNT(*) FROM folder_output_links WHERE sync_status = 'orphan_folder'").fetchone()[0]
+            orphan_output_count = conn.execute("SELECT COUNT(*) FROM folder_output_links WHERE sync_status = 'orphan_output'").fetchone()[0]
+
+        self.assertEqual(folder_count, 2)
+        self.assertEqual(output_count, 2)
+        self.assertEqual(linked_count, 1)
+        self.assertEqual(orphan_folder_count, 1)
+        self.assertEqual(orphan_output_count, 1)
+
     def test_save_config_encrypts_audiobookshelf_secrets_at_rest(self):
         cfg = web_app._default_config()
         cfg['audiobookshelf_password'] = 'MotDePasseUltraSecret'

@@ -313,6 +313,55 @@ def _ensure_state_db() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS media_folders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                folder_name TEXT NOT NULL UNIQUE,
+                folder_path TEXT NOT NULL,
+                audio_count INTEGER NOT NULL DEFAULT 0,
+                file_count INTEGER NOT NULL DEFAULT 0,
+                size_bytes INTEGER NOT NULL DEFAULT 0,
+                modified REAL NOT NULL,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS output_files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_name TEXT NOT NULL UNIQUE,
+                file_stem TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL DEFAULT 0,
+                modified REAL NOT NULL,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS folder_output_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                folder_id INTEGER,
+                output_id INTEGER,
+                sync_status TEXT NOT NULL,
+                reason TEXT,
+                updated_at REAL NOT NULL,
+                FOREIGN KEY(folder_id) REFERENCES media_folders(id) ON DELETE CASCADE,
+                FOREIGN KEY(output_id) REFERENCES output_files(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_folder_output_links_pair
+            ON folder_output_links(folder_id, output_id, sync_status)
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS app_config (
                 config_key TEXT PRIMARY KEY,
                 config_payload TEXT NOT NULL,
@@ -803,6 +852,174 @@ def _reconcile_m4b_candidates_with_filesystem() -> None:
                     """,
                     (now, source_folder),
                 )
+
+
+def _full_reindex_media_database() -> Dict[str, object]:
+    """Reconstruit complètement l'index DB des dossiers/fichiers/liens."""
+    _ensure_state_db()
+    now = time.time()
+
+    folders_payload: List[Dict[str, object]] = []
+    for item in sorted(_safe_iterdir(MEDIA_DIR), key=lambda x: x.name.lower()):
+        if not item.is_dir():
+            continue
+        file_count = sum(1 for f in item.rglob("*") if f.is_file())
+        if file_count == 0:
+            continue
+        folders_payload.append(
+            {
+                "folder_name": item.name,
+                "folder_path": str(item),
+                "audio_count": _count_audio_files(item),
+                "file_count": file_count,
+                "size_bytes": _folder_size(item),
+                "modified": item.stat().st_mtime,
+            }
+        )
+
+    outputs_payload: List[Dict[str, object]] = []
+    for output_file in sorted(OUTPUT_DIR.glob("*.m4b"), key=lambda x: x.name.lower()) if OUTPUT_DIR.exists() else []:
+        if not output_file.is_file():
+            continue
+        outputs_payload.append(
+            {
+                "file_name": output_file.name,
+                "file_stem": output_file.stem,
+                "file_path": str(output_file),
+                "size_bytes": int(output_file.stat().st_size),
+                "modified": output_file.stat().st_mtime,
+            }
+        )
+
+    with sqlite3.connect(_state_db_path()) as conn:
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("BEGIN")
+        try:
+            conn.execute("DELETE FROM folder_output_links")
+            conn.execute("DELETE FROM media_folders")
+            conn.execute("DELETE FROM output_files")
+            conn.execute("DELETE FROM m4b_candidates")
+
+            for folder in folders_payload:
+                conn.execute(
+                    """
+                    INSERT INTO media_folders
+                        (folder_name, folder_path, audio_count, file_count, size_bytes, modified, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        folder["folder_name"],
+                        folder["folder_path"],
+                        folder["audio_count"],
+                        folder["file_count"],
+                        folder["size_bytes"],
+                        folder["modified"],
+                        now,
+                        now,
+                    ),
+                )
+            for output in outputs_payload:
+                conn.execute(
+                    """
+                    INSERT INTO output_files
+                        (file_name, file_stem, file_path, size_bytes, modified, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        output["file_name"],
+                        output["file_stem"],
+                        output["file_path"],
+                        output["size_bytes"],
+                        output["modified"],
+                        now,
+                        now,
+                    ),
+                )
+
+            folder_rows = conn.execute("SELECT id, folder_name FROM media_folders").fetchall()
+            output_rows = conn.execute("SELECT id, file_name, file_stem FROM output_files").fetchall()
+            folder_id_by_name = {str(name): int(fid) for fid, name in folder_rows}
+            output_by_stem: Dict[str, Dict[str, object]] = {}
+            for oid, file_name, file_stem in output_rows:
+                output_by_stem.setdefault(str(file_stem), {"id": int(oid), "file_name": str(file_name)})
+
+            linked_folder_ids: set[int] = set()
+            linked_output_ids: set[int] = set()
+
+            for folder_name, folder_id in folder_id_by_name.items():
+                output = output_by_stem.get(folder_name)
+                if output:
+                    linked_folder_ids.add(folder_id)
+                    linked_output_ids.add(int(output["id"]))
+                    conn.execute(
+                        """
+                        INSERT INTO folder_output_links (folder_id, output_id, sync_status, reason, updated_at)
+                        VALUES (?, ?, 'linked', 'same_name_match', ?)
+                        """,
+                        (folder_id, int(output["id"]), now),
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO m4b_candidates
+                            (source_folder, output_name, metadata_status, metadata_payload, created_at, updated_at)
+                        VALUES (?, ?, 'completed', NULL, ?, ?)
+                        """,
+                        (folder_name, str(output["file_name"]), now, now),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO folder_output_links (folder_id, output_id, sync_status, reason, updated_at)
+                        VALUES (?, NULL, 'orphan_folder', 'no_same_name_output', ?)
+                        """,
+                        (folder_id, now),
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO m4b_candidates
+                            (source_folder, output_name, metadata_status, metadata_payload, created_at, updated_at)
+                        VALUES (?, NULL, 'pending', NULL, ?, ?)
+                        """,
+                        (folder_name, now, now),
+                    )
+
+            for oid, _file_name, _file_stem in output_rows:
+                if int(oid) in linked_output_ids:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO folder_output_links (folder_id, output_id, sync_status, reason, updated_at)
+                    VALUES (NULL, ?, 'orphan_output', 'no_same_name_folder', ?)
+                    """,
+                    (int(oid), now),
+                )
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    return {
+        "folders_indexed": len(folders_payload),
+        "outputs_indexed": len(outputs_payload),
+        "linked": len([1 for f in folders_payload if any(o["file_stem"] == f["folder_name"] for o in outputs_payload)]),
+        "orphan_folders": len([1 for f in folders_payload if not any(o["file_stem"] == f["folder_name"] for o in outputs_payload)]),
+        "orphan_outputs": len([1 for o in outputs_payload if not any(f["folder_name"] == o["file_stem"] for f in folders_payload)]),
+    }
+
+
+def _verify_media_index_schema() -> Dict[str, bool]:
+    _ensure_state_db()
+    required_tables = {"media_folders", "output_files", "folder_output_links"}
+    with sqlite3.connect(_state_db_path()) as conn:
+        rows = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+    existing = {str(row[0]) for row in rows if row and row[0]}
+    return {
+        "media_folders": "media_folders" in existing,
+        "output_files": "output_files" in existing,
+        "folder_output_links": "folder_output_links" in existing,
+        "ok": required_tables.issubset(existing),
+    }
 
 
 def _get_completed_folders_with_existing_outputs() -> set[str]:
@@ -2624,6 +2841,18 @@ def api_library():
         folder["job"] = by_folder.get(folder["name"])
 
     return jsonify(media)
+
+
+@app.route("/api/library/reindex", methods=["POST"])
+def api_library_reindex():
+    report = _full_reindex_media_database()
+    schema = _verify_media_index_schema()
+    return jsonify({"ok": True, "report": report, "schema": schema})
+
+
+@app.route("/api/library/schema")
+def api_library_schema_status():
+    return jsonify({"ok": True, "schema": _verify_media_index_schema()})
 
 
 @app.route("/api/extract", methods=["POST"])

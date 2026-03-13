@@ -231,6 +231,7 @@
     </div>
     <div class="top-actions">
         <button onclick="refreshLibraryPanelsNow()">Rafraîchir</button>
+        <button class="secondary" onclick="reindexLibraryDatabase()">Réindexer la base</button>
         <span id="apiActivityDot" class="status-dot" title="Activité API"></span>
         <label class="row">🌗 Theme <input id="themeSwitch" type="checkbox"></label>
     </div>
@@ -998,6 +999,30 @@ async function loadLibrary({folders=true, files=true, archives=true} = {}) {
 
 function refreshLibraryPanelsNow(){
     return loadLibrary();
+}
+
+async function reindexLibraryDatabase(){
+    const confirmed = await askConfirmation(
+        'Réindexer la base ? Cela vide les index Dossiers/Fichiers/Liaisons puis les reconstruit depuis le disque.',
+        {confirmText: 'Réindexer', cancelText: 'Annuler', type: 'warn'}
+    );
+    if (!confirmed) return;
+
+    const payload = await api('/api/library/reindex', {method:'POST'});
+    const schema = payload?.schema || {};
+    const report = payload?.report || {};
+    if (!schema.ok) {
+        notify('Réindexation terminée mais schéma incomplet (Dossiers/Fichiers/Liaisons).', 'error', 7000);
+    } else {
+        notify(
+            `Réindexation OK: ${report.folders_indexed || 0} dossier(s), ${report.outputs_indexed || 0} fichier(s), ${report.linked || 0} lié(s).`,
+            'success',
+            6000
+        );
+    }
+    await loadLibrary();
+    await loadSubmissionQueue();
+    await loadJobs({forceDoneRefresh: false});
 }
 
 

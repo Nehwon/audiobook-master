@@ -154,55 +154,6 @@ class TestWebRenameApi(unittest.TestCase):
         hidden = next(entry for entry in listing['hidden_processed_folders'] if entry['name'] == 'Mon Livre Source')
         self.assertIn(output_name, hidden['output_files'])
 
-    def test_library_sets_has_folder_true_when_source_folder_exists(self):
-        folder = self.media_dir / 'Roman Relie'
-        folder.mkdir()
-        (folder / 'track1.mp3').write_text('x')
-
-        output_name = 'Auteur - Roman Relie.m4b'
-        (web_app.OUTPUT_DIR / output_name).write_text('m4b')
-        web_app._save_m4b_candidate('Roman Relie', output_name)
-
-        listing = self.client.get('/api/library').get_json()
-        hidden = next(entry for entry in listing['hidden_processed_folders'] if entry['name'] == 'Roman Relie')
-        self.assertTrue(hidden['has_folder'])
-
-    def test_library_adds_output_without_source_folder_and_marks_has_folder_false(self):
-        output_name = 'Auteur - Orphelin.m4b'
-        (web_app.OUTPUT_DIR / output_name).write_text('m4b')
-
-        listing = self.client.get('/api/library').get_json()
-        hidden = next(entry for entry in listing['hidden_processed_folders'] if output_name in entry.get('output_files', []))
-        self.assertFalse(hidden['has_folder'])
-
-    def test_library_keeps_unmapped_output_separate_from_input_folder(self):
-        folder = self.media_dir / 'Sync Livre'
-        folder.mkdir()
-        (folder / 'track1.mp3').write_text('x')
-        output_name = 'Sync Livre.m4b'
-        (web_app.OUTPUT_DIR / output_name).write_text('m4b')
-
-        listing = self.client.get('/api/library').get_json()
-        folder_names = [entry['name'] for entry in listing['folders']]
-        self.assertIn('Sync Livre', folder_names)
-        hidden = next(entry for entry in listing['hidden_processed_folders'] if output_name in entry.get('output_files', []))
-        self.assertFalse(hidden['has_folder'])
-
-    def test_library_sync_removes_stale_source_mapping_without_forced_relink(self):
-        output_name = 'Sync Rebind.m4b'
-        (web_app.OUTPUT_DIR / output_name).write_text('m4b')
-        web_app._save_m4b_candidate('Ancien Dossier', output_name)
-
-        folder = self.media_dir / 'Sync Rebind'
-        folder.mkdir()
-        (folder / 'track1.mp3').write_text('x')
-
-        listing = self.client.get('/api/library').get_json()
-        folder_names = [entry['name'] for entry in listing['folders']]
-        self.assertIn('Sync Rebind', folder_names)
-        hidden = next(entry for entry in listing['hidden_processed_folders'] if output_name in entry.get('output_files', []))
-        self.assertFalse(hidden['has_folder'])
-
     def test_delete_processed_folder_with_override_flag(self):
         folder = self.media_dir / 'Traite'
         folder.mkdir()

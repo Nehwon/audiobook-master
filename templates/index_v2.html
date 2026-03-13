@@ -1541,6 +1541,9 @@ async function monitorAndPatchDom(){
 
         if (changes.jobs) {
             await loadJobs({forceDoneRefresh: false});
+            // Les barres de progression des dossiers dépendent de /api/library (f.job),
+            // donc un changement de jobs doit aussi déclencher un refresh de la zone Dossiers.
+            monitorState.pendingLibraryRefresh = true;
         }
         if (changes.outputs) {
             await loadSubmissionQueue();
@@ -1549,7 +1552,7 @@ async function monitorAndPatchDom(){
             monitorState.pendingLibraryRefresh = true;
         }
         if (monitorState.pendingLibraryRefresh && canPatchLibrarySafely()) {
-            await loadLibrary();
+            await loadLibrary({folders: true, files: true, archives: false});
             monitorState.pendingLibraryRefresh = false;
         }
         monitorState.didHydrateOnce = true;

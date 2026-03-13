@@ -187,6 +187,20 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertIn(output_name, hidden['output_files'])
         self.assertTrue(hidden['has_folder'])
 
+    def test_library_sync_removes_stale_source_mapping_and_relinks_existing_folder(self):
+        output_name = 'Sync Rebind.m4b'
+        (web_app.OUTPUT_DIR / output_name).write_text('m4b')
+        web_app._save_m4b_candidate('Ancien Dossier', output_name)
+
+        folder = self.media_dir / 'Sync Rebind'
+        folder.mkdir()
+        (folder / 'track1.mp3').write_text('x')
+
+        listing = self.client.get('/api/library').get_json()
+        hidden = next(entry for entry in listing['hidden_processed_folders'] if entry['name'] == 'Sync Rebind')
+        self.assertIn(output_name, hidden['output_files'])
+        self.assertTrue(hidden['has_folder'])
+
     def test_delete_processed_folder_with_override_flag(self):
         folder = self.media_dir / 'Traite'
         folder.mkdir()

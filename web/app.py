@@ -785,6 +785,7 @@ def _sync_m4b_candidates_with_filesystem() -> None:
         }
     else:
         source_folders = {}
+    source_folder_names = set(source_folders.keys())
 
     with sqlite3.connect(_state_db_path()) as conn:
         if output_names:
@@ -792,6 +793,16 @@ def _sync_m4b_candidates_with_filesystem() -> None:
             conn.execute(
                 "DELETE FROM m4b_candidates WHERE output_name NOT IN (" + placeholders + ")",
                 tuple(output_names),
+            )
+        else:
+            conn.execute("DELETE FROM m4b_candidates")
+            return
+
+        if source_folder_names:
+            source_placeholders = ",".join("?" for _ in source_folder_names)
+            conn.execute(
+                "DELETE FROM m4b_candidates WHERE source_folder NOT IN (" + source_placeholders + ")",
+                tuple(source_folder_names),
             )
         else:
             conn.execute("DELETE FROM m4b_candidates")

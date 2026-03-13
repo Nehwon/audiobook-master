@@ -815,40 +815,10 @@ def _sync_m4b_candidates_with_filesystem() -> None:
         existing_sources = {str(row[0]) for row in existing_rows if row and row[0]}
         existing_outputs = {str(row[1]) for row in existing_rows if row and row[1]}
 
-        normalized_sources = {normalized for normalized in source_folders.values() if normalized}
+        # Synchronisation conservative: on nettoie l'état obsolète sans créer de liaison inférée
+        # entre dossier input et output .m4b. Les liaisons sont créées explicitement en fin d'encodage.
+        _ = existing_sources, existing_outputs
 
-        for output_file in output_files:
-            if output_file.name in existing_outputs:
-                continue
-            normalized_output = _normalize_media_label(output_file.stem)
-            if not normalized_output or normalized_output not in normalized_sources:
-                continue
-
-            source_name = next(
-                (
-                    name for name, normalized in source_folders.items()
-                    if normalized == normalized_output and name not in existing_sources
-                ),
-                None,
-            )
-            if not source_name:
-                continue
-
-            now = time.time()
-            conn.execute(
-                """
-                INSERT INTO m4b_candidates
-                    (source_folder, output_name, metadata_status, metadata_payload, created_at, updated_at)
-                VALUES (?, ?, 'completed', NULL, ?, ?)
-                ON CONFLICT(source_folder) DO UPDATE SET
-                    output_name = excluded.output_name,
-                    metadata_status = excluded.metadata_status,
-                    updated_at = excluded.updated_at
-                """,
-                (source_name, output_file.name, now, now),
-            )
-            existing_sources.add(source_name)
-            existing_outputs.add(output_file.name)
 
 
 _ensure_state_db()
@@ -1508,7 +1478,6 @@ def _list_media() -> Dict:
     hidden_processed_folders = []
     archives = []
     output_files = [file for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()] if OUTPUT_DIR.exists() else []
-    output_keys = {_normalize_media_label(file.stem) for file in output_files}
     output_names_by_key: Dict[str, List[str]] = {}
     for output_file in output_files:
         output_names_by_key.setdefault(_normalize_media_label(output_file.stem), []).append(output_file.name)
@@ -1525,7 +1494,7 @@ def _list_media() -> Dict:
                 continue
             folder_size = _folder_size(item)
             normalized_folder_name = _normalize_media_label(item.name)
-            if item.name in completed_source_folders or normalized_folder_name in output_keys:
+            if item.name in completed_source_folders:
                 matched_outputs = list(completed_outputs_by_source.get(item.name, []))
                 for output_name in output_names_by_key.get(normalized_folder_name, []):
                     if output_name not in matched_outputs:
@@ -2803,13 +2772,8 @@ def api_delete_folder():
         if not suggest_delete:
             return _api_error("suppression autorisée uniquement pour dossier suspect", code="folder_not_suspicious")
     else:
-        output_keys = {
-            _normalize_media_label(file.stem)
-            for file in OUTPUT_DIR.glob("*.m4b")
-            if file.is_file()
-        } if OUTPUT_DIR.exists() else set()
         completed_source_folders = _get_completed_folders_with_existing_outputs()
-        is_hidden_processed = folder in completed_source_folders or _normalize_media_label(folder) in output_keys
+        is_hidden_processed = folder in completed_source_folders
         if not is_hidden_processed:
             return _api_error("dossier non éligible à la suppression des éléments déjà traités", code="folder_not_processed")
 

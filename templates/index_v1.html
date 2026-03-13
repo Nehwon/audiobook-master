@@ -682,6 +682,7 @@ async function loadLibrary() {
         const outputName = outputFiles[0] || '';
         const jsOutputName = toJsString(outputName);
         const hasOutput = !!outputName;
+        const canDeleteFolder = f.has_folder !== false;
         const outputLabel = hasOutput ? escapeHtml(outputName) : '<span class="muted">Aucun M4B trouvé</span>';
         hpb.innerHTML += `<tr>
             <td>${folderNameEscaped}</td>
@@ -689,9 +690,9 @@ async function loadLibrary() {
             <td>${fmtMb(f.size)}</td>
             <td>${outputLabel}</td>
             <td>
-                <button class="danger" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer dossier</button>
+                ${canDeleteFolder ? `<button class="danger" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer dossier</button>` : ''}
                 <button class="danger" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedOutput('${jsOutputName}','${jsFolder}')">Supprimer M4B</button>
-                <button class="danger" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedBoth('${jsFolder}','${jsOutputName}')">Supprimer les deux</button>
+                ${canDeleteFolder ? `<button class="danger" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedBoth('${jsFolder}','${jsOutputName}')">Supprimer les deux</button>` : ''}
             </td>
         </tr>`;
     });

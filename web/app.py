@@ -1432,6 +1432,7 @@ def _list_media() -> Dict:
         output_names_by_key.setdefault(_normalize_media_label(output_file.stem), []).append(output_file.name)
     completed_outputs_by_source = _get_completed_outputs_by_source_folder()
     completed_source_folders = set(completed_outputs_by_source.keys()) | _get_completed_folders_with_existing_outputs()
+    linked_output_names: set[str] = set()
 
     for item in sorted(MEDIA_DIR.iterdir(), key=lambda x: x.name.lower()):
         if item.is_dir():
@@ -1447,6 +1448,7 @@ def _list_media() -> Dict:
                 for output_name in output_names_by_key.get(normalized_folder_name, []):
                     if output_name not in matched_outputs:
                         matched_outputs.append(output_name)
+                linked_output_names.update(matched_outputs)
                 hidden_processed_folders.append(
                     {
                         "name": item.name,
@@ -1455,6 +1457,7 @@ def _list_media() -> Dict:
                         "file_count": file_count,
                         "modified": item.stat().st_mtime,
                         "output_files": matched_outputs,
+                        "has_folder": True,
                     }
                 )
                 continue
@@ -1501,6 +1504,23 @@ def _list_media() -> Dict:
                     } if validation else None,
                 }
             )
+
+    for output_file in output_files:
+        if output_file.name in linked_output_names:
+            continue
+        hidden_processed_folders.append(
+            {
+                "name": output_file.stem,
+                "audio_count": 0,
+                "size": output_file.stat().st_size,
+                "file_count": 0,
+                "modified": output_file.stat().st_mtime,
+                "output_files": [output_file.name],
+                "has_folder": False,
+            }
+        )
+
+    hidden_processed_folders.sort(key=lambda item: str(item.get("name", "")).lower())
 
     grouped_archives = _group_archives_for_ui(archives)
     _cleanup_archive_fingerprint_db([a.get("primary_name", "") for a in grouped_archives if a.get("primary_name")])

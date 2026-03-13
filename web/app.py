@@ -770,6 +770,76 @@ def _get_completed_outputs_by_source_folder() -> Dict[str, List[str]]:
     return mapping
 
 
+def _sync_m4b_candidates_with_filesystem() -> None:
+    """Synchronise m4b_candidates avec les dossiers input/output présents sur disque."""
+    _ensure_state_db()
+
+    output_files = [file for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()] if OUTPUT_DIR.exists() else []
+    output_names = {file.name for file in output_files}
+
+    if MEDIA_DIR.exists():
+        source_folders = {
+            item.name: _normalize_media_label(item.name)
+            for item in MEDIA_DIR.iterdir()
+            if item.is_dir()
+        }
+    else:
+        source_folders = {}
+
+    with sqlite3.connect(_state_db_path()) as conn:
+        if output_names:
+            placeholders = ",".join("?" for _ in output_names)
+            conn.execute(
+                "DELETE FROM m4b_candidates WHERE output_name NOT IN (" + placeholders + ")",
+                tuple(output_names),
+            )
+        else:
+            conn.execute("DELETE FROM m4b_candidates")
+            return
+
+        existing_rows = conn.execute(
+            "SELECT source_folder, output_name FROM m4b_candidates WHERE metadata_status = 'completed'"
+        ).fetchall()
+
+        existing_sources = {str(row[0]) for row in existing_rows if row and row[0]}
+        existing_outputs = {str(row[1]) for row in existing_rows if row and row[1]}
+
+        normalized_sources = {normalized for normalized in source_folders.values() if normalized}
+
+        for output_file in output_files:
+            if output_file.name in existing_outputs:
+                continue
+            normalized_output = _normalize_media_label(output_file.stem)
+            if not normalized_output or normalized_output not in normalized_sources:
+                continue
+
+            source_name = next(
+                (
+                    name for name, normalized in source_folders.items()
+                    if normalized == normalized_output and name not in existing_sources
+                ),
+                None,
+            )
+            if not source_name:
+                continue
+
+            now = time.time()
+            conn.execute(
+                """
+                INSERT INTO m4b_candidates
+                    (source_folder, output_name, metadata_status, metadata_payload, created_at, updated_at)
+                VALUES (?, ?, 'completed', NULL, ?, ?)
+                ON CONFLICT(source_folder) DO UPDATE SET
+                    output_name = excluded.output_name,
+                    metadata_status = excluded.metadata_status,
+                    updated_at = excluded.updated_at
+                """,
+                (source_name, output_file.name, now, now),
+            )
+            existing_sources.add(source_name)
+            existing_outputs.add(output_file.name)
+
+
 _ensure_state_db()
 
 def _default_config() -> Dict:
@@ -1416,6 +1486,7 @@ def _normalize_media_label(value: str) -> str:
 
 def _list_media() -> Dict:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    _sync_m4b_candidates_with_filesystem()
     config = _load_config()
     ignored = set(config.get("ignored_folders", []))
     extracted_folders = {

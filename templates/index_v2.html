@@ -739,13 +739,14 @@ function renderProcessingActionBand(job, folder, audioCount=0){
         ${deleteBtn}`;
 }
 
-function renderFileActionBand(folder, outputName){
+function renderFileActionBand(folder, outputName, hasFolder=true){
     const jsFolder = toJsString(folder);
     const jsOutput = toJsString(outputName || '');
+    const canDeleteFolder = !!hasFolder;
     const hasOutput = !!outputName;
-    return `<button class="file-btn-delete-folder" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer dossier</button>
+    return `${canDeleteFolder ? `<button class="file-btn-delete-folder" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer dossier</button>` : ''}
         <button class="file-btn-delete-m4b" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedOutput('${jsOutput}','${jsFolder}')">Supprimer M4B</button>
-        <button class="file-btn-delete-both" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedBoth('${jsFolder}','${jsOutput}')">Supprimer les deux</button>`;
+        ${canDeleteFolder ? `<button class="file-btn-delete-both" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedBoth('${jsFolder}','${jsOutput}')">Supprimer les deux</button>` : ''}`;
 }
 
 function renderInlineJobProgress(job){
@@ -956,7 +957,7 @@ async function loadLibrary({folders=true, files=true, archives=true} = {}) {
                 <td>${fmtMb(f.size)}</td>
                 <td>${outputLabel}</td>
             </tr>
-            <tr class="row-band"><td colspan="5"><div class="action-band"><span class="checkbox-slot"></span>${renderFileActionBand(f.name, outputName)}</div></td></tr>`;
+            <tr class="row-band"><td colspan="5"><div class="action-band"><span class="checkbox-slot"></span>${renderFileActionBand(f.name, outputName, f.has_folder !== false)}</div></td></tr>`;
         });
         if (!(data.hidden_processed_folders || []).length) {
             hpb.innerHTML = '<tr><td colspan="6" class="muted">Aucun dossier déjà traité caché</td></tr>';

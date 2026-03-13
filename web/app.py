@@ -90,6 +90,7 @@ upload_packets: Dict[str, Dict[str, object]] = {}
 packet_schedule_jobs: Dict[str, Dict[str, object]] = {}
 review_bin: List[Dict] = []
 worker_started = False
+worker_threads: List[threading.Thread] = []
 MAX_JOB_EVENTS = 500
 job_events: List[Dict] = []
 archive_validation_cache: Dict[str, Dict[str, object]] = {}
@@ -726,6 +727,84 @@ def _save_m4b_candidate(source_folder: str, output_name: str) -> None:
         )
 
 
+def _reconcile_m4b_candidates_with_filesystem() -> None:
+    """Synchronise la base avec le disque de manière conservative.
+
+    Règles:
+    - on ajoute les dossiers visibles sur disque s'ils sont absents en base,
+    - on appaire un dossier à un fichier uniquement si un .m4b du même nom (stem) existe,
+    - on supprime une entrée base uniquement si le dossier ET le fichier référencé n'existent plus,
+    - on ne nettoie jamais agressivement les orphelins partiels.
+    """
+    _ensure_state_db()
+
+    disk_folders = {
+        item.name
+        for item in MEDIA_DIR.iterdir()
+        if item.is_dir() and any(f.is_file() for f in item.rglob("*"))
+    } if MEDIA_DIR.exists() else set()
+    disk_outputs = {
+        file.name: file
+        for file in OUTPUT_DIR.glob("*.m4b")
+        if file.is_file()
+    } if OUTPUT_DIR.exists() else {}
+    output_by_stem: Dict[str, str] = {}
+    for output_name, output_file in disk_outputs.items():
+        output_by_stem.setdefault(output_file.stem, output_name)
+
+    now = time.time()
+    with sqlite3.connect(_state_db_path()) as conn:
+        rows = conn.execute(
+            "SELECT source_folder, output_name, metadata_status FROM m4b_candidates"
+        ).fetchall()
+        existing_sources = {str(row[0]) for row in rows if row and row[0]}
+
+        for folder_name in sorted(disk_folders):
+            if folder_name in existing_sources:
+                continue
+            conn.execute(
+                """
+                INSERT INTO m4b_candidates
+                    (source_folder, output_name, metadata_status, metadata_payload, created_at, updated_at)
+                VALUES (?, NULL, 'pending', NULL, ?, ?)
+                """,
+                (folder_name, now, now),
+            )
+
+        for row in rows:
+            source_folder = str(row[0]) if row and row[0] else ""
+            output_name = str(row[1]) if row and row[1] else ""
+            if not source_folder:
+                continue
+
+            folder_exists = source_folder in disk_folders
+            output_exists = bool(output_name) and output_name in disk_outputs
+
+            if not folder_exists and not output_exists:
+                conn.execute("DELETE FROM m4b_candidates WHERE source_folder = ?", (source_folder,))
+                continue
+
+            matched_output = output_by_stem.get(source_folder)
+            if folder_exists and matched_output:
+                conn.execute(
+                    """
+                    UPDATE m4b_candidates
+                    SET output_name = ?, metadata_status = 'completed', updated_at = ?
+                    WHERE source_folder = ?
+                    """,
+                    (matched_output, now, source_folder),
+                )
+            elif folder_exists and not output_exists:
+                conn.execute(
+                    """
+                    UPDATE m4b_candidates
+                    SET metadata_status = 'pending', updated_at = ?
+                    WHERE source_folder = ?
+                    """,
+                    (now, source_folder),
+                )
+
+
 def _get_completed_folders_with_existing_outputs() -> set[str]:
     _ensure_state_db()
     if not OUTPUT_DIR.exists():
@@ -769,58 +848,20 @@ def _get_completed_outputs_by_source_folder() -> Dict[str, List[str]]:
     return mapping
 
 
-def _sync_m4b_candidates_with_filesystem() -> None:
-    """Synchronise m4b_candidates avec les dossiers input/output présents sur disque."""
-    _ensure_state_db()
-
-    output_files = [file for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()] if OUTPUT_DIR.exists() else []
-    output_names = {file.name for file in output_files}
-
-    if MEDIA_DIR.exists():
-        source_folders = {
-            item.name: _normalize_media_label(item.name)
-            for item in MEDIA_DIR.iterdir()
-            if item.is_dir()
-        }
-    else:
-        source_folders = {}
-    source_folder_names = set(source_folders.keys())
-
-    with sqlite3.connect(_state_db_path()) as conn:
-        if output_names:
-            placeholders = ",".join("?" for _ in output_names)
-            conn.execute(
-                "DELETE FROM m4b_candidates WHERE output_name NOT IN (" + placeholders + ")",
-                tuple(output_names),
-            )
-        else:
-            conn.execute("DELETE FROM m4b_candidates")
-            return
-
-        if source_folder_names:
-            source_placeholders = ",".join("?" for _ in source_folder_names)
-            conn.execute(
-                "DELETE FROM m4b_candidates WHERE source_folder NOT IN (" + source_placeholders + ")",
-                tuple(source_folder_names),
-            )
-        else:
-            conn.execute("DELETE FROM m4b_candidates")
-            return
-
-        existing_rows = conn.execute(
-            "SELECT source_folder, output_name FROM m4b_candidates WHERE metadata_status = 'completed'"
-        ).fetchall()
-
-        existing_sources = {str(row[0]) for row in existing_rows if row and row[0]}
-        existing_outputs = {str(row[1]) for row in existing_rows if row and row[1]}
-
-        # Synchronisation conservative: on nettoie l'état obsolète sans créer de liaison inférée
-        # entre dossier input et output .m4b. Les liaisons sont créées explicitement en fin d'encodage.
-        _ = existing_sources, existing_outputs
-
-
-
 _ensure_state_db()
+
+
+@app.before_request
+def _refresh_library_state_before_user_actions():
+    if not request.path.startswith("/api/"):
+        return
+    if request.path.startswith("/api/stream/") or request.path.startswith("/api/download/"):
+        return
+    try:
+        _reconcile_m4b_candidates_with_filesystem()
+    except Exception:
+        logger.exception("Impossible de réconcilier la bibliothèque avant la requête %s", request.path)
+
 
 def _default_config() -> Dict:
     return {
@@ -1466,7 +1507,7 @@ def _normalize_media_label(value: str) -> str:
 
 def _list_media() -> Dict:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-    _sync_m4b_candidates_with_filesystem()
+    _reconcile_m4b_candidates_with_filesystem()
     config = _load_config()
     ignored = set(config.get("ignored_folders", []))
     extracted_folders = {
@@ -1477,11 +1518,7 @@ def _list_media() -> Dict:
     hidden_processed_folders = []
     archives = []
     output_files = [file for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()] if OUTPUT_DIR.exists() else []
-    output_names_by_key: Dict[str, List[str]] = {}
-    for output_file in output_files:
-        output_names_by_key.setdefault(_normalize_media_label(output_file.stem), []).append(output_file.name)
-    completed_outputs_by_source = _get_completed_outputs_by_source_folder()
-    completed_source_folders = set(completed_outputs_by_source.keys()) | _get_completed_folders_with_existing_outputs()
+    output_name_by_stem = {file.stem: file.name for file in output_files}
     linked_output_names: set[str] = set()
 
     for item in sorted(MEDIA_DIR.iterdir(), key=lambda x: x.name.lower()):
@@ -1492,13 +1529,9 @@ def _list_media() -> Dict:
             if file_count == 0:
                 continue
             folder_size = _folder_size(item)
-            normalized_folder_name = _normalize_media_label(item.name)
-            if item.name in completed_source_folders:
-                matched_outputs = list(completed_outputs_by_source.get(item.name, []))
-                for output_name in output_names_by_key.get(normalized_folder_name, []):
-                    if output_name not in matched_outputs:
-                        matched_outputs.append(output_name)
-                linked_output_names.update(matched_outputs)
+            matched_output = output_name_by_stem.get(item.name)
+            if matched_output:
+                linked_output_names.add(matched_output)
                 hidden_processed_folders.append(
                     {
                         "name": item.name,
@@ -1506,7 +1539,7 @@ def _list_media() -> Dict:
                         "size": folder_size,
                         "file_count": file_count,
                         "modified": item.stat().st_mtime,
-                        "output_files": matched_outputs,
+                        "output_files": [matched_output],
                         "has_folder": True,
                     }
                 )
@@ -1939,6 +1972,12 @@ def _push_job_event(
     log_fn("[%s] %s - %s", job_id, stage, message)
 
 
+def _compute_job_worker_count(total_cores: Optional[int] = None) -> int:
+    """Nombre de workers de job parallèle (CPU threads / 4, minimum 1)."""
+    cores = total_cores or os.cpu_count() or 1
+    return max(1, cores // 4)
+
+
 def _worker_loop() -> None:
     while True:
         job_id = job_queue.get()
@@ -2082,8 +2121,14 @@ def _ensure_worker() -> None:
     if worker_started:
         return
     _run_recovery_bootstrap()
-    thread = threading.Thread(target=_worker_loop, daemon=True)
-    thread.start()
+
+    worker_count = _compute_job_worker_count()
+    for idx in range(worker_count):
+        thread = threading.Thread(target=_worker_loop, daemon=True, name=f"job-worker-{idx + 1}")
+        thread.start()
+        worker_threads.append(thread)
+
+    logger.info("⚙️ Workers de traitement démarrés: %s (règle CPU/4)", worker_count)
     worker_started = True
 
 
@@ -2759,8 +2804,8 @@ def api_delete_folder():
         if not suggest_delete:
             return _api_error("suppression autorisée uniquement pour dossier suspect", code="folder_not_suspicious")
     else:
-        completed_source_folders = _get_completed_folders_with_existing_outputs()
-        is_hidden_processed = folder in completed_source_folders
+        matched_output = OUTPUT_DIR / f"{folder}.m4b"
+        is_hidden_processed = OUTPUT_DIR.exists() and matched_output.exists() and matched_output.is_file()
         if not is_hidden_processed:
             return _api_error("dossier non éligible à la suppression des éléments déjà traités", code="folder_not_processed")
 

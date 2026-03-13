@@ -770,6 +770,57 @@ def _get_completed_outputs_by_source_folder() -> Dict[str, List[str]]:
     return mapping
 
 
+def _sync_m4b_candidates_with_filesystem() -> None:
+    """Synchronise m4b_candidates avec les dossiers input/output présents sur disque."""
+    _ensure_state_db()
+
+    output_files = [file for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()] if OUTPUT_DIR.exists() else []
+    output_names = {file.name for file in output_files}
+
+    if MEDIA_DIR.exists():
+        source_folders = {
+            item.name: _normalize_media_label(item.name)
+            for item in MEDIA_DIR.iterdir()
+            if item.is_dir()
+        }
+    else:
+        source_folders = {}
+    source_folder_names = set(source_folders.keys())
+
+    with sqlite3.connect(_state_db_path()) as conn:
+        if output_names:
+            placeholders = ",".join("?" for _ in output_names)
+            conn.execute(
+                "DELETE FROM m4b_candidates WHERE output_name NOT IN (" + placeholders + ")",
+                tuple(output_names),
+            )
+        else:
+            conn.execute("DELETE FROM m4b_candidates")
+            return
+
+        if source_folder_names:
+            source_placeholders = ",".join("?" for _ in source_folder_names)
+            conn.execute(
+                "DELETE FROM m4b_candidates WHERE source_folder NOT IN (" + source_placeholders + ")",
+                tuple(source_folder_names),
+            )
+        else:
+            conn.execute("DELETE FROM m4b_candidates")
+            return
+
+        existing_rows = conn.execute(
+            "SELECT source_folder, output_name FROM m4b_candidates WHERE metadata_status = 'completed'"
+        ).fetchall()
+
+        existing_sources = {str(row[0]) for row in existing_rows if row and row[0]}
+        existing_outputs = {str(row[1]) for row in existing_rows if row and row[1]}
+
+        # Synchronisation conservative: on nettoie l'état obsolète sans créer de liaison inférée
+        # entre dossier input et output .m4b. Les liaisons sont créées explicitement en fin d'encodage.
+        _ = existing_sources, existing_outputs
+
+
+
 _ensure_state_db()
 
 def _default_config() -> Dict:
@@ -1416,6 +1467,7 @@ def _normalize_media_label(value: str) -> str:
 
 def _list_media() -> Dict:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    _sync_m4b_candidates_with_filesystem()
     config = _load_config()
     ignored = set(config.get("ignored_folders", []))
     extracted_folders = {
@@ -1426,12 +1478,12 @@ def _list_media() -> Dict:
     hidden_processed_folders = []
     archives = []
     output_files = [file for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()] if OUTPUT_DIR.exists() else []
-    output_keys = {_normalize_media_label(file.stem) for file in output_files}
     output_names_by_key: Dict[str, List[str]] = {}
     for output_file in output_files:
         output_names_by_key.setdefault(_normalize_media_label(output_file.stem), []).append(output_file.name)
     completed_outputs_by_source = _get_completed_outputs_by_source_folder()
     completed_source_folders = set(completed_outputs_by_source.keys()) | _get_completed_folders_with_existing_outputs()
+    linked_output_names: set[str] = set()
 
     for item in sorted(MEDIA_DIR.iterdir(), key=lambda x: x.name.lower()):
         if item.is_dir():
@@ -1442,11 +1494,12 @@ def _list_media() -> Dict:
                 continue
             folder_size = _folder_size(item)
             normalized_folder_name = _normalize_media_label(item.name)
-            if item.name in completed_source_folders or normalized_folder_name in output_keys:
+            if item.name in completed_source_folders:
                 matched_outputs = list(completed_outputs_by_source.get(item.name, []))
                 for output_name in output_names_by_key.get(normalized_folder_name, []):
                     if output_name not in matched_outputs:
                         matched_outputs.append(output_name)
+                linked_output_names.update(matched_outputs)
                 hidden_processed_folders.append(
                     {
                         "name": item.name,
@@ -1455,6 +1508,7 @@ def _list_media() -> Dict:
                         "file_count": file_count,
                         "modified": item.stat().st_mtime,
                         "output_files": matched_outputs,
+                        "has_folder": True,
                     }
                 )
                 continue
@@ -1501,6 +1555,23 @@ def _list_media() -> Dict:
                     } if validation else None,
                 }
             )
+
+    for output_file in output_files:
+        if output_file.name in linked_output_names:
+            continue
+        hidden_processed_folders.append(
+            {
+                "name": output_file.stem,
+                "audio_count": 0,
+                "size": output_file.stat().st_size,
+                "file_count": 0,
+                "modified": output_file.stat().st_mtime,
+                "output_files": [output_file.name],
+                "has_folder": False,
+            }
+        )
+
+    hidden_processed_folders.sort(key=lambda item: str(item.get("name", "")).lower())
 
     grouped_archives = _group_archives_for_ui(archives)
     _cleanup_archive_fingerprint_db([a.get("primary_name", "") for a in grouped_archives if a.get("primary_name")])
@@ -2701,13 +2772,8 @@ def api_delete_folder():
         if not suggest_delete:
             return _api_error("suppression autorisée uniquement pour dossier suspect", code="folder_not_suspicious")
     else:
-        output_keys = {
-            _normalize_media_label(file.stem)
-            for file in OUTPUT_DIR.glob("*.m4b")
-            if file.is_file()
-        } if OUTPUT_DIR.exists() else set()
         completed_source_folders = _get_completed_folders_with_existing_outputs()
-        is_hidden_processed = folder in completed_source_folders or _normalize_media_label(folder) in output_keys
+        is_hidden_processed = folder in completed_source_folders
         if not is_hidden_processed:
             return _api_error("dossier non éligible à la suppression des éléments déjà traités", code="folder_not_processed")
 

@@ -234,6 +234,79 @@ class TestAudiobookProcessor(unittest.TestCase):
         self.assertEqual(self.processor._compute_parallel_audiobooks(8), 2)
         self.assertEqual(self.processor._compute_parallel_audiobooks(32), 8)
 
+    def test_normalize_batch_cpu_optimized_emits_progress_events(self):
+        aac_temp = self.temp_dir_path / "aac"
+        aac_temp.mkdir(parents=True, exist_ok=True)
+        aac_files = []
+        for idx in range(3):
+            src = aac_temp / f"track_{idx+1:04d}.aac"
+            src.write_bytes(b"FAKE")
+            aac_files.append(src)
+
+        progress_events = []
+        self.processor.progress_callback = progress_events.append
+
+        config = MagicMock()
+        config.loudnorm_target = -18.0
+        config.loudnorm_range = 11.0
+        config.loudnorm_true_peak = -1.5
+
+        with patch('subprocess.run', return_value=self._mock_run_result(0)):
+            normalized = self.processor.normalize_batch_cpu_optimized(
+                aac_files,
+                aac_temp,
+                config,
+                total_cores_override=16,
+            )
+
+        self.assertEqual(len(normalized), len(aac_files))
+        normalization_events = [
+            event for event in progress_events
+            if isinstance(event.get('details'), dict)
+            and event['details'].get('phase_key') == 'normalization'
+        ]
+        self.assertTrue(normalization_events)
+        self.assertEqual(normalization_events[-1]['details'].get('processed'), len(aac_files))
+        self.assertEqual(normalization_events[-1]['details'].get('total'), len(aac_files))
+
+    def test_encode_cpu_optimized_phase2_emits_conversion_and_finalization_progress(self):
+        audio_files = []
+        for idx in range(2):
+            f = self.source_dir / f"track_{idx+1:02d}.mp3"
+            f.write_bytes(b"FAKE_AUDIO_DATA")
+            audio_files.append(f)
+
+        progress_events = []
+        self.processor.progress_callback = progress_events.append
+
+        metadata = MagicMock()
+        metadata.get_metadata_dict.return_value = {}
+
+        def fake_encode(task):
+            _audio_file, aac_file, _params, _num = task
+            Path(aac_file).write_bytes(b"FAKE_AAC")
+            return True, Path(aac_file).name, {'action': 'codec_only', 'cpu_threads': 2}
+
+        with patch.object(self.processor, 'analyze_audio_quality', return_value={'codec': 'mp3', 'bitrate': 128, 'sample_rate': 44100}),              patch.object(self.processor, 'encode_single_file_cpu_optimized', side_effect=fake_encode),              patch.object(self.processor, 'detect_cuda_support', return_value=False),              patch.object(self.processor, 'normalize_batch_cpu_optimized', side_effect=lambda aac_files, *_args, **_kwargs: aac_files),              patch('subprocess.run', return_value=self._mock_run_result(0)):
+            result = self.processor.encode_cpu_optimized_phase2(audio_files, self.output_dir / 'phase2.m4b', metadata, cpu_budget_cores=8)
+
+        self.assertTrue(result)
+        conversion_events = [
+            event for event in progress_events
+            if isinstance(event.get('details'), dict)
+            and event['details'].get('phase_key') == 'conversion'
+        ]
+        finalization_events = [
+            event for event in progress_events
+            if isinstance(event.get('details'), dict)
+            and event['details'].get('phase_key') == 'finalization'
+        ]
+        self.assertTrue(conversion_events)
+        self.assertTrue(any(evt['details'].get('processed') == len(audio_files) for evt in conversion_events))
+        self.assertTrue(finalization_events)
+        self.assertEqual(finalization_events[-1]['details'].get('processed'), 2)
+
+
 
 if __name__ == '__main__':
     unittest.main()

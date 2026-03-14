@@ -1087,7 +1087,8 @@ class AudiobookProcessor:
         # Traitement par lots de 4 fichiers (optimisé pour GPU)
         batch_size = 4
         normalized_files = []
-        
+        total_files = max(1, len(aac_files))
+
         for i in range(0, len(aac_files), batch_size):
             batch = aac_files[i:i+batch_size]
             logger.info(f"🔧 Batch {i//batch_size + 1}/{(len(aac_files)-1)//batch_size + 1}: {len(batch)} fichiers")
@@ -1220,7 +1221,8 @@ class AudiobookProcessor:
         logger.info(f"   🔧 Configuration: {total_cores} cœurs, {batch_threads} threads/batch, {batch_size} fichiers/batch")
         
         normalized_files = []
-        
+        total_files = max(1, len(aac_files))
+
         for i in range(0, len(aac_files), batch_size):
             batch = aac_files[i:i+batch_size]
             batch_num = i // batch_size + 1
@@ -1289,7 +1291,21 @@ class AudiobookProcessor:
                         normalized_files[i+j] = aac_file
             else:
                 logger.info(f"   ✅ Batch {batch_num} terminé avec succès")
-        
+
+            processed = min(i + len(batch), total_files)
+            progress = 65 + int((processed / total_files) * 20)
+            self._emit_progress(
+                "Conversion",
+                f"Normalisation batch {batch_num}/{total_batches}",
+                progress,
+                {
+                    "phase_key": "normalization",
+                    "phase_label": "Normalisation",
+                    "processed": processed,
+                    "total": total_files,
+                },
+            )
+
         return normalized_files
     
     def encode_cpu_optimized_phase2(
@@ -1312,6 +1328,17 @@ class AudiobookProcessor:
             logger.info(f"🖥️ Configuration CPU: {detected_cores} cœurs détectés, budget {total_cores}")
             logger.info(f"⚡ Multithreading: {max_workers} workers parallèles")
             logger.info(f"🔧 Allocation: {cpu_threads} cœurs/tâche, 2 cœurs réservés système")
+            self._emit_progress(
+                "Conversion",
+                "Préparation du pipeline CPU optimisé",
+                35,
+                {
+                    "phase_key": "conversion",
+                    "phase_label": "Conversion AAC",
+                    "processed": 0,
+                    "total": max(1, len(audio_files)),
+                },
+            )
             
             # Analyse qualité rapide
             logger.info("🔍 Analyse qualité (échantillon 5 fichiers)...")
@@ -1356,14 +1383,28 @@ class AudiobookProcessor:
                         aac_files.append(aac_temp_dir / f"track_{future_to_file[future][3]:04d}.aac")
                         action = params.get('action', 'unknown')
                         encoding_stats[action] += 1
-                        
+
                         threads_used = params.get('cpu_threads', 0)
                         thread_usage[threads_used] = thread_usage.get(threads_used, 0) + 1
-                            
+
                         logger.info(f"   ✅ [{len(aac_files)}/{len(audio_files)}] {filename} - {action} ({threads_used} threads)")
                     else:
                         encoding_stats['errors'] += 1
                         logger.error(f"   ❌ Échec: {filename}")
+
+                    processed_conversion = min(len(aac_files), len(audio_files))
+                    progress_conversion = 35 + int((processed_conversion / max(1, len(audio_files))) * 25)
+                    self._emit_progress(
+                        "Conversion",
+                        f"Encodage CPU {processed_conversion}/{len(audio_files)}",
+                        progress_conversion,
+                        {
+                            "phase_key": "conversion",
+                            "phase_label": "Conversion AAC",
+                            "processed": processed_conversion,
+                            "total": max(1, len(audio_files)),
+                        },
+                    )
             
             # Vérification erreurs
             if encoding_stats['errors'] > len(audio_files) * 0.1:
@@ -1398,7 +1439,18 @@ class AudiobookProcessor:
             
             # Concaténation finale
             logger.info("🔗 Concaténation finale...")
-            
+            self._emit_progress(
+                "Finalisation",
+                "Préparation de la concaténation finale",
+                90,
+                {
+                    "phase_key": "finalization",
+                    "phase_label": "Finalisation",
+                    "processed": 1,
+                    "total": 2,
+                },
+            )
+
             file_list = aac_temp_dir / "aac_filelist.txt"
             with open(file_list, 'w') as f:
                 for aac_file in normalized_files:
@@ -1443,7 +1495,18 @@ class AudiobookProcessor:
             logger.info(f"📊 Taille: {input_size:.1f}MB → {output_size:.1f}MB ({((1-output_size/input_size)*100):.1f}% compression)")
             logger.info(f"📊 Qualité: AAC 128k, 48kHz, normalisé -18 LUFS")
             logger.info(f"🎯 Optimisé pour: Double Xeon 32 cœurs")
-            
+            self._emit_progress(
+                "Finalisation",
+                "Concaténation finale terminée",
+                95,
+                {
+                    "phase_key": "finalization",
+                    "phase_label": "Finalisation",
+                    "processed": 2,
+                    "total": 2,
+                },
+            )
+
             return True
             
         except Exception as e:

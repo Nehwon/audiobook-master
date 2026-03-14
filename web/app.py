@@ -1860,6 +1860,13 @@ def _list_media() -> Dict:
                 output_files_by_name,
             )
             if linked_outputs and not _folder_has_visible_job(item.name):
+                primary_output_name = linked_outputs[0] if linked_outputs else ""
+                primary_output_size = 0
+                if primary_output_name and primary_output_name in output_files_by_name:
+                    try:
+                        primary_output_size = output_files_by_name[primary_output_name].stat().st_size
+                    except OSError:
+                        primary_output_size = 0
                 linked_output_names.update(linked_outputs)
                 hidden_processed_folders.append(
                     {
@@ -1869,6 +1876,7 @@ def _list_media() -> Dict:
                         "file_count": file_count,
                         "modified": item.stat().st_mtime,
                         "output_files": linked_outputs,
+                        "primary_output_size": primary_output_size,
                         "has_folder": True,
                     }
                 )

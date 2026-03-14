@@ -96,6 +96,22 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(payload['renamed'], [])
         self.assertEqual(payload['skipped'][0]['reason'], 'titre manuel vide')
 
+    def test_rename_sanitizes_inner_filenames_with_apostrophes(self):
+        src = self.media_dir / "Auteur_-_L'histoire"
+        src.mkdir()
+        nested = src / "CD1"
+        nested.mkdir()
+        bad_file = nested / "Chapitre d'ouverture.mp3"
+        bad_file.write_text("x")
+
+        resp = self.client.post('/api/rename', json={'folders': ["Auteur_-_L'histoire"]})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['renamed'][0]['new'], "Auteur - L'histoire")
+
+        self.assertFalse((self.media_dir / "Auteur - L'histoire" / "CD1" / "Chapitre d'ouverture.mp3").exists())
+        self.assertTrue((self.media_dir / "Auteur - L'histoire" / "CD1" / "Chapitre d_ouverture.mp3").exists())
+
     def test_ignore_folder_hides_it_from_library(self):
         (self.media_dir / 'A_Garder').mkdir()
         (self.media_dir / 'A_Garder' / 'a.mp3').write_text('x')

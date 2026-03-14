@@ -1627,6 +1627,28 @@ def _clean_manual_title(title: str) -> str:
     return cleaned
 
 
+def _sanitize_inner_filenames(path: Path) -> None:
+    """Évite les apostrophes dans les fichiers internes (concat FFmpeg)."""
+    files_to_rename = sorted(
+        [member for member in path.rglob("*") if member.is_file() and "'" in member.name],
+        key=lambda member: len(member.parts),
+        reverse=True,
+    )
+
+    for member in files_to_rename:
+        base_name = member.name.replace("'", "_")
+        candidate = member.with_name(base_name)
+        if candidate == member:
+            continue
+
+        suffix = 1
+        while candidate.exists():
+            candidate = member.with_name(f"{Path(base_name).stem}_{suffix}{Path(base_name).suffix}")
+            suffix += 1
+
+        member.rename(candidate)
+
+
 def _rename_from_ollama(folder: str, config: Dict) -> Optional[str]:
     """Construit un nom cible depuis les métadonnées Ollama si disponibles."""
     if not config.get("ollama_enabled", False):
@@ -3230,6 +3252,7 @@ def api_rename():
 
         try:
             src.rename(dst)
+            _sanitize_inner_filenames(dst)
             renamed.append({"old": folder, "new": new_name})
             _clear_recently_extracted_flag(folder)
         except OSError as exc:

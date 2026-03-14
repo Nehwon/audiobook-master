@@ -1,8 +1,8 @@
 # ADR-002: Choix Frontend et Design System v3
 
-**Status**: Decision Required  
+**Status**: Accepted  
 **Date**: 2026-03-14  
-**Decision**: À valider en Phase 0 - Framework et design system pour UI v3  
+**Decision**: Svelte + Stores + Tailwind CSS validé pour UI v3  
 
 ---
 
@@ -117,37 +117,59 @@ Basée sur l'analyse des critères :
 
 ## Decision
 
-**À valider en Phase 0** :
+**Validé en Phase 0** :
 
-L'équipe doit choisir entre :
+**Svelte + Stores + Tailwind CSS** a été choisi pour l'UI v3.
 
-1. **React + Tailwind CSS** (Recommandé)
-   - Meilleur équilibre technique/équipe/produit
-   - Compétences existantes valorisées
-   - Flexibilité maximale pour l'avenir
+### Justification du Choix
 
-2. **Svelte + CoreUI** (Innovation)
-   - Performance exceptionnelle
-   - Modernité technologique
-   - Investissement formation
+1. **Performance Exceptionnelle**
+   - Bundle size minimal
+   - Compilation optimisée
+   - Exécution rapide
 
-3. **React + CoreUI** (Rapidité)
-   - Délais de développement courts
-   - Cohérence visuelle immédiate
-   - Productivité maximale
+2. **Modernité Technologique**
+   - Syntaxe élégante et concise
+   - Réactivité intégrée
+   - Moins de code boilerplate
 
-## Validation Requise
+3. **Customisation Maximale**
+   - Tailwind CSS pour design flexible
+   - Pas de dépendance UI kit lourd
+   - Contrôle total sur l'apparence
 
-Cette décision nécessite la validation de :
-- [ ] Lead Technique: __________________
-- [ ] Lead Produit: __________________
-- [ ] Équipe Développement: __________________
+4. **Scalabilité**
+   - Architecture stores moderne
+   - Composants réutilisables
+   - Maintenance simplifiée
+
+### Conséquences du Choix
+
+#### Positives
+- ✅ Performance UI exceptionnelle
+- ✅ Bundle size minimal
+- ✅ Syntaxe moderne et élégante
+- ✅ Customisation design maximale
+- ✅ Maintenance simplifiée
+
+#### Négatives  
+- ❌ Courbe d'apprentissage équipe
+- ❌ Écosystème moins mature
+- ❌ Moins de bibliothèques disponibles
+- ❌ Formation équipe requise
+
+## Validation Effectuée
+
+Cette décision a été validée par :
+- [x] Lead Technique: Fabrice Lamachère
+- [x] Lead Produit: Fabrice Lamachère  
+- [x] Équipe Développement: Fabrice Lamachère
 
 **Critères de validation**:
-- Analyse des compétences actuelles
-- Évaluation des délais impartis
-- Validation des contraintes budget/temps
+- ✅ Compétences actuelles analysées
+- ✅ Délais impartis évalués (6 semaines)
+- ✅ Contraintes budget/temps validées
 
 ---
 
-**Statut**: ⚠️ **EN ATTENTE DE VALIDATION** - Choix à confirmer en Phase 0
+**Statut**: ✅ **ACCEPTÉ** - Svelte + Stores + Tailwind CSS validé pour UI v3

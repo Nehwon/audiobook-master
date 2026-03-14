@@ -105,3 +105,15 @@ class OutboxEvent(Base):
     
     def __repr__(self):
         return f"<OutboxEvent {self.event_type} at {self.created_at}>"
+
+class RecoveryAudit(Base):
+    __tablename__ = "recovery_audit"
+    
+    id = Column(Integer, primary_key=True)
+    job_id = Column(String(100))
+    decision = Column(String(50))
+    reason = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<RecoveryAudit {self.decision} for job {self.job_id} at {self.created_at}>"

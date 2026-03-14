@@ -39,7 +39,9 @@ from .metadata import BookScraper
 from plugins.covers import ExistingFileCoverProvider, UrlDownloadCoverProvider
 
 # Configuration
-LOG_DIR = Path(os.getenv("AUDIOBOOK_LOG_DIR", os.getenv("LOG_DIR", "/app/logs")))
+# Utiliser ./logs par défaut pour environnement local, /app/logs pour Docker
+DEFAULT_LOG_DIR = "./logs" if os.getenv("ENVIRONMENT") != "docker" else "/app/logs"
+LOG_DIR = Path(os.getenv("AUDIOBOOK_LOG_DIR", os.getenv("LOG_DIR", DEFAULT_LOG_DIR)))
 PROCESSOR_LOG_PATH = LOG_DIR / "processor.log"
 
 

@@ -14,7 +14,7 @@ Nous repartons à zéro, sans patch de l’UI/architecture existante.
 ## Architecture cible (V3)
 
 ```text
-[React/Svelte + Tailwind/CoreUI]
+[Svelte + Tailwind/CoreUI]
           |
    (WebSocket + HTTP)
           |

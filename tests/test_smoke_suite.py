@@ -1,5 +1,13 @@
 """Suite smoke minimale pour validation rapide P0."""
 
+import sys
+import os
+from pathlib import Path
+
+# Ajouter le répertoire racine au PYTHONPATH
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from core.main import setup_argument_parser
 from core.processor import AudiobookProcessor
 from integrations.audiobookshelf import AudiobookshelfClient

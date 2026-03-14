@@ -71,9 +71,11 @@ def resolve_runtime_paths(*, profile: str = "core") -> RuntimePaths:
     3) Valeurs de fallback selon le profil (`core` ou `web`)
     """
 
-    source_default = "/app/data/source"
-    output_default = "/app/data/output"
-    log_default = "/app/logs"
+    # Utiliser ./logs par défaut pour environnement local, /app/logs pour Docker
+    is_docker = os.getenv("ENVIRONMENT") == "docker"
+    source_default = "/app/data/source" if is_docker else "./data/source"
+    output_default = "/app/data/output" if is_docker else "./data/output"
+    log_default = "/app/logs" if is_docker else "./logs"
 
     temp_fallback = "/tmp/audiobooks_web" if profile == "web" else "/tmp/audiobooks"
 

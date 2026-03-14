@@ -206,6 +206,16 @@ class AudiobookProcessor:
         escaped_path = str(file_path.absolute()).replace("'", r"'\''")
         return f"file '{escaped_path}'\n"
 
+    def _resolve_m4b_tool_binary(self) -> Optional[str]:
+        """Résout le binaire m4b-tool (système puis version embarquée)."""
+        system_binary = shutil.which('m4b-tool')
+        if system_binary:
+            return system_binary
+        bundled_binary = (Path(__file__).resolve().parents[1] / 'src' / 'm4b-tool')
+        if bundled_binary.exists() and os.access(bundled_binary, os.X_OK):
+            return str(bundled_binary)
+        return None
+
     def _compute_cpu_parallel_tasks(self, total_cores: Optional[int] = None) -> int:
         """Calcule le nombre de tâches CPU parallèles.
 
@@ -819,6 +829,8 @@ class AudiobookProcessor:
         except Exception as e:
             logger.error(f"Erreur encodage {input_file}: {e}")
             return False
+
+    def concat_fast_m4b(self, audio_files: List[Path], output_path: Path, metadata: AudiobookMetadata) -> bool:
         """Concaténation 1:1 rapide sans réencodage - Phase 1"""
         try:
             logger.info(f"🚀 CONCATÉNATION 1:1 RAPIDE: {len(audio_files)} fichiers")
@@ -846,33 +858,44 @@ class AudiobookProcessor:
                 for audio_file in audio_files:
                     f.write(self._ffmpeg_concat_file_entry(audio_file))
             
-            # Configuration
-            config = getattr(self, 'config', ProcessingConfig())
-            max_threads = os.cpu_count() or 24
-            
             # Métadonnées
             metadata_dict = metadata.get_metadata_dict()
             metadata_args = []
             for key, value in metadata_dict.items():
                 metadata_args.extend(['-metadata', f'{key}={value}'])
             
-            # Commande FFmpeg CONCATÉNATION RAPIDE (sans réencodage)
-            logger.info("⚡ CONCATÉNATION SANS RÉENCODAGE - VITESSE MAXIMALE")
-            cmd = [
-                'ffmpeg', '-y',
-                '-f', 'concat',
-                '-safe', '0',
-                '-i', str(file_list),
-                '-c', 'copy',  # COPIE DIRECTE - PAS DE RÉENCODAGE
-                '-map_metadata', '0',  # Conserve métadonnées originales
-                # Métadonnées enrichies
-                *metadata_args,
-                '-progress', 'pipe:1',
-                '-f', 'mp4',
-                str(output_path)
-            ]
-            
-            codec_info = "CONCAT 1:1 (COPY) - VITESSE MAXIMALE"
+            m4b_tool_bin = self._resolve_m4b_tool_binary()
+            if m4b_tool_bin:
+                logger.info("⚡ CONCATÉNATION M4B-TOOL (remux sans réencodage)")
+                cmd = [
+                    m4b_tool_bin,
+                    'merge',
+                    '-f',
+                    '--no-conversion',
+                    '--output-file', str(output_path),
+                    '--name', metadata.title or output_path.stem,
+                    '--artist', metadata.author or 'Inconnu',
+                    '--albumartist', metadata.author or 'Inconnu',
+                    '--genre', metadata.genre or 'Audiobook',
+                    '--use-filenames-as-chapters',
+                    *[str(audio_file) for audio_file in audio_files],
+                ]
+                codec_info = "M4B-TOOL MERGE (NO-CONVERSION)"
+            else:
+                logger.info("⚡ CONCATÉNATION FFMPEG (fallback sans réencodage)")
+                cmd = [
+                    'ffmpeg', '-y',
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', str(file_list),
+                    '-c', 'copy',
+                    '-map_metadata', '0',
+                    *metadata_args,
+                    '-progress', 'pipe:1',
+                    '-f', 'mp4',
+                    str(output_path)
+                ]
+                codec_info = "FFMPEG CONCAT 1:1 (COPY)"
             
             # Taille totale
             total_input_size = sum(f.stat().st_size for f in audio_files)
@@ -880,8 +903,8 @@ class AudiobookProcessor:
             logger.info(f'📊 Taille source: {total_input_mb:.1f}MB')
             logger.info(f'📊 Taille attendue: ~{total_input_mb:.1f}MB (identique)')
             
-            # Lance FFmpeg
-            logger.info("🚀 LANCEMENT CONCATÉNATION...")
+            # Lance la concaténation
+            logger.info("🚀 LANCEMENT CONCATÉNATION (m4b-tool prioritaire)...")
             # Important: ne pas utiliser PIPE ici, sinon FFmpeg peut se bloquer
             # en fin de traitement si les buffers stdout/stderr se remplissent
             # (notamment avec `-progress pipe:1` et les logs de concaténation).
@@ -959,7 +982,7 @@ class AudiobookProcessor:
             stdout, stderr = process.communicate()
             
             if process.returncode != 0:
-                logger.error(f'❌ Erreur FFmpeg: {stderr}')
+                logger.error(f'❌ Erreur concaténation: {stderr}')
                 return False
             
             # Statistiques finales
@@ -2107,20 +2130,38 @@ class AudiobookProcessor:
                     )
 
             logger.info("🔗 Étape 4/6: Concaténation simple en M4A temporaire")
-            concat_list = work_dir / "concat_list.txt"
-            with open(concat_list, 'w', encoding='utf-8') as concat_writer:
-                for normalized_file in normalized_files:
-                    concat_writer.write(self._ffmpeg_concat_file_entry(normalized_file))
-
             temp_concat_file = work_dir / "temp.m4a"
-            concat_cmd = [
-                'ffmpeg', '-y',
-                '-f', 'concat',
-                '-safe', '0',
-                '-i', str(concat_list),
-                '-c', 'copy',
-                str(temp_concat_file)
-            ]
+            m4b_tool_bin = self._resolve_m4b_tool_binary()
+            if m4b_tool_bin:
+                concat_cmd = [
+                    m4b_tool_bin,
+                    'merge',
+                    '-f',
+                    '--no-conversion',
+                    '--output-file', str(temp_concat_file),
+                    '--name', metadata.title or output_path.stem,
+                    '--artist', metadata.author or 'Inconnu',
+                    '--albumartist', metadata.author or 'Inconnu',
+                    '--genre', metadata.genre or 'Audiobook',
+                    '--use-filenames-as-chapters',
+                    *[str(normalized_file) for normalized_file in normalized_files],
+                ]
+                logger.info("⚡ m4b-tool utilisé pour la concaténation intermédiaire")
+            else:
+                concat_list = work_dir / "concat_list.txt"
+                with open(concat_list, 'w', encoding='utf-8') as concat_writer:
+                    for normalized_file in normalized_files:
+                        concat_writer.write(self._ffmpeg_concat_file_entry(normalized_file))
+                concat_cmd = [
+                    'ffmpeg', '-y',
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', str(concat_list),
+                    '-c', 'copy',
+                    str(temp_concat_file)
+                ]
+                logger.info("⚡ fallback FFmpeg pour la concaténation intermédiaire")
+
             concat_process = run_command(concat_cmd, timeout=7200)
             if concat_process.returncode != 0:
                 self.last_error = f"Échec concaténation: {(concat_process.stderr or '').strip() or 'erreur inconnue'}"

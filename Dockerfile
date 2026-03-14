@@ -11,7 +11,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    M4B_TOOL_VERSION=0.5.0
 
 # Installation des dépendances système
 RUN apt-get update && apt-get install -y \
@@ -30,7 +31,13 @@ RUN apt-get update && apt-get install -y \
     wget \
     git \
     build-essential \
+    ca-certificates \
+    php-cli \
     nginx \
+    && curl -fsSL "https://github.com/sandreas/m4b-tool/releases/download/v${M4B_TOOL_VERSION}/m4b-tool.phar" -o /usr/local/bin/m4b-tool.phar \
+    && chmod +x /usr/local/bin/m4b-tool.phar \
+    && { echo '#!/bin/sh'; echo 'exec php /usr/local/bin/m4b-tool.phar "$@"'; } > /usr/local/bin/m4b-tool \
+    && chmod +x /usr/local/bin/m4b-tool \
     && rm -rf /var/lib/apt/lists/*
 
 # Création de l'utilisateur audiobook

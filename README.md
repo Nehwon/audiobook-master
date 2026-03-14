@@ -1,109 +1,166 @@
-# 🎧 Audiobook Master
+# Audiobook Master
 
-<div align="center">
+> Plateforme de traitement audio avec deux architectures disponibles
 
-![Audiobook Master](audiobook-manager.jpg)
+## 🎯 Vue d'Ensemble
 
-**Convertisseur d'audiobooks en `.m4b` avec CLI Python + interface web Flask + intégration Audiobookshelf.**
+Audiobook Master est une application complète de traitement audio qui existe en deux versions :
 
-</div>
+- **📖 Version 2 (V2)** : Architecture Flask avec templates Jinja2
+- **🚀 Version 3 (V3)** : Architecture moderne FastAPI + Svelte + WebSocket
 
 ---
-
-## ✨ État actuel du projet
-
-Audiobook Master est **opérationnel** sur 2 parcours principaux :
-
-1. **Traitement audio local** via CLI (`python -m core.main`)
-2. **Orchestration web** via Flask (`python -m web.app`)
-
-Le dépôt contient aussi des wrappers legacy (`run.py`, `start_web.py`) conservés pour compatibilité, mais dépréciés au profit des entrées module.  
-
-## 🧱 Architecture rapide
-
-| Zone | Rôle |
-|---|---|
-| `core/` | Pipeline conversion audio, config, diagnostics, métadonnées |
-| `web/` + `templates/` | API Flask + interface HTML |
-| `integrations/` | Client Audiobookshelf |
-| `plugins/` | Plugins métadonnées / covers / exports |
-| `tests/` | Suite de tests (smoke, unitaires, API) |
-| `docs/` | Documentation détaillée maintenue |
-
-## 🚀 Démarrage rapide
-
-### Prérequis
-- Python **3.10+**
-- `ffmpeg` disponible dans le `PATH`
-- (Optionnel) `ollama` pour génération de synopsis IA
-
-### Installation
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### Exécution
-
-```bash
-# CLI
-python -m core.main --source /chemin/source --output /chemin/output
-
-# Web
-python -m web.app
-```
-
-## 🧪 Validation minimale
-
-```bash
-pytest -q tests/test_smoke_suite.py
-```
-
-
-## 🔖 Versionnage automatique (M.m.f)
-
-Le projet utilise désormais un versionnage **M.m.f** automatique, indépendant des numéros de sprint.
-
-- `M.m` : base fonctionnelle définie dans `VERSION_BASE` (ex: `2.2`)
-- `f` : compteur de commits Git (`git rev-list --count HEAD`)
-- Version runtime exposée: `vM.m.f`
-
-Vous pouvez forcer une version explicite avec `AUDIOBOOK_MANAGER_VERSION`, ou piloter les composants via `AUDIOBOOK_VERSION_BASE` / `AUDIOBOOK_VERSION_PATCH`.
 
 ## 📚 Documentation
 
-- Utilisation (CLI/Web/API) : `docs/usage.md`
-- Installation locale & Docker : `docs/INSTALLATION.md`
-- Développement : `docs/DEVELOPER.md`
-- CI/CD : `docs/ci-cd.md`
-- Plugins : `docs/plugin-registry-spec.md`
-- Dépendances PostgreSQL (Sprint 1, optionnelles) : `requirements_postgresql.txt`
-- Roadmap : `ROADMAP.md`
-- Plan de migration React + PostgreSQL : `docs/SPRINTS_REACT_POSTGRESQL.md`
-- Sprint 1 PostgreSQL (implémentation) : `docs/sprint-1/README.md`
-- Clôture Sprint 1 : `docs/sprint-1/CLOTURE.md`
-- Sprint 2 (résilience) : `docs/sprint-2/README.md`
-- Runbook Sprint 2 : `docs/sprint-2/RUNBOOK.md`
-- Clôture Sprint 2 : `docs/sprint-2/CLOTURE.md`
-- Sprint 3 (API temps réel) : `docs/sprint-3/README.md`
-- Clôture Sprint 3 : `docs/sprint-3/CLOTURE.md`
-- Sprint 4 (migration UI React — documentation) : `docs/sprint-4/README.md`
-- Clôture Sprint 4 : `docs/sprint-4/CLOTURE.md`
-- Sprint 5 (erreurs rouges + validation persistée — documentation) : `docs/sprint-5/README.md`
-- Clôture Sprint 5 : `docs/sprint-5/CLOTURE.md`
-- Sprint 6 (stabilisation + mise en production) : `docs/sprint-6/README.md`
-- Architecture DB scan input + configuration : `docs/database-architecture-input-scan.md`
-- Clôture Sprint 6 : `docs/sprint-6/CLOTURE.md`
-- Contrat frontend Sprint 3 (OpenAPI) : `docs/api/openapi-frontend-sprint3.yaml`
-- Suivi de tâches : `TODO.md`
+### 📖 Version 2 (Stable)
+[**README_V2.md**](README_V2.md) - Documentation complète de la version stable
+
+- Architecture Flask + SQLite
+- Templates Jinja2
+- Interface web classique
+- Scripts de traitement audio
+
+### 🚀 Version 3 (Alpha)
+[**README_V3.md**](README_V3.md) - Documentation de la nouvelle architecture
+
+- Backend FastAPI + PostgreSQL
+- Frontend Svelte + Tailwind CSS
+- WebSocket temps réel
+- API REST complète
+- Interface moderne et responsive
 
 ---
 
-## ⚠️ Compatibilité legacy
+## 🎯 Choisir une Version
 
-- `run.py` ➜ délègue vers `core.main` (déprécié)
-- `start_web.py` ➜ délègue vers `web.app` (déprécié)
+### Utiliser V2 si :
+- ✅ Vous avez besoin d'une version stable et éprouvée
+- ✅ Vous préférez une interface web classique
+- ✅ Vous voulez une configuration simple
+- ✅ Vous utilisez l'application existante
 
-Ces scripts restent présents pour éviter les ruptures dans les environnements existants.
+### Utiliser V3 si :
+- ✅ Vous voulez une architecture moderne
+- ✅ Vous avez besoin d'une API REST complète
+- ✅ Vous voulez une interface SPA responsive
+- ✅ Vous avez besoin du temps réel (WebSocket)
+- ✅ Vous développez de nouvelles fonctionnalités
+
+---
+
+## 🚀 Démarrage Rapide
+
+### Version 2
+```bash
+# Cloner et utiliser la branche main
+git clone https://github.com/Nehwon/audiobook-master.git
+cd audiobook-master
+# Voir README_V2.md pour les instructions
+```
+
+### Version 3
+```bash
+# Cloner et utiliser la branche V3.0.0a
+git clone https://github.com/Nehwon/audiobook-master.git
+cd audiobook-master
+git checkout V3.0.0a
+# Voir README_V3.md pour les instructions
+```
+
+---
+
+## 🏗️ Comparaison des Architectures
+
+| Caractéristique | V2 (Flask) | V3 (FastAPI + Svelte) |
+|----------------|-------------|------------------------|
+| **Backend** | Flask | FastAPI |
+| **Frontend** | Jinja2 Templates | Svelte SPA |
+| **Base de données** | SQLite | PostgreSQL |
+| **API** | Routes Flask | REST API |
+| **Temps réel** | Non | WebSocket |
+| **Responsive** | Limité | Mobile-first |
+| **Documentation** | Markdown | Swagger/OpenAPI |
+| **Tests** | Basiques | Complets |
+| **Déploiement** | Simple | Docker |
+
+---
+
+## 📁 Structure du Proôt
+
+```
+audiobook-master/
+├── README.md              # Ce fichier
+├── README_V2.md           # Documentation V2
+├── README_V3.md           # Documentation V3
+├── v2/                    # Code de la version 2
+│   ├── web/              # Application Flask
+│   ├── core/             # Scripts de traitement
+│   └── persistence/      # Base de données SQLite
+├── v3/                    # Code de la version 3
+│   ├── backend/          # FastAPI application
+│   ├── frontend/         # SvelteKit application
+│   └── docker-compose.yml # Orchestration Docker
+├── docs/                  # Documentation partagée
+├── LICENSE               # License AGPL-3.0
+└── CHANGELOG.md          # Historique des changements
+```
+
+---
+
+## 🔄 Migration
+
+### Guide de Migration V2 → V3
+1. Sauvegarder vos données V2
+2. Installer les dépendances V3
+3. Exporter/importer les données dans PostgreSQL
+4. Configurer les variables d'environnement
+5. Tester la nouvelle interface
+
+Voir [README_V3.md](README_V3.md) pour les détails complets.
+
+---
+
+## 🤝 Contribuer
+
+### Pour V2
+- Forker le projet
+- Travailler sur la branche `main`
+- Créer des PR vers `main`
+
+### Pour V3
+- Forker le projet
+- Travailler sur la branche `V3.0.0a`
+- Créer des PR vers `V3.0.0a`
+
+---
+
+## 📊 État des Versions
+
+| Version | Statut | Branche | Documentation |
+|---------|--------|---------|---------------|
+| V2 | ✅ Stable | `main` | [README_V2.md](README_V2.md) |
+| V3 | 🚀 Alpha | `V3.0.0a` | [README_V3.md](README_V3.md) |
+
+---
+
+## 📄 License
+
+Ce projet est sous license AGPL-3.0. Voir [LICENSE](LICENSE) pour les détails.
+
+---
+
+## 🆘 Support
+
+### Issues et Discussions
+- **GitHub Issues** : [Signaler un problème](https://github.com/Nehwon/audiobook-master/issues)
+- **GitHub Discussions** : [Discussions](https://github.com/Nehwon/audiobook-master/discussions)
+
+### Documentation
+- **V2** : Voir [README_V2.md](README_V2.md)
+- **V3** : Voir [README_V3.md](README_V3.md)
+- **Architecture** : Voir dossier [docs/](docs/)
+
+---
+
+**Audiobook Master** - La puissance du traitement audio, deux approches pour tous les besoins 🎧✨

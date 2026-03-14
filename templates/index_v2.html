@@ -906,7 +906,8 @@ async function loadLibrary({folders=true, files=true, archives=true} = {}) {
             const folderNameEscaped = escapeHtml(f.name);
             const folderIcon = f.extracted_from_archive ? '📦 ' : '';
             const job = f.job || null;
-            const hideActionsForJob = !!job;
+            const jobStatus = String(job?.status || '').toLowerCase();
+            const hideActionsForJob = jobStatus === 'pending' || jobStatus === 'running';
             const issues = (f.issues || []).length
                 ? `<div class="muted" style="font-size:12px">⚠️ ${(f.issues || []).join(' | ')}${f.suggest_delete ? ' — suppression suggérée' : ''}</div>`
                 : '';
@@ -921,7 +922,12 @@ async function loadLibrary({folders=true, files=true, archives=true} = {}) {
                    ${f.can_ignore ? `<button class="secondary" ${hideActionsForJob ? 'disabled' : ''} onclick="ignoreOne('${jsFolder}')">Ignorer</button>` : ''}
                    ${f.suggest_delete ? `<button class="danger" ${hideActionsForJob ? 'disabled' : ''} onclick="deleteSuspectFolder('${jsFolder}')">Supprimer</button>` : ''}
                    <button ${hideActionsForJob ? 'disabled' : ''} onclick="enqueueFolders(['${jsFolder}'])">Traiter M4B</button>`;
-            const bandInner = hideActionsForJob ? renderProcessingActionBand(job, f.name, f.audio_count) : actionButtons;
+            const nonBlockingJobHint = (!hideActionsForJob && job && (jobStatus === 'failed' || jobStatus === 'cancelled'))
+                ? `<div class="muted" style="margin-right:8px">${jobStatus === 'failed' ? '⚠️ Dernier traitement en erreur' : 'ℹ️ Dernier traitement annulé'}</div>`
+                : '';
+            const bandInner = hideActionsForJob
+                ? renderProcessingActionBand(job, f.name, f.audio_count)
+                : `${nonBlockingJobHint}${actionButtons}`;
             fb.innerHTML += `<tr class="row-main">
                 <td class="checkbox-col"><input type="checkbox" name="folderSel" value="${folderNameEscaped}" ${hideActionsForJob ? 'disabled' : ''} onchange="bindSelectionState('folderSel', 'folderSelAll')"></td>
                 <td>

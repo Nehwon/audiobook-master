@@ -63,6 +63,12 @@ UI_DEFAULT_VERSION = os.getenv("AUDIOBOOK_UI_DEFAULT", "v2").strip().lower() or 
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}
 ARCHIVE_EXTENSIONS = {".zip", ".rar"}
+RAR_TOOL_CANDIDATES: List[tuple[str, List[str]]] = [
+    ("unrar", ["t", "-idq"]),
+    ("7z", ["t", "-bso0", "-bsp0"]),
+    ("7za", ["t", "-bso0", "-bsp0"]),
+    ("bsdtar", ["-tf"]),
+]
 SENSITIVE_CONFIG_KEYS = ("audiobookshelf_password", "audiobookshelf_api_key")
 SECRET_V1_PREFIX = "enc:v1:"
 
@@ -2137,6 +2143,40 @@ def _attach_archive_duplicate_hints(archives: List[Dict]) -> None:
         archive["duplicate_peers"] = sorted(peers_union)
 
 
+def _run_rar_tool(path: Path, mode: str, target_dir: Optional[Path] = None) -> bool:
+    """Exécute un outil système (unrar/7z/bsdtar) en fallback pour RAR."""
+    for binary, base_args in RAR_TOOL_CANDIDATES:
+        if not shutil.which(binary):
+            continue
+
+        if mode == "test":
+            cmd = [binary, *base_args, str(path)]
+        elif mode == "extract":
+            if binary in {"7z", "7za"}:
+                cmd = [binary, "x", "-y", f"-o{target_dir}", str(path)]
+            elif binary == "unrar":
+                cmd = [binary, "x", "-o+", str(path), str(target_dir)]
+            elif binary == "bsdtar":
+                cmd = [binary, "-xf", str(path), "-C", str(target_dir)]
+            else:
+                continue
+        else:
+            continue
+
+        try:
+            completed = subprocess.run(cmd, capture_output=True, text=True)
+            if completed.returncode == 0:
+                return True
+        except OSError:
+            continue
+
+    return False
+
+
+def _rar_missing_tool_message() -> str:
+    return "Aucun outil RAR disponible (installer unrar, 7z ou bsdtar)"
+
+
 def _validate_archive(path: Path) -> Dict:
     if not path.exists() or not path.is_file():
         raise FileNotFoundError(f"Archive introuvable: {path.name}")
@@ -2154,15 +2194,22 @@ def _validate_archive(path: Path) -> Dict:
                 return {"valid": False, "message": f"Archive ZIP corrompue (erreur sur: {bad_file})"}
         return {"valid": True, "message": "Archive ZIP valide"}
 
-    with rarfile.RarFile(path, "r") as rf:
-        if not rf.infolist():
-            return {"valid": False, "message": "Archive RAR vide"}
-        if rf.needs_password():
-            return {"valid": False, "message": "Archive RAR protégée par mot de passe"}
-        bad_file = rf.testrar()
-        if bad_file:
-            return {"valid": False, "message": f"Archive RAR corrompue (erreur sur: {bad_file})"}
-    return {"valid": True, "message": "Archive RAR valide"}
+    try:
+        with rarfile.RarFile(path, "r") as rf:
+            if not rf.infolist():
+                return {"valid": False, "message": "Archive RAR vide"}
+            if rf.needs_password():
+                return {"valid": False, "message": "Archive RAR protégée par mot de passe"}
+            bad_file = rf.testrar()
+            if bad_file:
+                return {"valid": False, "message": f"Archive RAR corrompue (erreur sur: {bad_file})"}
+        return {"valid": True, "message": "Archive RAR valide"}
+    except rarfile.RarCannotExec:
+        if _run_rar_tool(path, mode="test"):
+            return {"valid": True, "message": "Archive RAR valide (outil système)"}
+        return {"valid": False, "message": _rar_missing_tool_message()}
+    except rarfile.Error as exc:
+        return {"valid": False, "message": f"Archive RAR invalide: {exc}"}
 
 
 def _mark_folder_as_recently_extracted(folder_name: str) -> None:
@@ -2203,8 +2250,12 @@ def _extract_archive(path: Path, delete_archive: bool = True) -> Dict:
         with zipfile.ZipFile(path, "r") as zf:
             zf.extractall(target_dir)
     elif path.suffix.lower() == ".rar":
-        with rarfile.RarFile(path, "r") as rf:
-            rf.extractall(target_dir)
+        try:
+            with rarfile.RarFile(path, "r") as rf:
+                rf.extractall(target_dir)
+        except rarfile.RarCannotExec as exc:
+            if not _run_rar_tool(path, mode="extract", target_dir=target_dir):
+                raise ValueError(f"Extraction RAR impossible: {_rar_missing_tool_message()}") from exc
     else:
         raise ValueError("Archive non supportée")
 

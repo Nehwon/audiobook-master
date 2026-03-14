@@ -769,6 +769,38 @@ class TestWebRenameApi(unittest.TestCase):
         payload = resp.get_json()
         self.assertEqual(payload['code'], 'file_not_found')
 
+    @mock.patch('web.app.subprocess.run')
+    @mock.patch('web.app.shutil.which')
+    @mock.patch('web.app.rarfile.RarFile', side_effect=web_app.rarfile.RarCannotExec('Cannot find working tool'))
+    def test_archive_validate_rar_fallback_to_system_tool(self, _mock_rar, mock_which, mock_run):
+        archive = self.media_dir / 'Sevader dAuschwitz.rar'
+        archive.write_bytes(b'not-a-real-rar')
+        mock_which.side_effect = lambda name: '/usr/bin/7z' if name == '7z' else None
+        mock_run.return_value = mock.Mock(returncode=0, stdout='', stderr='')
+
+        resp = self.client.post('/api/archive/validate', json={'archives': [archive.name]})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['errors'], [])
+        self.assertEqual(len(payload['results']), 1)
+        self.assertTrue(payload['results'][0]['valid'])
+        self.assertIn('outil système', payload['results'][0]['message'])
+
+    @mock.patch('web.app.subprocess.run', side_effect=OSError('missing'))
+    @mock.patch('web.app.shutil.which', return_value=None)
+    @mock.patch('web.app.rarfile.RarFile', side_effect=web_app.rarfile.RarCannotExec('Cannot find working tool'))
+    def test_archive_validate_rar_reports_missing_tool_cleanly(self, _mock_rar, _mock_which, _mock_run):
+        archive = self.media_dir / 'Sevader dAuschwitz.rar'
+        archive.write_bytes(b'not-a-real-rar')
+
+        resp = self.client.post('/api/archive/validate', json={'archives': [archive.name]})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['errors'], [])
+        self.assertEqual(len(payload['results']), 1)
+        self.assertFalse(payload['results'][0]['valid'])
+        self.assertIn('Aucun outil RAR disponible', payload['results'][0]['message'])
+
     @mock.patch('web.app._ensure_worker')
     def test_pipeline_archive_extract_rename_enqueue(self, mocked_worker):
         import zipfile

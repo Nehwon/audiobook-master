@@ -105,6 +105,16 @@
         .phase-bar { height:100%; background: color-mix(in srgb, var(--primary) 82%, white); transition: width .2s ease; }
         .archive-actions-bar { margin: 10px 0 14px; }
         .dup-badge { display:inline-block; margin-left:6px; color:#b45309; font-size:12px; }
+        .size-status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            display: inline-block;
+            border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
+        }
+        .size-status-dot.green { background: #16a34a; }
+        .size-status-dot.orange { background: #f59e0b; }
+        .size-status-dot.red { background: #dc2626; }
 
         .warning-banner {
             margin-top: 10px;
@@ -288,7 +298,7 @@
                 </div>
                 <div class="panel-body">
                     <table>
-                        <thead><tr><th class="checkbox-col"><input id="fileSelAll" type="checkbox" onchange="toggleAllSelection('fileSel', this.checked)"></th><th>Nom</th><th>Fichiers audio</th><th>Taille MB</th><th>M4B lié</th></tr></thead>
+                        <thead><tr><th class="checkbox-col"><input id="fileSelAll" type="checkbox" onchange="toggleAllSelection('fileSel', this.checked)"></th><th>Nom</th><th>État</th><th>Taille MB</th><th>M4B lié</th></tr></thead>
                         <tbody id="hiddenProcessedFoldersBody"></tbody>
                     </table>
                 </div>
@@ -991,17 +1001,33 @@ async function loadLibrary({folders=true, files=true, archives=true} = {}) {
             const outputFiles = Array.isArray(f.output_files) ? f.output_files.filter(Boolean) : [];
             const outputName = outputFiles[0] || '';
             const outputLabel = outputName ? escapeHtml(outputName) : '<span class="muted">Aucun M4B trouvé</span>';
+            const folderSize = Number(f.size || 0);
+            const outputSize = Number(f.primary_output_size || 0);
+            let sizeStatusClass = 'red';
+            let sizeStatusTitle = 'Hors limites ±20%';
+            if (folderSize > 0 && outputSize > 0) {
+                const ratio = outputSize / folderSize;
+                const delta = Math.abs(1 - ratio);
+                if (delta <= 0.10) {
+                    sizeStatusClass = 'green';
+                    sizeStatusTitle = 'Taille M4B proche du dossier (±10%)';
+                } else if (delta <= 0.20) {
+                    sizeStatusClass = 'orange';
+                    sizeStatusTitle = 'Taille M4B acceptable (±20%)';
+                }
+            }
+            const sizeStatusDot = `<span class="size-status-dot ${sizeStatusClass}" title="${sizeStatusTitle}" aria-label="${sizeStatusTitle}"></span>`;
             hpb.innerHTML += `<tr class="row-main">
                 <td class="checkbox-col"><input type="checkbox" name="fileSel" value="${folderNameEscaped}" onchange="bindSelectionState('fileSel', 'fileSelAll')"></td>
                 <td>${folderNameEscaped}</td>
-                <td>${f.audio_count} / ${f.file_count ?? '-'}</td>
+                <td>${sizeStatusDot}</td>
                 <td>${fmtMb(f.size)}</td>
                 <td>${outputLabel}</td>
             </tr>
             <tr class="row-band"><td colspan="5"><div class="action-band"><span class="checkbox-slot"></span>${renderFileActionBand(f.name, outputName, f.has_folder !== false)}</div></td></tr>`;
         });
         if (!(data.hidden_processed_folders || []).length) {
-            hpb.innerHTML = '<tr><td colspan="6" class="muted">Aucun dossier déjà traité caché</td></tr>';
+            hpb.innerHTML = '<tr><td colspan="5" class="muted">Aucun dossier déjà traité caché</td></tr>';
         }
         bindSelectionState('fileSel', 'fileSelAll');
     }

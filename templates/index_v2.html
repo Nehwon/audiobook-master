@@ -458,6 +458,7 @@ let packetsSummaryCache = [];
 let latestJobsSnapshot = { pending: [], running: [], done: [] };
 let liveRefreshTimer = null;
 let liveRefreshQueued = false;
+let confirmationDialogOpen = false;
 let libraryVisualState = { foldersSig: '', filesSig: '', archivesSig: '', processingSig: '' };
 
 function isAudiobookshelfConfigMissing(config){
@@ -830,6 +831,15 @@ function askConfirmation(message, {confirmText='Valider', cancelText='Annuler', 
     return new Promise(resolve => {
         const wrap = document.getElementById('toastWrap');
         if (!wrap) { resolve(false); return; }
+        confirmationDialogOpen = true;
+        let resolved = false;
+        const finish = (value) => {
+            if (resolved) return;
+            resolved = true;
+            confirmationDialogOpen = false;
+            resolve(value);
+        };
+
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         toast.innerHTML = `<div>${escapeHtml(message)}</div>`;
@@ -840,12 +850,12 @@ function askConfirmation(message, {confirmText='Valider', cancelText='Annuler', 
         wrap.appendChild(toast);
 
         const [okBtn, cancelBtn] = actions.querySelectorAll('button');
-        okBtn.addEventListener('click', () => { toast.remove(); resolve(true); });
-        cancelBtn.addEventListener('click', () => { toast.remove(); resolve(false); });
+        okBtn.addEventListener('click', () => { toast.remove(); finish(true); });
+        cancelBtn.addEventListener('click', () => { toast.remove(); finish(false); });
         setTimeout(() => {
             if (toast.isConnected) {
                 toast.remove();
-                resolve(false);
+                finish(false);
             }
         }, 15000);
     });
@@ -1456,6 +1466,7 @@ async function refreshDashboardData({forceDoneRefresh=false} = {}){
 
 function shouldRefreshLibrary(){
     if (renameInProgress || manualRenameRow) return false;
+    if (confirmationDialogOpen || pendingApiCalls > 0) return false;
     if (isTextEditingActive()) return false;
     const active = document.activeElement;
     if (active && active.tagName === 'SELECT') return false;

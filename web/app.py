@@ -63,6 +63,12 @@ UI_DEFAULT_VERSION = os.getenv("AUDIOBOOK_UI_DEFAULT", "v2").strip().lower() or 
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".m4b", ".wav", ".flac", ".aac", ".ogg"}
 ARCHIVE_EXTENSIONS = {".zip", ".rar"}
+RAR_TOOL_CANDIDATES: List[tuple[str, List[str]]] = [
+    ("unrar", ["t", "-idq"]),
+    ("7z", ["t", "-bso0", "-bsp0"]),
+    ("7za", ["t", "-bso0", "-bsp0"]),
+    ("bsdtar", ["-tf"]),
+]
 SENSITIVE_CONFIG_KEYS = ("audiobookshelf_password", "audiobookshelf_api_key")
 SECRET_V1_PREFIX = "enc:v1:"
 
@@ -892,6 +898,20 @@ def _full_reindex_media_database() -> Dict[str, object]:
         )
 
     with sqlite3.connect(_state_db_path()) as conn:
+        existing_candidate_rows = conn.execute(
+            "SELECT source_folder, output_name, metadata_status, metadata_payload FROM m4b_candidates"
+        ).fetchall()
+    existing_candidates: Dict[str, Dict[str, Optional[str]]] = {}
+    for row in existing_candidate_rows:
+        if not row or not row[0]:
+            continue
+        existing_candidates[str(row[0])] = {
+            "output_name": str(row[1]) if row[1] else None,
+            "metadata_status": str(row[2]) if row[2] else "pending",
+            "metadata_payload": str(row[3]) if row[3] else None,
+        }
+
+    with sqlite3.connect(_state_db_path()) as conn:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("BEGIN")
         try:
@@ -939,24 +959,53 @@ def _full_reindex_media_database() -> Dict[str, object]:
             folder_rows = conn.execute("SELECT id, folder_name FROM media_folders").fetchall()
             output_rows = conn.execute("SELECT id, file_name, file_stem FROM output_files").fetchall()
             folder_id_by_name = {str(name): int(fid) for fid, name in folder_rows}
-            output_by_stem: Dict[str, Dict[str, object]] = {}
-            for oid, file_name, file_stem in output_rows:
-                output_by_stem.setdefault(str(file_stem), {"id": int(oid), "file_name": str(file_name)})
+            output_id_by_name = {str(file_name): int(oid) for oid, file_name, _file_stem in output_rows}
+            output_name_by_stem = {str(file_stem): str(file_name) for _oid, file_name, file_stem in output_rows}
+            output_files_by_name = {
+                output["file_name"]: Path(output["file_path"])
+                for output in outputs_payload
+            }
 
-            linked_folder_ids: set[int] = set()
             linked_output_ids: set[int] = set()
+            linked_folder_count = 0
 
             for folder_name, folder_id in folder_id_by_name.items():
-                output = output_by_stem.get(folder_name)
-                if output:
-                    linked_folder_ids.add(folder_id)
-                    linked_output_ids.add(int(output["id"]))
+                previous = existing_candidates.get(folder_name, {})
+                previous_output_name = previous.get("output_name") if isinstance(previous, dict) else None
+                previous_map: Dict[str, List[str]] = {
+                    folder_name: [str(previous_output_name)]
+                    if isinstance(previous_output_name, str)
+                    else []
+                }
+                resolved_outputs = _resolve_outputs_for_folder(
+                    folder_name,
+                    output_name_by_stem,
+                    previous_map,
+                    output_files_by_name,
+                )
+
+                output_id = None
+                reason = ""
+                if isinstance(previous_output_name, str) and previous_output_name in output_id_by_name:
+                    output_id = output_id_by_name[previous_output_name]
+                    reason = "candidate_match"
+                else:
+                    for output_name in resolved_outputs:
+                        if output_name in output_id_by_name:
+                            output_id = output_id_by_name[output_name]
+                            reason = "same_name_or_fuzzy_match"
+                            break
+
+                if output_id is not None:
+                    linked_output_ids.add(output_id)
+                    linked_folder_count += 1
+                    output_name = next((name for name, oid in output_id_by_name.items() if oid == output_id), "")
                     conn.execute(
                         """
                         INSERT INTO folder_output_links (folder_id, output_id, sync_status, reason, updated_at)
-                        VALUES (?, ?, 'linked', 'same_name_match', ?)
+                        VALUES (?, ?, 'linked', ?, ?)
                         """,
-                        (folder_id, int(output["id"]), now),
+                        (folder_id, output_id, reason, now),
                     )
                     conn.execute(
                         """
@@ -964,7 +1013,7 @@ def _full_reindex_media_database() -> Dict[str, object]:
                             (source_folder, output_name, metadata_status, metadata_payload, created_at, updated_at)
                         VALUES (?, ?, 'completed', NULL, ?, ?)
                         """,
-                        (folder_name, str(output["file_name"]), now, now),
+                        (folder_name, output_name, now, now),
                     )
                 else:
                     conn.execute(
@@ -978,9 +1027,15 @@ def _full_reindex_media_database() -> Dict[str, object]:
                         """
                         INSERT INTO m4b_candidates
                             (source_folder, output_name, metadata_status, metadata_payload, created_at, updated_at)
-                        VALUES (?, NULL, 'pending', NULL, ?, ?)
+                        VALUES (?, NULL, ?, ?, ?, ?)
                         """,
-                        (folder_name, now, now),
+                        (
+                            folder_name,
+                            str(previous.get("metadata_status") or "pending"),
+                            previous.get("metadata_payload"),
+                            now,
+                            now,
+                        ),
                     )
 
             for oid, _file_name, _file_stem in output_rows:
@@ -1002,9 +1057,9 @@ def _full_reindex_media_database() -> Dict[str, object]:
     return {
         "folders_indexed": len(folders_payload),
         "outputs_indexed": len(outputs_payload),
-        "linked": len([1 for f in folders_payload if any(o["file_stem"] == f["folder_name"] for o in outputs_payload)]),
-        "orphan_folders": len([1 for f in folders_payload if not any(o["file_stem"] == f["folder_name"] for o in outputs_payload)]),
-        "orphan_outputs": len([1 for o in outputs_payload if not any(f["folder_name"] == o["file_stem"] for f in folders_payload)]),
+        "linked": linked_folder_count,
+        "orphan_folders": len(folders_payload) - linked_folder_count,
+        "orphan_outputs": len(outputs_payload) - len(linked_output_ids),
     }
 
 
@@ -1722,6 +1777,46 @@ def _normalize_media_label(value: str) -> str:
     return " ".join(label.split())
 
 
+def _folder_has_visible_job(folder_name: str) -> bool:
+    with jobs_lock:
+        return any(
+            j.folder == folder_name and j.status in {"pending", "running", "failed", "cancelled"}
+            for j in jobs.values()
+        )
+
+
+def _resolve_outputs_for_folder(
+    folder_name: str,
+    output_name_by_stem: Dict[str, str],
+    completed_outputs_by_source: Dict[str, List[str]],
+    output_files_by_name: Dict[str, Path],
+) -> List[str]:
+    linked: List[str] = []
+    seen: set[str] = set()
+
+    for output_name in completed_outputs_by_source.get(folder_name, []):
+        if output_name in output_files_by_name and output_name not in seen:
+            linked.append(output_name)
+            seen.add(output_name)
+
+    exact = output_name_by_stem.get(folder_name)
+    if exact and exact not in seen:
+        linked.append(exact)
+        seen.add(exact)
+
+    normalized_folder = _normalize_media_label(folder_name)
+    if normalized_folder:
+        fuzzy_matches = [
+            output_name
+            for output_name, output_file in output_files_by_name.items()
+            if _normalize_media_label(output_file.stem).endswith(normalized_folder)
+        ]
+        if len(fuzzy_matches) == 1 and fuzzy_matches[0] not in seen:
+            linked.append(fuzzy_matches[0])
+
+    return linked
+
+
 def _list_media() -> Dict:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     _reconcile_m4b_candidates_with_filesystem()
@@ -1735,7 +1830,9 @@ def _list_media() -> Dict:
     hidden_processed_folders = []
     archives = []
     output_files = [file for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()] if OUTPUT_DIR.exists() else []
+    output_files_by_name = {file.name: file for file in output_files}
     output_name_by_stem = {file.stem: file.name for file in output_files}
+    completed_outputs_by_source = _get_completed_outputs_by_source_folder()
     linked_output_names: set[str] = set()
 
     for item in sorted(MEDIA_DIR.iterdir(), key=lambda x: x.name.lower()):
@@ -1746,9 +1843,14 @@ def _list_media() -> Dict:
             if file_count == 0:
                 continue
             folder_size = _folder_size(item)
-            matched_output = output_name_by_stem.get(item.name)
-            if matched_output:
-                linked_output_names.add(matched_output)
+            linked_outputs = _resolve_outputs_for_folder(
+                item.name,
+                output_name_by_stem,
+                completed_outputs_by_source,
+                output_files_by_name,
+            )
+            if linked_outputs and not _folder_has_visible_job(item.name):
+                linked_output_names.update(linked_outputs)
                 hidden_processed_folders.append(
                     {
                         "name": item.name,
@@ -1756,7 +1858,7 @@ def _list_media() -> Dict:
                         "size": folder_size,
                         "file_count": file_count,
                         "modified": item.stat().st_mtime,
-                        "output_files": [matched_output],
+                        "output_files": linked_outputs,
                         "has_folder": True,
                     }
                 )
@@ -2041,6 +2143,40 @@ def _attach_archive_duplicate_hints(archives: List[Dict]) -> None:
         archive["duplicate_peers"] = sorted(peers_union)
 
 
+def _run_rar_tool(path: Path, mode: str, target_dir: Optional[Path] = None) -> bool:
+    """Exécute un outil système (unrar/7z/bsdtar) en fallback pour RAR."""
+    for binary, base_args in RAR_TOOL_CANDIDATES:
+        if not shutil.which(binary):
+            continue
+
+        if mode == "test":
+            cmd = [binary, *base_args, str(path)]
+        elif mode == "extract":
+            if binary in {"7z", "7za"}:
+                cmd = [binary, "x", "-y", f"-o{target_dir}", str(path)]
+            elif binary == "unrar":
+                cmd = [binary, "x", "-o+", str(path), str(target_dir)]
+            elif binary == "bsdtar":
+                cmd = [binary, "-xf", str(path), "-C", str(target_dir)]
+            else:
+                continue
+        else:
+            continue
+
+        try:
+            completed = subprocess.run(cmd, capture_output=True, text=True)
+            if completed.returncode == 0:
+                return True
+        except OSError:
+            continue
+
+    return False
+
+
+def _rar_missing_tool_message() -> str:
+    return "Aucun outil RAR disponible (installer unrar, 7z ou bsdtar)"
+
+
 def _validate_archive(path: Path) -> Dict:
     if not path.exists() or not path.is_file():
         raise FileNotFoundError(f"Archive introuvable: {path.name}")
@@ -2058,15 +2194,22 @@ def _validate_archive(path: Path) -> Dict:
                 return {"valid": False, "message": f"Archive ZIP corrompue (erreur sur: {bad_file})"}
         return {"valid": True, "message": "Archive ZIP valide"}
 
-    with rarfile.RarFile(path, "r") as rf:
-        if not rf.infolist():
-            return {"valid": False, "message": "Archive RAR vide"}
-        if rf.needs_password():
-            return {"valid": False, "message": "Archive RAR protégée par mot de passe"}
-        bad_file = rf.testrar()
-        if bad_file:
-            return {"valid": False, "message": f"Archive RAR corrompue (erreur sur: {bad_file})"}
-    return {"valid": True, "message": "Archive RAR valide"}
+    try:
+        with rarfile.RarFile(path, "r") as rf:
+            if not rf.infolist():
+                return {"valid": False, "message": "Archive RAR vide"}
+            if rf.needs_password():
+                return {"valid": False, "message": "Archive RAR protégée par mot de passe"}
+            bad_file = rf.testrar()
+            if bad_file:
+                return {"valid": False, "message": f"Archive RAR corrompue (erreur sur: {bad_file})"}
+        return {"valid": True, "message": "Archive RAR valide"}
+    except rarfile.RarCannotExec:
+        if _run_rar_tool(path, mode="test"):
+            return {"valid": True, "message": "Archive RAR valide (outil système)"}
+        return {"valid": False, "message": _rar_missing_tool_message()}
+    except rarfile.Error as exc:
+        return {"valid": False, "message": f"Archive RAR invalide: {exc}"}
 
 
 def _mark_folder_as_recently_extracted(folder_name: str) -> None:
@@ -2107,8 +2250,12 @@ def _extract_archive(path: Path, delete_archive: bool = True) -> Dict:
         with zipfile.ZipFile(path, "r") as zf:
             zf.extractall(target_dir)
     elif path.suffix.lower() == ".rar":
-        with rarfile.RarFile(path, "r") as rf:
-            rf.extractall(target_dir)
+        try:
+            with rarfile.RarFile(path, "r") as rf:
+                rf.extractall(target_dir)
+        except rarfile.RarCannotExec as exc:
+            if not _run_rar_tool(path, mode="extract", target_dir=target_dir):
+                raise ValueError(f"Extraction RAR impossible: {_rar_missing_tool_message()}") from exc
     else:
         raise ValueError("Archive non supportée")
 

@@ -154,20 +154,55 @@ class TestWebRenameApi(unittest.TestCase):
         hidden = next(entry for entry in listing['hidden_processed_folders'] if entry['name'] == 'Mon Livre Source')
         self.assertIn(output_name, hidden['output_files'])
 
-    def test_library_keeps_folder_visible_when_output_has_different_name(self):
+    def test_library_keeps_folder_visible_when_output_has_different_name_and_no_candidate(self):
         folder = self.media_dir / 'Mon Livre Source'
         folder.mkdir()
         (folder / 'track1.mp3').write_text('x')
 
         output_name = 'Auteur - Mon Super Livre.m4b'
         (web_app.OUTPUT_DIR / output_name).write_text('m4b')
-        web_app._save_m4b_candidate('Mon Livre Source', output_name)
 
         listing = self.client.get('/api/library').get_json()
         names = [entry['name'] for entry in listing['folders']]
         self.assertIn('Mon Livre Source', names)
         hidden_names = [entry['name'] for entry in listing['hidden_processed_folders']]
         self.assertIn('Auteur - Mon Super Livre', hidden_names)
+
+    def test_library_hides_folder_when_candidate_links_different_output_name(self):
+        folder = self.media_dir / 'Mon Livre Source'
+        folder.mkdir()
+        (folder / 'track1.mp3').write_text('x')
+
+        output_name = 'Auteur - Mon Livre Source.m4b'
+        (web_app.OUTPUT_DIR / output_name).write_text('m4b')
+        web_app._save_m4b_candidate('Mon Livre Source', output_name)
+
+        listing = self.client.get('/api/library').get_json()
+        names = [entry['name'] for entry in listing['folders']]
+        self.assertNotIn('Mon Livre Source', names)
+        hidden = next(entry for entry in listing['hidden_processed_folders'] if entry['name'] == 'Mon Livre Source')
+        self.assertIn(output_name, hidden['output_files'])
+
+    def test_library_keeps_folder_visible_when_processing_job_running(self):
+        folder = self.media_dir / 'Mon Livre Source'
+        folder.mkdir()
+        (folder / 'track1.mp3').write_text('x')
+
+        output_name = 'Mon Livre Source.m4b'
+        (web_app.OUTPUT_DIR / output_name).write_text('m4b')
+        web_app._save_m4b_candidate('Mon Livre Source', output_name)
+
+        with web_app.jobs_lock:
+            web_app.jobs['job-1'] = web_app.Job(
+                id='job-1',
+                folder='Mon Livre Source',
+                status='running',
+                created_at=1.0,
+            )
+
+        listing = self.client.get('/api/library').get_json()
+        names = [entry['name'] for entry in listing['folders']]
+        self.assertIn('Mon Livre Source', names)
 
     def test_delete_processed_folder_with_override_flag(self):
         folder = self.media_dir / 'Traite'
@@ -254,6 +289,37 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(linked_count, 1)
         self.assertEqual(orphan_folder_count, 1)
         self.assertEqual(orphan_output_count, 1)
+
+
+    def test_library_reindex_reuses_existing_candidate_link(self):
+        folder = self.media_dir / 'Source Originale'
+        folder.mkdir()
+        (folder / 'track1.mp3').write_text('x')
+
+        output_name = 'Auteur - Source Originale.m4b'
+        (self.output_dir / output_name).write_text('m4b')
+        web_app._save_m4b_candidate('Source Originale', output_name)
+
+        resp = self.client.post('/api/library/reindex')
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertTrue(payload['ok'])
+        self.assertEqual(payload['report']['linked'], 1)
+
+        with sqlite3.connect(web_app._state_db_path()) as conn:
+            row = conn.execute(
+                "SELECT output_name, metadata_status FROM m4b_candidates WHERE source_folder = ?",
+                ('Source Originale',),
+            ).fetchone()
+            link_row = conn.execute(
+                "SELECT sync_status, reason FROM folder_output_links WHERE sync_status = 'linked'"
+            ).fetchone()
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row[0], output_name)
+        self.assertEqual(row[1], 'completed')
+        self.assertIsNotNone(link_row)
+        self.assertEqual(link_row[0], 'linked')
 
     def test_save_config_encrypts_audiobookshelf_secrets_at_rest(self):
         cfg = web_app._default_config()
@@ -702,6 +768,38 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(resp.status_code, 404)
         payload = resp.get_json()
         self.assertEqual(payload['code'], 'file_not_found')
+
+    @mock.patch('web.app.subprocess.run')
+    @mock.patch('web.app.shutil.which')
+    @mock.patch('web.app.rarfile.RarFile', side_effect=web_app.rarfile.RarCannotExec('Cannot find working tool'))
+    def test_archive_validate_rar_fallback_to_system_tool(self, _mock_rar, mock_which, mock_run):
+        archive = self.media_dir / 'Sevader dAuschwitz.rar'
+        archive.write_bytes(b'not-a-real-rar')
+        mock_which.side_effect = lambda name: '/usr/bin/7z' if name == '7z' else None
+        mock_run.return_value = mock.Mock(returncode=0, stdout='', stderr='')
+
+        resp = self.client.post('/api/archive/validate', json={'archives': [archive.name]})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['errors'], [])
+        self.assertEqual(len(payload['results']), 1)
+        self.assertTrue(payload['results'][0]['valid'])
+        self.assertIn('outil système', payload['results'][0]['message'])
+
+    @mock.patch('web.app.subprocess.run', side_effect=OSError('missing'))
+    @mock.patch('web.app.shutil.which', return_value=None)
+    @mock.patch('web.app.rarfile.RarFile', side_effect=web_app.rarfile.RarCannotExec('Cannot find working tool'))
+    def test_archive_validate_rar_reports_missing_tool_cleanly(self, _mock_rar, _mock_which, _mock_run):
+        archive = self.media_dir / 'Sevader dAuschwitz.rar'
+        archive.write_bytes(b'not-a-real-rar')
+
+        resp = self.client.post('/api/archive/validate', json={'archives': [archive.name]})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['errors'], [])
+        self.assertEqual(len(payload['results']), 1)
+        self.assertFalse(payload['results'][0]['valid'])
+        self.assertIn('Aucun outil RAR disponible', payload['results'][0]['message'])
 
     @mock.patch('web.app._ensure_worker')
     def test_pipeline_archive_extract_rename_enqueue(self, mocked_worker):

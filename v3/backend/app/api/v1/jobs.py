@@ -192,11 +192,11 @@ async def update_job(
         raise HTTPException(status_code=500, detail="Failed to update job")
 
 
-@router.delete("/{job_id}", status_code=204)
+@router.delete("/{job_id}")
 async def delete_job(
     job_id: str,
     db: AsyncSession = Depends(get_db)
-) -> None:
+):
     """Delete a job."""
     try:
         # Get existing job

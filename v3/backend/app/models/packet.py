@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import Integer, String, Text, Boolean, JSON
+from sqlalchemy import Integer, String, Text, Boolean, JSON, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -44,7 +44,7 @@ class Packet(Base):
     )
     
     # Metadata
-    metadata: Mapped[Optional[dict]] = mapped_column(
+    packet_metadata: Mapped[Optional[dict]] = mapped_column(
         JSON, 
         nullable=True,
         default={}

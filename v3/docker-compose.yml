@@ -139,6 +139,3 @@ volumes:
 networks:
   audiobook-v3:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16

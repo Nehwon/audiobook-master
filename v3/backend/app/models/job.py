@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import Integer, String, Text, Boolean
+from sqlalchemy import Integer, String, Text, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -58,7 +58,7 @@ class Job(Base):
     max_retries: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     
     # Metadata
-    metadata: Mapped[Optional[dict]] = mapped_column(
+    job_metadata: Mapped[Optional[dict]] = mapped_column(
         String(1000), 
         nullable=True,
         default="{}"

@@ -207,11 +207,11 @@ async def update_packet(
         raise HTTPException(status_code=500, detail="Failed to update packet")
 
 
-@router.delete("/{packet_id}", status_code=204)
+@router.delete("/{packet_id}")
 async def delete_packet(
     packet_id: str,
     db: AsyncSession = Depends(get_db)
-) -> None:
+):
     """Delete a packet."""
     try:
         # Get existing packet

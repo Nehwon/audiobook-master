@@ -18,7 +18,7 @@ python-multipart>=0.0.6
 websockets>=12.0
 
 # CORS
-python-cors>=1.7.0
+# python-cors>=1.7.0  # Not needed, FastAPI has built-in CORS
 
 # Development & Testing
 pytest>=7.4.0

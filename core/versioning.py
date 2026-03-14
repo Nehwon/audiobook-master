@@ -42,6 +42,25 @@ def _read_patch_number() -> int:
         return 0
 
 
+def _normalize_base(base: str) -> tuple[int, int, int]:
+    """Normalize base version into ``(major, minor, patch_seed)``.
+
+    Accepted formats:
+    - M.m
+    - M.m.p
+    Any invalid value falls back to ``_DEFAULT_BASE`` and seed ``0``.
+    """
+
+    parts = [part.strip() for part in base.split(".") if part.strip()]
+    if len(parts) not in {2, 3} or not all(part.isdigit() for part in parts):
+        parts = _DEFAULT_BASE.split(".")
+
+    major = int(parts[0])
+    minor = int(parts[1])
+    patch_seed = int(parts[2]) if len(parts) == 3 else 0
+    return major, minor, patch_seed
+
+
 def get_project_version(prefix: str = "v") -> str:
     """Return runtime version in M.m.f format.
 
@@ -55,5 +74,6 @@ def get_project_version(prefix: str = "v") -> str:
         return explicit
 
     base = _read_version_base()
-    patch = _read_patch_number()
-    return f"{prefix}{base}.{patch}"
+    major, minor, patch_seed = _normalize_base(base)
+    patch = patch_seed + _read_patch_number()
+    return f"{prefix}{major}.{minor}.{patch}"

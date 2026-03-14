@@ -30,8 +30,15 @@ RUN apt-get update && apt-get install -y \
     wget \
     git \
     build-essential \
+    cargo \
+    rustc \
     nginx \
-    && rm -rf /var/lib/apt/lists/*
+    && cargo install m4b-tool --locked \
+    && cp /root/.cargo/bin/m4b-tool /usr/local/bin/m4b-tool \
+    && chmod +x /usr/local/bin/m4b-tool \
+    && apt-get purge -y cargo rustc \
+    && apt-get autoremove -y \
+    && rm -rf /root/.cargo /var/lib/apt/lists/*
 
 # Création de l'utilisateur audiobook
 RUN groupadd -r audiobook && useradd -r -g audiobook -d /app -s /bin/bash audiobook

@@ -5,21 +5,59 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et v
 ## [Unreleased]
 
 ### Added
-- Sprint 6 clôturé: publication du plan d'exécution et du document de clôture (`docs/sprint-6/README.md`, `docs/sprint-6/CLOTURE.md`).
-- Sprint 5 clôturé côté documentation: formalisation de l'implémentation UX « erreurs rouges + validation persistée » (`docs/sprint-5/README.md`, `docs/sprint-5/CLOTURE.md`).
-- Sprint 4 clôturé côté documentation: plan de migration UI React consolidé (`docs/sprint-4/README.md`, `docs/sprint-4/CLOTURE.md`).
-- Référencement du Sprint 4 dans la documentation racine (`README.md`, `ROADMAP.md`, `TODO.md`, `docs/SPRINTS_REACT_POSTGRESQL.md`).
-- Référencement du Sprint 5 terminé dans la documentation racine et de pilotage (`README.md`, `ROADMAP.md`, `TODO.md`, `docs/SPRINTS_REACT_POSTGRESQL.md`).
-- Référencement du Sprint 6 terminé dans la documentation racine et de pilotage (`README.md`, `ROADMAP.md`, `TODO.md`, `docs/SPRINTS_REACT_POSTGRESQL.md`).
+- Phase 0 UI v3 complétée: Architecture Decision Records (ADR-001, ADR-002), RFC-001 événements JSON, MVP backlog complet.
+- Documentation technique exhaustive: guides développement, installation, Docker, formats audio, plugins, CI/CD.
+- Architecture frontend v2.3.0 planifiée: composants React, pages modernes, migration PostgreSQL.
+- Services de persistance: recovery service, endpoints API, gestion versions automatique.
+- Logo professionnel: `audiobook-manager.jpg` pour documentation et branding.
+- Questionnaire validation TR001: validation structurée Phase 0 avec critères GO/NO-GO.
+- Analyse dysfonctionnements AN002: audit technique complet avec plan d'action prioritaire.
 
 ### Changed
-- Mise à jour de l'état d'avancement des sprints: Sprint 6 est désormais marqué comme terminé.
-- Mise à jour de l'état d'avancement des sprints: Sprint 5 est désormais marqué comme terminé (périmètre documentaire).
-- Mise à jour de l'état d'avancement des sprints: Sprint 4 est désormais marqué comme terminé (périmètre documentaire).
-- Harmonisation éditoriale des documents de pilotage produit et de migration frontend.
+- Refonte complète de la documentation: guides structurés, architecture clarifiée, planning détaillé.
+- Organisation des sprints Dev v2.3.0: documentation consolidée avec runbooks et clotures.
+- Mise à jour TODO.md: passage en mode sprint pilotage avec objectifs et livrables clairs.
+- Simplification README.md: focus sur démarrage rapide et références documentation détaillée.
+
+### Fixed
+- Identification et documentation des dysfonctionnements critiques: ImportError Base SQLAlchemy, configuration logs, tests inopérants.
+- Plan de correction prioritaire: Phase 1 (1-2 jours), Phase 2 (3-5 jours), Phase 3 (1-2 semaines).
+
+### Deprecated
+- `run.py` et `start_web.py` maintenus pour compatibilité legacy (délégation vers entrées recommandées).
+
+### Security
+- Audit des dépendances et identification des vulnérabilités potentielles.
+
+## [3.0.0-alpha.1] - 2026-03-14 (Pré-release)
+
+### Added
+- 🏗️ Architecture v3: FastAPI + PostgreSQL + WebSocket temps réel
+- 📋 Phase 0 complète: ADR, RFC, MVP backlog avec 12 user stories
+- 📚 Documentation technique: 4 guides complets + architecture détaillée
+- 🎯 Planning UI v3: 6 semaines réparties en 3 sprints
+- 🔍 Analyse dysfonctionnements: rapport complet avec plan d'action
+- 📝 Questionnaire validation: TR001 pour décisions techniques
+- 🖼️ Branding: logo professionnel pour documentation
+
+### Changed
+- 📖 Refonte documentation: guides structurés et références croisées
+- 🏛️ Architecture: passage de Flask à FastAPI pour backend moderne
+- 🗂️ Organisation: documentation Dev v2.3.0 consolidée
+- 📊 Planning: mode sprint avec objectifs clairs et livrables
+
+### Fixed
+- 🐛 Dysfonctionnements identifiés: ImportError Base SQLAlchemy, logs, tests
+- 🔧 Configuration: adaptation environnement local
+- 📋 Dépendances: SQLAlchemy et psycopg2 ajoutés
+
+### Deprecated
+- ⚠️ Legacy wrappers: `run.py`, `start_web.py` (compatibilité maintenue)
 
 ### Notes
-- Les wrappers `run.py` et `start_web.py` sont maintenus pour compatibilité, mais restent dépréciés.
+- 🚀 Cette version alpha prépare la migration complète vers UI v3
+- 📋 Phase 0 validée avec tous les livrables techniques
+- 🎯 Prêt pour démarrage Phase 1 (Backend FastAPI)
 
 ## [2.1.2] - Référence historique
 

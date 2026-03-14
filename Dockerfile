@@ -36,9 +36,7 @@ RUN apt-get update && apt-get install -y \
     nginx \
     && curl -fsSL "https://github.com/sandreas/m4b-tool/releases/download/v${M4B_TOOL_VERSION}/m4b-tool.phar" -o /usr/local/bin/m4b-tool.phar \
     && chmod +x /usr/local/bin/m4b-tool.phar \
-    && printf '#!/bin/sh
-exec php /usr/local/bin/m4b-tool.phar "$@"
-' > /usr/local/bin/m4b-tool \
+    && { echo '#!/bin/sh'; echo 'exec php /usr/local/bin/m4b-tool.phar "$@"'; } > /usr/local/bin/m4b-tool \
     && chmod +x /usr/local/bin/m4b-tool \
     && rm -rf /var/lib/apt/lists/*
 

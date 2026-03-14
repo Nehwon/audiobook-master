@@ -1001,7 +1001,7 @@ async function loadLibrary({folders=true, files=true, archives=true} = {}) {
             const outputFiles = Array.isArray(f.output_files) ? f.output_files.filter(Boolean) : [];
             const outputName = outputFiles[0] || '';
             const outputLabel = outputName ? escapeHtml(outputName) : '<span class="muted">Aucun M4B trouvé</span>';
-            const folderSize = Number(f.size || 0);
+            const folderSize = Number(f.folder_size || 0);
             const outputSize = Number(f.primary_output_size || 0);
             let sizeStatusClass = 'red';
             let sizeStatusTitle = 'Hors limites ±20%';

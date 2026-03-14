@@ -1849,6 +1849,53 @@ def _resolve_outputs_for_folder(
     return linked
 
 
+def _sync_output_files_sizes_from_disk(output_files: List[Path]) -> Dict[str, int]:
+    """Met à jour la DB avec les tailles réelles des .m4b sur disque."""
+    _ensure_state_db()
+    now = time.time()
+    sizes_by_name: Dict[str, int] = {}
+
+    with sqlite3.connect(_state_db_path()) as conn:
+        conn.execute("BEGIN")
+        try:
+            for output_file in output_files:
+                try:
+                    stat = output_file.stat()
+                except OSError:
+                    continue
+
+                size_bytes = int(stat.st_size)
+                sizes_by_name[output_file.name] = size_bytes
+                conn.execute(
+                    """
+                    INSERT INTO output_files
+                        (file_name, file_stem, file_path, size_bytes, modified, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(file_name) DO UPDATE SET
+                        file_stem = excluded.file_stem,
+                        file_path = excluded.file_path,
+                        size_bytes = excluded.size_bytes,
+                        modified = excluded.modified,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        output_file.name,
+                        output_file.stem,
+                        str(output_file),
+                        size_bytes,
+                        float(stat.st_mtime),
+                        now,
+                        now,
+                    ),
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    return sizes_by_name
+
+
 def _list_media() -> Dict:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     _reconcile_m4b_candidates_with_filesystem()
@@ -1862,6 +1909,7 @@ def _list_media() -> Dict:
     hidden_processed_folders = []
     archives = []
     output_files = [file for file in OUTPUT_DIR.glob("*.m4b") if file.is_file()] if OUTPUT_DIR.exists() else []
+    output_sizes_by_name = _sync_output_files_sizes_from_disk(output_files)
     output_files_by_name = {file.name: file for file in output_files}
     output_name_by_stem = {file.stem: file.name for file in output_files}
     completed_outputs_by_source = _get_completed_outputs_by_source_folder()
@@ -1883,18 +1931,15 @@ def _list_media() -> Dict:
             )
             if linked_outputs and not _folder_has_visible_job(item.name):
                 primary_output_name = linked_outputs[0] if linked_outputs else ""
-                primary_output_size = 0
-                if primary_output_name and primary_output_name in output_files_by_name:
-                    try:
-                        primary_output_size = output_files_by_name[primary_output_name].stat().st_size
-                    except OSError:
-                        primary_output_size = 0
+                primary_output_size = int(output_sizes_by_name.get(primary_output_name, 0)) if primary_output_name else 0
+                linked_output_size = sum(int(output_sizes_by_name.get(name, 0)) for name in linked_outputs)
                 linked_output_names.update(linked_outputs)
                 hidden_processed_folders.append(
                     {
                         "name": item.name,
                         "audio_count": _count_audio_files(item),
-                        "size": folder_size,
+                        "size": linked_output_size,
+                        "folder_size": folder_size,
                         "file_count": file_count,
                         "modified": item.stat().st_mtime,
                         "output_files": linked_outputs,
@@ -1954,7 +1999,7 @@ def _list_media() -> Dict:
             {
                 "name": output_file.stem,
                 "audio_count": 0,
-                "size": output_file.stat().st_size,
+                "size": int(output_sizes_by_name.get(output_file.name, 0)),
                 "file_count": 0,
                 "modified": output_file.stat().st_mtime,
                 "output_files": [output_file.name],

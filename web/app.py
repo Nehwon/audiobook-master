@@ -80,6 +80,11 @@ class Job:
     status: str = "pending"
     progress: int = 0
     stage: str = "En attente"
+    current_step: str = "pending"
+    step_label: str = "En attente"
+    done_units: int = 0
+    total_units: int = 1
+    percent: int = 0
     phase_progress: Dict[str, Dict[str, object]] = field(default_factory=dict)
     error: Optional[str] = None
     output_file: Optional[str] = None
@@ -426,6 +431,11 @@ def _jobs_signature() -> str:
                 "id": j.id,
                 "status": j.status,
                 "progress": j.progress,
+                "percent": j.percent,
+                "done_units": j.done_units,
+                "total_units": j.total_units,
+                "current_step": j.current_step,
+                "step_label": j.step_label,
                 "stage": j.stage,
                 "error": j.error,
                 "output_file": j.output_file,
@@ -2342,6 +2352,94 @@ def _compute_job_worker_count(total_cores: Optional[int] = None) -> int:
     return max(1, cores // 4)
 
 
+def _compute_job_progress_snapshot(job: Job) -> Dict[str, object]:
+    """Calcule une progression exploitable côté frontend (unités + étape courante)."""
+    phase_progress = job.phase_progress if isinstance(job.phase_progress, dict) else {}
+    done_units = 0
+    total_units = 0
+    current_step = ""
+    current_label = ""
+
+    for phase_key, raw_phase in phase_progress.items():
+        if not isinstance(raw_phase, dict):
+            continue
+        label = str(raw_phase.get("label") or phase_key)
+        try:
+            total = max(0, int(raw_phase.get("total", 0)))
+        except (TypeError, ValueError):
+            total = 0
+        try:
+            processed = max(0, int(raw_phase.get("processed", 0)))
+        except (TypeError, ValueError):
+            processed = 0
+
+        if total > 0:
+            processed = min(processed, total)
+            total_units += total
+            done_units += processed
+            if processed < total and not current_step:
+                current_step = str(phase_key)
+                current_label = f"{label} ({processed}/{total})"
+
+    status = str(job.status or "").lower()
+    if total_units <= 0:
+        # Fallback sur l'ancien modèle lorsqu'aucune granularité de phase n'est disponible.
+        fallback_percent = max(0, min(100, int(job.progress or 0)))
+        total_units = 100
+        done_units = fallback_percent
+        step_label = str(job.stage or "En attente")
+        step_key = str(job.stage or "pending").strip().lower() or "pending"
+        if status in {"completed", "failed", "cancelled"}:
+            done_units = 100
+            step_key = status
+            if status == "completed":
+                step_label = "Terminé"
+            elif status == "failed":
+                step_label = "Erreur"
+            else:
+                step_label = "Annulé"
+        return {
+            "done_units": done_units,
+            "total_units": total_units,
+            "percent": max(0, min(100, round((done_units / total_units) * 100))),
+            "current_step": step_key,
+            "step_label": step_label,
+        }
+
+    if status == "completed":
+        done_units = total_units
+        current_step = "completed"
+        current_label = "Terminé"
+    elif status == "failed":
+        current_step = "failed"
+        current_label = "Erreur"
+    elif status == "cancelled":
+        current_step = "cancelled"
+        current_label = "Annulé"
+    elif not current_step:
+        current_step = str(job.stage or "running").strip().lower() or "running"
+        current_label = str(job.stage or "Traitement")
+
+    percent = max(0, min(100, round((done_units / max(1, total_units)) * 100)))
+    return {
+        "done_units": done_units,
+        "total_units": max(1, total_units),
+        "percent": percent,
+        "current_step": current_step,
+        "step_label": current_label,
+    }
+
+
+def _sync_job_progress_fields(job: Job) -> None:
+    snapshot = _compute_job_progress_snapshot(job)
+    job.done_units = int(snapshot["done_units"])
+    job.total_units = int(snapshot["total_units"])
+    job.percent = int(snapshot["percent"])
+    job.current_step = str(snapshot["current_step"])
+    job.step_label = str(snapshot["step_label"])
+    job.progress = job.percent
+
+
 def _worker_loop() -> None:
     while True:
         job_id = job_queue.get()
@@ -2353,6 +2451,7 @@ def _worker_loop() -> None:
             job.status = "running"
             job.stage = "Préparation"
             job.progress = 5
+            _sync_job_progress_fields(job)
             job.started_at = time.time()
             _push_job_event(job.id, job.folder, job.stage, "Job démarré")
         if job:
@@ -2421,6 +2520,8 @@ def _worker_loop() -> None:
 
                         current_job.stage = str(phase_label)
 
+                    _sync_job_progress_fields(current_job)
+
                     nonlocal last_heartbeat_ts
                     now_ts = time.time()
                     if now_ts - last_heartbeat_ts >= HEARTBEAT_INTERVAL_SECONDS:
@@ -2433,6 +2534,7 @@ def _worker_loop() -> None:
             with jobs_lock:
                 job.stage = "Conversion"
                 job.progress = 30
+                _sync_job_progress_fields(job)
                 _push_job_event(job.id, job.folder, job.stage, "Conversion démarrée")
 
             success = processor.process_audiobook(folder_path)
@@ -2443,6 +2545,7 @@ def _worker_loop() -> None:
                     job.stage = "Terminé"
                     job.progress = 100
                     job.phase_progress.setdefault("finalization", {"label": "Finalisation", "processed": 2, "total": 2})
+                    _sync_job_progress_fields(job)
                     job.output_file = _guess_output_file(job.folder, job.started_at or time.time())
                     _push_job_event(job.id, job.folder, job.stage, f"Succès. Fichier: {job.output_file or 'inconnu'}")
                 else:
@@ -2451,6 +2554,7 @@ def _worker_loop() -> None:
                     processor_error = getattr(processor, "last_error", None)
                     job.error = str(processor_error) if processor_error else "Échec conversion"
                     job.progress = 100
+                    _sync_job_progress_fields(job)
                     _push_job_event(
                         job.id,
                         job.folder,
@@ -2473,6 +2577,7 @@ def _worker_loop() -> None:
                 job.stage = "Erreur"
                 job.error = str(exc)
                 job.progress = 100
+                _sync_job_progress_fields(job)
                 job.ended_at = time.time()
                 _push_job_event(job.id, job.folder, job.stage, f"Exception: {exc}", "error")
             _persist_job_error(job, user_message="Exception durant le traitement", technical_message=str(exc))
@@ -2964,11 +3069,12 @@ def api_integration_packet_remove_file(packet_id: str):
 def api_library():
     media = _list_media()
     with jobs_lock:
-        visible_jobs = [
-            asdict(j)
-            for j in jobs.values()
-            if j.status in {"pending", "running", "failed", "cancelled"}
-        ]
+        visible_jobs = []
+        for job in jobs.values():
+            if job.status not in {"pending", "running", "failed", "cancelled"}:
+                continue
+            _sync_job_progress_fields(job)
+            visible_jobs.append(asdict(job))
 
     by_folder: Dict[str, Dict] = {}
     for job in sorted(visible_jobs, key=lambda j: j.get("created_at", 0), reverse=True):
@@ -2978,7 +3084,12 @@ def api_library():
                 "job_id": job.get("id"),
                 "status": job.get("status"),
                 "progress": job.get("progress", 0),
+                "percent": job.get("percent", job.get("progress", 0)),
                 "stage": job.get("stage", "En attente"),
+                "current_step": job.get("current_step", "pending"),
+                "step_label": job.get("step_label", job.get("stage", "En attente")),
+                "done_units": job.get("done_units", 0),
+                "total_units": job.get("total_units", 1),
                 "phase_progress": job.get("phase_progress", {}),
                 "started_at": job.get("started_at"),
                 "error": job.get("error"),
@@ -3216,6 +3327,7 @@ def api_enqueue_jobs():
                 continue
             jid = f"job-{int(time.time() * 1000)}-{len(jobs)}"
             job = Job(id=jid, folder=folder_name)
+            _sync_job_progress_fields(job)
             jobs[jid] = job
             job_queue.put(jid)
             queued.append(asdict(job))
@@ -3242,7 +3354,10 @@ def api_enqueue_jobs():
 @app.route("/api/jobs")
 def api_jobs():
     with jobs_lock:
-        values = [asdict(j) for j in jobs.values()]
+        values = []
+        for job in jobs.values():
+            _sync_job_progress_fields(job)
+            values.append(asdict(job))
 
     def sort_key(entry):
         return entry["created_at"]
@@ -3281,6 +3396,27 @@ def api_jobs():
     })
 
 
+
+
+@app.route("/api/jobs/<job_id>/progress")
+def api_job_progress(job_id: str):
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if not job:
+            return _api_error("Job introuvable", status=404, code="job_not_found")
+        _sync_job_progress_fields(job)
+        payload = {
+            "job_id": job.id,
+            "folder": job.folder,
+            "status": job.status,
+            "percent": job.percent,
+            "current_step": job.current_step,
+            "step_label": job.step_label,
+            "done_units": job.done_units,
+            "total_units": job.total_units,
+            "updated_at": time.time(),
+        }
+    return jsonify(payload)
 @app.route("/api/jobs/cancel", methods=["POST"])
 def api_cancel_job():
     payload = request.get_json(silent=True) or {}
@@ -3300,6 +3436,7 @@ def api_cancel_job():
         job.status = "cancelled"
         job.stage = "Annulé"
         job.progress = 100
+        _sync_job_progress_fields(job)
         job.ended_at = time.time()
         _push_job_event(job.id, job.folder, job.stage, "Job annulé par l'utilisateur", "warning")
 
@@ -3359,6 +3496,7 @@ def api_reprocess():
     with jobs_lock:
         jid = f"job-{int(time.time() * 1000)}-{len(jobs)}"
         job = Job(id=jid, folder=folder)
+        _sync_job_progress_fields(job)
         jobs[jid] = job
         job_queue.put(jid)
 

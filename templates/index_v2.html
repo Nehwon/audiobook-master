@@ -552,7 +552,7 @@ function computeLibraryVisualSignatures(data){
     const foldersSig = JSON.stringify(folders.map(f => [f.name, f.audio_count, f.file_count, f.size, !!f.extracted_from_archive, (f.issues || []).join('|')]));
     const filesSig = JSON.stringify(hiddenFiles.map(f => [f.name, f.audio_count, f.file_count, f.size, (f.output_files || []).join('|')]));
     const archivesSig = JSON.stringify(archives.map(a => [a.primary_name || a.name, a.display_name || a.name, a.size, a.validation?.valid, a.validation?.message || '', (a.duplicate_reasons || []).join('|')]));
-    const processingSig = JSON.stringify(folders.filter(f => !!f.job).map(f => [f.name, f.job?.id, f.job?.status, f.job?.progress, f.job?.stage]));
+    const processingSig = JSON.stringify(folders.filter(f => !!f.job).map(f => [f.name, f.job?.id, f.job?.status, f.job?.percent, f.job?.step_label, f.job?.done_units, f.job?.total_units]));
     return { foldersSig, filesSig, archivesSig, processingSig };
 }
 
@@ -663,6 +663,11 @@ function computePhaseEta(job){
 }
 
 function computePhasePoints(job, audioCount=0){
+    const apiTotalUnits = Math.max(0, parseInt(job?.total_units ?? 0, 10) || 0);
+    if (apiTotalUnits > 0) {
+        const apiDoneUnits = Math.max(0, Math.min(apiTotalUnits, parseInt(job?.done_units ?? 0, 10) || 0));
+        return { total: apiTotalUnits, processed: apiDoneUnits };
+    }
     const phaseProgress = (job?.phase_progress && typeof job.phase_progress === 'object') ? job.phase_progress : {};
     const convTotal = Math.max(0, parseInt(phaseProgress.conversion?.total ?? 0, 10) || 0);
     const convProcessed = Math.max(0, parseInt(phaseProgress.conversion?.processed ?? 0, 10) || 0);
@@ -691,6 +696,12 @@ function computePhasePoints(job, audioCount=0){
 }
 
 function getCurrentPhaseStep(job){
+    const apiLabel = String(job?.step_label || '').trim();
+    const apiTotal = Math.max(0, parseInt(job?.total_units ?? 0, 10) || 0);
+    const apiDone = Math.max(0, parseInt(job?.done_units ?? 0, 10) || 0);
+    if (apiLabel) {
+        return { label: apiLabel, processed: Math.min(apiDone, apiTotal), total: apiTotal };
+    }
     const phaseOrder = ['conversion', 'normalization', 'chapters', 'finalization'];
     const phaseProgress = (job?.phase_progress && typeof job.phase_progress === 'object') ? job.phase_progress : {};
     for (const key of phaseOrder) {
@@ -709,7 +720,7 @@ function getCurrentPhaseStep(job){
 function renderProcessingActionBand(job, folder, audioCount=0){
     const points = computePhasePoints(job, audioCount);
     const currentPhaseStep = getCurrentPhaseStep(job);
-    const pct = points.total ? Math.round((points.processed / points.total) * 100) : 0;
+    const pct = Math.max(0, Math.min(100, parseInt(job?.percent ?? job?.progress ?? (points.total ? Math.round((points.processed / points.total) * 100) : 0), 10) || 0));
     const folderJs = toJsString(folder || '');
     const status = String(job?.status || '').toLowerCase();
     const isPending = status === 'pending';
@@ -752,7 +763,7 @@ function renderFileActionBand(folder, outputName, hasFolder=true){
 
 function renderInlineJobProgress(job){
     if (!job) return '';
-    const pct = Math.max(0, Math.min(100, parseInt(job.progress ?? 0, 10) || 0));
+    const pct = Math.max(0, Math.min(100, parseInt(job.percent ?? job.progress ?? 0, 10) || 0));
     const statusLabel = job.status === 'pending' ? 'En file d\'attente' : 'Traitement en cours';
     const stageRaw = String(job.stage || 'Traitement');
     const normalizedStage = stageRaw.toLowerCase();
@@ -771,7 +782,7 @@ function renderInlineJobProgress(job){
 }
 
 function renderJobDetailCard(job){
-    const pct = Math.max(0, Math.min(100, parseInt(job?.progress ?? 0, 10) || 0));
+    const pct = Math.max(0, Math.min(100, parseInt(job?.percent ?? job?.progress ?? 0, 10) || 0));
     const points = computePhasePoints(job || {});
     const detail = renderJobsHtml([job], false);
     return `<div><div class="muted" style="margin-bottom:8px">Progression générale: ${pct}% · ${points.processed}/${points.total} étapes</div>${detail}</div>`;
@@ -1185,7 +1196,7 @@ async function enqueueSelected(){
 function renderJobsHtml(jobs, withActions=false){
     if (!jobs.length) return '<p class="muted">Vide</p>';
     return jobs.map(j => {
-        const pct = Math.max(0, Math.min(100, parseInt(j.progress ?? 0, 10) || 0));
+        const pct = Math.max(0, Math.min(100, parseInt(j.percent ?? j.progress ?? 0, 10) || 0));
         const phaseOrder = ['conversion', 'normalization', 'chapters', 'finalization'];
         const phaseProgress = (j.phase_progress && typeof j.phase_progress === 'object') ? j.phase_progress : {};
         const phaseRows = phaseOrder.map((key) => {

@@ -690,7 +690,7 @@ async function loadLibrary() {
             <td>${fmtMb(f.size)}</td>
             <td>${outputLabel}</td>
             <td>
-                ${canDeleteFolder ? `<button class="danger" onclick="deleteProcessedFolder('${jsFolder}')">Supprimer dossier</button>` : ''}
+                ${canDeleteFolder ? `<button class="danger" onclick="deleteProcessedFolder('${jsFolder}','${jsOutputName}')">Supprimer dossier</button>` : ''}
                 <button class="danger" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedOutput('${jsOutputName}','${jsFolder}')">Supprimer M4B</button>
                 ${canDeleteFolder ? `<button class="danger" ${hasOutput ? '' : 'disabled'} onclick="deleteProcessedBoth('${jsFolder}','${jsOutputName}')">Supprimer les deux</button>` : ''}
             </td>
@@ -819,10 +819,10 @@ async function deleteSuspectFolder(folder){
     await loadLibrary();
 }
 
-async function deleteProcessedFolder(folder){
+async function deleteProcessedFolder(folder, outputName=''){
     const confirmed = await askConfirmation(`Supprimer définitivement le dossier déjà traité "${folder}" ?`, {confirmText: 'Supprimer'});
     if (!confirmed) return;
-    await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder, allow_hidden_processed: true})});
+    await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder, allow_hidden_processed: true, output_name: outputName})});
     notify(`Dossier traité "${folder}" supprimé.`, 'success');
     await loadLibrary();
 }
@@ -839,7 +839,7 @@ async function deleteProcessedOutput(outputName, folder){
 async function deleteProcessedBoth(folder, outputName){
     const confirmed = await askConfirmation(`Supprimer le dossier "${folder}" et le M4B "${outputName}" ?`, {confirmText: 'Supprimer'});
     if (!confirmed) return;
-    await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder, allow_hidden_processed: true})});
+    await api('/api/folder/delete',{method:'POST', body: JSON.stringify({folder, allow_hidden_processed: true, output_name: outputName})});
     await api('/api/output/delete',{method:'POST', body: JSON.stringify({filename: outputName})});
     notify(`Dossier "${folder}" et M4B "${outputName}" supprimés.`, 'success');
     await loadLibrary();

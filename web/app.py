@@ -3274,6 +3274,7 @@ def api_delete_folder():
     payload = request.get_json(silent=True) or {}
     folder = payload.get("folder")
     allow_hidden_processed = bool(payload.get("allow_hidden_processed", False))
+    output_name = str(payload.get("output_name") or "").strip()
     if not isinstance(folder, str) or not folder.strip():
         return _api_error("folder invalide", code="invalid_folder")
     if Path(folder).name != folder:
@@ -3292,7 +3293,11 @@ def api_delete_folder():
             return _api_error("suppression autorisée uniquement pour dossier suspect", code="folder_not_suspicious")
     else:
         matched_output = OUTPUT_DIR / f"{folder}.m4b"
-        is_hidden_processed = OUTPUT_DIR.exists() and matched_output.exists() and matched_output.is_file()
+        explicit_output = _resolve_output_file(output_name) if output_name else None
+        is_hidden_processed = OUTPUT_DIR.exists() and (
+            (matched_output.exists() and matched_output.is_file())
+            or bool(explicit_output and explicit_output.exists() and explicit_output.is_file())
+        )
         if not is_hidden_processed:
             return _api_error("dossier non éligible à la suppression des éléments déjà traités", code="folder_not_processed")
 

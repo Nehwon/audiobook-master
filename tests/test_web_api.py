@@ -542,6 +542,55 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(entry['job']['status'], 'running')
         self.assertEqual(entry['job']['progress'], 47)
 
+
+    def test_job_progress_endpoint_returns_units_and_percent(self):
+        with web_app.jobs_lock:
+            web_app.jobs.clear()
+            web_app.jobs['job-43'] = web_app.Job(
+                id='job-43',
+                folder='Livre API',
+                status='running',
+                phase_progress={
+                    'conversion': {'label': 'Conversion AAC', 'processed': 2, 'total': 4},
+                    'normalization': {'label': 'Normalisation', 'processed': 1, 'total': 4},
+                },
+            )
+
+        resp = self.client.get('/api/jobs/job-43/progress')
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['job_id'], 'job-43')
+        self.assertEqual(payload['done_units'], 3)
+        self.assertEqual(payload['total_units'], 8)
+        self.assertEqual(payload['percent'], 38)
+        self.assertEqual(payload['step_label'], 'Conversion AAC (2/4)')
+
+    def test_library_job_payload_includes_backend_progress_fields(self):
+        folder = self.media_dir / 'Livre Suivi Backend'
+        folder.mkdir()
+        (folder / 'track.mp3').write_text('x')
+
+        with web_app.jobs_lock:
+            web_app.jobs.clear()
+            web_app.jobs['job-44'] = web_app.Job(
+                id='job-44',
+                folder='Livre Suivi Backend',
+                status='running',
+                phase_progress={
+                    'conversion': {'label': 'Conversion AAC', 'processed': 1, 'total': 5},
+                },
+            )
+
+        resp = self.client.get('/api/library')
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        entry = next(item for item in payload['folders'] if item['name'] == 'Livre Suivi Backend')
+        self.assertIsNotNone(entry['job'])
+        self.assertEqual(entry['job']['done_units'], 1)
+        self.assertEqual(entry['job']['total_units'], 5)
+        self.assertEqual(entry['job']['percent'], 20)
+        self.assertEqual(entry['job']['step_label'], 'Conversion AAC (1/5)')
+
     def test_push_job_event_persists_details_payload(self):
         with web_app.jobs_lock:
             web_app.job_events.clear()

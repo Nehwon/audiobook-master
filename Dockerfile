@@ -16,6 +16,9 @@ ENV PYTHONUNBUFFERED=1 \
 # Installation des dépendances système
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    unrar-free \
+    p7zip-full \
+    libarchive-tools \
     libavcodec-extra \
     libavformat-dev \
     libavcodec-dev \

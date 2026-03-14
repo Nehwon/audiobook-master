@@ -27,7 +27,7 @@ Valider les décisions techniques fondamentales pour le démarrage du développe
 **Question** : La stack imposée (FastAPI + PostgreSQL + asyncpg + triggers) est-elle validée pour les besoins ?
 
 **Options** :
-- [ ] ✅ **OUI** - Stack cohérente et validée
+- [X] ✅ **OUI** - Stack cohérente et validée
 - [ ] ❌ **NON** - Stack inadaptée ou nécessite ajustements
 - [ ] ⚠️ **CONDITIONNEL** - Valide sous conditions précises
 
@@ -39,17 +39,17 @@ ________________________________________________________________
 **Question** : Les 3 principes sont-ils acceptés et compris ?
 
 1. **Aucun couplage avec templates Flask historiques**
-   - [ ] ✅ **Accepté** - Clean break avec l'existant
+   - [X] ✅ **Accepté** - Clean break avec l'existant
    - [ ] ❌ **Refusé** - Nécessite compatibilité partielle
    - [ ] ⚠️ **À discuter** - Points de transition à définir
 
 2. **Contrat d'événements versionné dès le départ**
-   - [ ] ✅ **Accepté** - Versionnement obligatoire
+   - [X] ✅ **Accepté** - Versionnement obligatoire
    - [ ] ❌ **Refusé** - Approche plus flexible souhaitée
    - [ ] ⚠️ **À discuter** - Stratégie hybride
 
 3. **Reconnexion WebSocket et idempotence backend obligatoires**
-   - [ ] ✅ **Accepté** - Robustesse temps réel requise
+   - [X] ✅ **Accepté** - Robustesse temps réel requise
    - [ ] ❌ **Refusé** - Complexité excessive pour MVP
    - [ ] ⚠️ **À discuter** - Idempotence sélective
 
@@ -69,21 +69,21 @@ ________________________________________________________________
   - Avantages : Écosystème mature, compétences existantes
   - Inconvénients : Bundle size, complexité Redux
 
-- [ ] **Svelte + stores**
+- [X] **Svelte + stores**
   - Avantages : Performance, bundle size minimal
   - Inconvénients : Courbe d'apprentissage, écosystème moins mature
 
 - [ ] **AUTRE** (préciser) : ________________________________
 
 **Justification du choix** :
-________________________________________________________________
+Rapidité et flexibilité__________________________________________
 ________________________________________________________________
 
 #### **B2. Système de Design**
 **Question** : Quel système de design UI ?
 
 **Options** :
-- [ ] **Tailwind CSS**
+- [X] **Tailwind CSS**
   - Avantages : Customisation maximale, performance
   - Inconvénients : CSS à écrire, moins de composants prêts
 
@@ -101,7 +101,7 @@ ________________________________________________________________
 **Question** : La stratégie JWT short-lived + refresh est-elle validée ?
 
 **Options** :
-- [ ] ✅ **VALIDÉE** - JWT courts + refresh token
+- [X] ✅ **VALIDÉE** - JWT courts + refresh token
 - [ ] ❌ **REFUSÉE** - Préférence pour session classique
 - [ ] ⚠️ **MODIFIÉE** - JWT avec durée différente
 
@@ -117,7 +117,7 @@ ________________________________________________________________
 **Question** : Le format ADR Markdown est-il adapté ?
 
 **Validation** :
-- [ ] ✅ **OUI** - Format ADR standard suffisant
+- [X] ✅ **OUI** - Format ADR standard suffisant
 - [ ] ❌ **NON** - Nécessite format plus structuré
 - [ ] ⚠️ **ENRICHIR** - ADR + schémas + diagrammes
 
@@ -129,7 +129,7 @@ ________________________________________________________________
 **Question** : Quel niveau de maquettage pour la Phase 0 ?
 
 **Options** :
-- [ ] **Figma complet** - Écrans détaillés, interactions
+- [X] **Figma complet** - Écrans détaillés, interactions
 - [ ] **Schéma léger** - Wireframes + flux principaux
 - [ ] **Paper prototyping** - Croquis simples, itération rapide
 - [ ] **AUTRE** (préciser) : ________________________________
@@ -150,7 +150,7 @@ ________________________________________________________________
 }
 ```
 
-- [ ] ✅ **SUFFISANT** - Format MVP complet
+- [X] ✅ **SUFFISANT** - Format MVP complet
 - [ ] ❌ **INSUFFISANT** - Ajouts requis (préciser) :
   - ____________________________________________________________
   - ____________________________________________________________
@@ -165,39 +165,39 @@ ________________________________________________________________
 **Question** : Le MVP défini (écrans + actions + métriques live) est-il correct ?
 
 **Écrans MVP validés** :
-- [ ] **Tableau de bord** (KPI + statut connexion)
-- [ ] **Liste jobs/packets** (live updates)
-- [ ] **Détail job** (timeline événements)
-- [ ] **Gestion erreurs/notifications**
+- [X] **Tableau de bord** (KPI + statut connexion)
+- [X] **Liste jobs/packets** (live updates)
+- [X] **Détail job** (timeline événements)
+- [X] **Gestion erreurs/notifications**
 - [ ] **AUTRE** (préciser) : ________________________________
 
 **Actions requises** :
-- [ ] **CRUD jobs/packets**
-- [ ] **Monitoring temps réel**
-- [ ] **Notifications utilisateur**
+- [X] **CRUD jobs/packets**
+- [X] **Monitoring temps réel**
+- [X] **Notifications utilisateur**
 - [ ] **AUTRE** (préciser) : ________________________________
 
 **Métriques live requises** :
 - [ ] **Statut système** (API, DB, WS)
 - [ ] **Performance** (temps réponse, débit)
-- [ ] **Activité utilisateur** (connexions, actions)
+- [X] **Activité utilisateur** (connexions, actions)
 - [ ] **AUTRE** (préciser) : ________________________________
 
 #### **D2. Critères d'Acceptation**
 **Question** : Quels sont les critères GO/NO-GO pour la Phase 1 ?
 
 **Critères GO** (cocher tous les applicables) :
-- [ ] Décisions techniques validées et documentées
-- [ ] MVP clairement défini et accepté
-- [ ] Équipe formée aux technologies choisies
-- [ ] Environnement de développement prêt
-- [ ] Risques identifiés avec plans de mitigation
+- [X] Décisions techniques validées et documentées
+- [X] MVP clairement défini et accepté
+- [X] Équipe formée aux technologies choisies
+- [X] Environnement de développement prêt
+- [X] Risques identifiés avec plans de mitigation
 
 **Critères NO-GO** (un seul suffit) :
 - [ ] Décisions techniques non convergentes
 - [ ] MVP trop ambitieux pour 3 semaines
-- [ ] Compétences techniques insuffisantes
-- [ ] Dépendances externes bloquantes
+- [X] Compétences techniques insuffisantes
+- [X] Dépendances externes bloquantes
 
 ---
 
@@ -232,7 +232,7 @@ ________________________________________________________________
 ## 📊 Synthèse de Validation
 
 ### **Décision Finale**
-- [ ] ✅ **GO** - Phase 0 validée, passage à Phase 1
+- [X] ✅ **GO** - Phase 0 validée, passage à Phase 1
 - [ ] ❌ **NO-GO** - Phase 0 à revoir
 - [ ] ⚠️ **GO CONDITIONNEL** - Sous conditions précises
 

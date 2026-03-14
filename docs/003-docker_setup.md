@@ -19,6 +19,8 @@ Le `docker-compose.yml` du dépôt définit l'environnement applicatif (web + vo
 - Variables `AUDIOBOOK_*` pour chemins runtime
 - Variables `AUDIOBOOKSHELF_*` pour intégration distante
 
+- Outils d'archives inclus dans l'image web: `unrar-free`, `7z` (p7zip) et `bsdtar` pour l'extraction des `.rar`.
+
 ## Vérifications
 
 ```bash

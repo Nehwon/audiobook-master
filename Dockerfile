@@ -11,7 +11,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    M4B_TOOL_VERSION=0.5.0
 
 # Installation des dépendances système
 RUN apt-get update && apt-get install -y \
@@ -30,15 +31,16 @@ RUN apt-get update && apt-get install -y \
     wget \
     git \
     build-essential \
-    cargo \
-    rustc \
+    ca-certificates \
+    php-cli \
     nginx \
-    && cargo install m4b-tool --locked \
-    && cp /root/.cargo/bin/m4b-tool /usr/local/bin/m4b-tool \
+    && curl -fsSL "https://github.com/sandreas/m4b-tool/releases/download/v${M4B_TOOL_VERSION}/m4b-tool.phar" -o /usr/local/bin/m4b-tool.phar \
+    && chmod +x /usr/local/bin/m4b-tool.phar \
+    && printf '#!/bin/sh
+exec php /usr/local/bin/m4b-tool.phar "$@"
+' > /usr/local/bin/m4b-tool \
     && chmod +x /usr/local/bin/m4b-tool \
-    && apt-get purge -y cargo rustc \
-    && apt-get autoremove -y \
-    && rm -rf /root/.cargo /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
 # Création de l'utilisateur audiobook
 RUN groupadd -r audiobook && useradd -r -g audiobook -d /app -s /bin/bash audiobook

@@ -96,6 +96,54 @@ class TestWebRenameApi(unittest.TestCase):
         self.assertEqual(payload['renamed'], [])
         self.assertEqual(payload['skipped'][0]['reason'], 'titre manuel vide')
 
+    def test_rename_sanitizes_inner_filenames_with_apostrophes(self):
+        src = self.media_dir / "Auteur_-_L'histoire"
+        src.mkdir()
+        nested = src / "CD1"
+        nested.mkdir()
+        bad_file = nested / "Chapitre d'ouverture.mp3"
+        bad_file.write_text("x")
+        bad_file_2 = src / "Intro d'hier.mp3"
+        bad_file_2.write_text("x")
+
+        resp = self.client.post('/api/rename', json={'folders': ["Auteur_-_L'histoire"]})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['renamed'][0]['new'], "Auteur - L'histoire")
+
+        self.assertFalse((self.media_dir / "Auteur - L'histoire" / "CD1" / "Chapitre d'ouverture.mp3").exists())
+        self.assertTrue((self.media_dir / "Auteur - L'histoire" / "CD1" / "Chapitre d’ouverture.mp3").exists())
+        self.assertFalse((self.media_dir / "Auteur - L'histoire" / "Intro d'hier.mp3").exists())
+        self.assertTrue((self.media_dir / "Auteur - L'histoire" / "Intro d’hier.mp3").exists())
+
+    def test_manual_rename_sanitizes_inner_filenames_with_apostrophes(self):
+        src = self.media_dir / "Nom source"
+        src.mkdir()
+        nested = src / "CD1"
+        nested.mkdir()
+        (nested / "Piste d'essai.mp3").write_text("x")
+
+        resp = self.client.post(
+            '/api/rename',
+            json={'folders': ["Nom source"], 'overrides': {"Nom source": "Nom manuel"}},
+        )
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['renamed'][0]['new'], "Nom manuel")
+        self.assertTrue((self.media_dir / "Nom manuel" / "CD1" / "Piste d’essai.mp3").exists())
+
+    def test_deja_conforme_still_sanitizes_inner_filenames(self):
+        src = self.media_dir / "Auteur - Titre"
+        src.mkdir()
+        (src / "Chapitre d'ouverture.mp3").write_text("x")
+
+        resp = self.client.post('/api/rename', json={'folders': ["Auteur - Titre"]})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload['renamed'], [])
+        self.assertEqual(payload['skipped'][0]['reason'], 'déjà conforme')
+        self.assertTrue((self.media_dir / "Auteur - Titre" / "Chapitre d’ouverture.mp3").exists())
+
     def test_ignore_folder_hides_it_from_library(self):
         (self.media_dir / 'A_Garder').mkdir()
         (self.media_dir / 'A_Garder' / 'a.mp3').write_text('x')

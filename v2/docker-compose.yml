@@ -1,0 +1,151 @@
+services:
+  # 🌐 Application Web Audiobook Manager
+  audiobook-manager:
+    image: ${APP_IMAGE:-ghcr.io/nehwon/audiobook-master:latest}
+    container_name: ${APP_CONTAINER_NAME:-audiobook-manager-pro}
+    user: "${APP_USER:-0:0}"
+    restart: ${APP_RESTART_POLICY:-unless-stopped}
+    ports:
+      - "${APP_HTTP_PORT:-8080}:8080"
+    volumes:
+      # 📁 Volumes de données
+      - ${SOURCE_VOLUME:-./data/source}:/app/data/source
+      - ${OUTPUT_VOLUME:-./data/output}:/app/data/output
+      - ${TMP_VOLUME:-/tmp}:/tmp
+      - ${LOGS_VOLUME:-./logs}:/app/logs
+      # 🔧 Configuration locale (optionnel)
+      - ${CONFIG_VOLUME:-./core/config.py}:/app/core/config.py:ro
+    environment:
+      # 🌐 Configuration Web
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8080}
+      - APP_PORT=${APP_PORT:-5001}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - AUDIOBOOK_DATABASE_URL=${AUDIOBOOK_DATABASE_URL:-sqlite+pysqlite:///:memory:}
+
+      # 🚀 Performance
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-1}
+      - GUNICORN_THREADS=${GUNICORN_THREADS:-8}
+      - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-300}
+
+      # 📁 Répertoires
+      - SOURCE_DIR=${SOURCE_DIR:-/app/data/source}
+      - OUTPUT_DIR=${OUTPUT_DIR:-/app/data/output}
+      - TEMP_DIR=${TEMP_DIR:-/tmp/audiobooks_web}
+
+      # 📊 Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+      # 🖥️ Configuration CPU (adapter selon votre système)
+      - MAX_WORKERS=${MAX_WORKERS:-32}
+      - CPU_THREADS=${CPU_THREADS:-16}
+      - BATCH_THREADS=${BATCH_THREADS:-8}
+
+    depends_on:
+      - ollama
+
+    networks:
+      - audiobook-network
+
+    # 🏥 Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: ${APP_HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${APP_HEALTHCHECK_TIMEOUT:-10s}
+      retries: ${APP_HEALTHCHECK_RETRIES:-3}
+      start_period: ${APP_HEALTHCHECK_START_PERIOD:-40s}
+
+    # 📊 Limites de ressources (adapter selon votre système)
+    deploy:
+      resources:
+        limits:
+          memory: ${APP_LIMIT_MEMORY:-8G}
+        reservations:
+          memory: ${APP_RESERVATION_MEMORY:-2G}
+
+
+  # 🤖 Ollama local pour stack all-in-one
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    container_name: ${OLLAMA_CONTAINER_NAME:-audiobook-ollama}
+    restart: ${OLLAMA_RESTART_POLICY:-unless-stopped}
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ${OLLAMA_DATA_VOLUME:-ollama-data}:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
+    networks:
+      - audiobook-network
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: ${OLLAMA_HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${OLLAMA_HEALTHCHECK_TIMEOUT:-10s}
+      retries: ${OLLAMA_HEALTHCHECK_RETRIES:-10}
+      start_period: ${OLLAMA_HEALTHCHECK_START_PERIOD:-30s}
+
+  # ⚛️ Interface React (Vite) pour la migration frontend
+  react-ui:
+    image: ${REACT_IMAGE:-ghcr.io/nehwon/audiobook-master-frontend:latest}
+    container_name: ${REACT_CONTAINER_NAME:-audiobook-react-ui}
+    restart: ${REACT_RESTART_POLICY:-unless-stopped}
+    ports:
+      - "${REACT_PORT:-5173}:5173"
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8080}
+    networks:
+      - audiobook-network
+
+  # 🗄️ Base de données optionnelle (pour futures fonctionnalités)
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:15-alpine}
+    container_name: ${POSTGRES_CONTAINER_NAME:-audiobook-postgres}
+    restart: ${POSTGRES_RESTART_POLICY:-unless-stopped}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ${POSTGRES_DATA_VOLUME:-postgres-data}:/var/lib/postgresql/data
+      - ${POSTGRES_INIT_VOLUME:-./database/init.sql}:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-audiobook_manager}
+      - POSTGRES_USER=${POSTGRES_USER:-audiobook}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-audiobook123}
+      - POSTGRES_INITDB_ARGS=${POSTGRES_INITDB_ARGS:---encoding=UTF-8 --lc-collate=C --lc-ctype=C}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-audiobook} -d ${POSTGRES_DB:-audiobook_manager}"]
+      interval: ${POSTGRES_HEALTHCHECK_INTERVAL:-10s}
+      timeout: ${POSTGRES_HEALTHCHECK_TIMEOUT:-5s}
+      retries: ${POSTGRES_HEALTHCHECK_RETRIES:-5}
+    networks:
+      - audiobook-network
+
+  # 🔄 Redis pour le cache et les queues
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    container_name: ${REDIS_CONTAINER_NAME:-audiobook-redis}
+    restart: ${REDIS_RESTART_POLICY:-unless-stopped}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ${REDIS_DATA_VOLUME:-redis-data}:/data
+    command: ${REDIS_COMMAND:-redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru}
+    networks:
+      - audiobook-network
+
+# 🌐 Réseau partagé
+networks:
+  audiobook-network:
+    driver: ${NETWORK_DRIVER:-bridge}
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET:-172.20.0.0/16}
+
+# 📁 Volumes persistants
+volumes:
+  postgres-data:
+    driver: ${POSTGRES_VOLUME_DRIVER:-local}
+  redis-data:
+    driver: ${REDIS_VOLUME_DRIVER:-local}
+  ollama-data:
+    driver: ${OLLAMA_VOLUME_DRIVER:-local}

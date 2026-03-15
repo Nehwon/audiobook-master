@@ -56,6 +56,8 @@ Audiobook Master est une application complète de traitement audio qui existe en
 # Cloner et utiliser la branche main
 git clone https://github.com/Nehwon/audiobook-master.git
 cd audiobook-master
+# Tout le code V2 se trouve maintenant dans ./v2
+cd v2
 # Voir README_V2.md pour les instructions
 ```
 
@@ -93,15 +95,16 @@ audiobook-master/
 ├── README.md              # Ce fichier
 ├── README_V2.md           # Documentation V2
 ├── README_V3.md           # Documentation V3
+├── backend/               # FastAPI application (V3)
+├── frontend/              # SvelteKit application (V3)
+├── database/              # Scripts/migrations PostgreSQL (V3)
+├── docker-compose.yml     # Orchestration Docker (V3)
+├── docs/                  # Documentation V3 (ADR, design system, phasing)
 ├── v2/                    # Code de la version 2
 │   ├── web/              # Application Flask
 │   ├── core/             # Scripts de traitement
 │   └── persistence/      # Base de données SQLite
-├── v3/                    # Code de la version 3
-│   ├── backend/          # FastAPI application
-│   ├── frontend/         # SvelteKit application
-│   └── docker-compose.yml # Orchestration Docker
-├── docs/                  # Documentation partagée
+├── v2/docs/               # Documentation V2 (sprints, runbooks, guides)
 ├── LICENSE               # License AGPL-3.0
 └── CHANGELOG.md          # Historique des changements
 ```
@@ -159,7 +162,7 @@ Ce projet est sous license AGPL-3.0. Voir [LICENSE](LICENSE) pour les détails.
 ### Documentation
 - **V2** : Voir [README_V2.md](README_V2.md)
 - **V3** : Voir [README_V3.md](README_V3.md)
-- **Architecture** : Voir dossier [docs/](docs/)
+- **Architecture** : Voir dossiers [docs/](docs/) (V3) et [v2/docs/](v2/docs/) (V2)
 
 ---
 

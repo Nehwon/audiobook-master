@@ -6,6 +6,8 @@
 
 Audiobook Master v3 est une refonte complète de l'application de traitement audio, utilisant une architecture moderne et des technologies web avancées pour offrir une expérience utilisateur exceptionnelle et des performances optimales.
 
+> Note : le code V3 vit désormais à la racine du dépôt (`backend/`, `frontend/`, `database/`, `docker-compose.yml`). Le dossier `v2/` conserve l'ancienne version.
+
 ## 🏗️ Architecture
 
 ### Backend (FastAPI)
